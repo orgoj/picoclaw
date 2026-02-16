@@ -59,13 +59,16 @@ type AgentsConfig struct {
 }
 
 type AgentDefaults struct {
-	Workspace           string  `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
-	RestrictToWorkspace bool    `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
-	Provider            string  `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
-	Model               string  `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
-	MaxTokens           int     `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
-	Temperature         float64 `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
-	MaxToolIterations   int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
+	Workspace             string  `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
+	RestrictToWorkspace   bool    `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
+	Provider              string  `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
+	Model                 string  `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
+	MaxTokens             int     `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	Temperature           float64 `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
+	MaxToolIterations     int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
+	MaxIterationsSubagent int     `json:"max_iterations_subagent"`
+	MaxTokensSubagent     int     `json:"max_tokens_subagent"`
+	LLMTimeout            int     `json:"llm_timeout"`
 }
 
 type ChannelsConfig struct {
@@ -206,9 +209,16 @@ type DuckDuckGoConfig struct {
 	MaxResults int  `json:"max_results" env:"PICOCLAW_TOOLS_WEB_DUCKDUCKGO_MAX_RESULTS"`
 }
 
+type ZAIConfig struct {
+	Enabled    bool `json:"enabled" env:"PICOCLAW_TOOLS_WEB_ZAI_ENABLED"`
+	MaxResults int  `json:"max_results" env:"PICOCLAW_TOOLS_WEB_ZAI_MAX_RESULTS"`
+	Timeout    int  `json:"timeout" env:"PICOCLAW_TOOLS_WEB_ZAI_TIMEOUT"`
+}
+
 type WebToolsConfig struct {
 	Brave      BraveConfig      `json:"brave"`
 	DuckDuckGo DuckDuckGoConfig `json:"duckduckgo"`
+	ZAI        ZAIConfig        `json:"zai"`
 }
 
 type ToolsConfig struct {
@@ -219,13 +229,16 @@ func DefaultConfig() *Config {
 	return &Config{
 		Agents: AgentsConfig{
 			Defaults: AgentDefaults{
-				Workspace:           "~/.picoclaw/workspace",
-				RestrictToWorkspace: true,
-				Provider:            "",
-				Model:               "glm-4.7",
-				MaxTokens:           8192,
-				Temperature:         0.7,
-				MaxToolIterations:   20,
+				Workspace:             "~/.picoclaw/workspace",
+				RestrictToWorkspace:   true,
+				Provider:              "",
+				Model:                 "glm-4.7",
+				MaxTokens:             8192,
+				Temperature:           0.7,
+				MaxToolIterations:     20,
+				MaxIterationsSubagent: 20,
+				MaxTokensSubagent:     4096,
+				LLMTimeout:            120,
 			},
 		},
 		Channels: ChannelsConfig{
@@ -320,6 +333,11 @@ func DefaultConfig() *Config {
 				DuckDuckGo: DuckDuckGoConfig{
 					Enabled:    true,
 					MaxResults: 5,
+				},
+				ZAI: ZAIConfig{
+					Enabled:    false,
+					MaxResults: 5,
+					Timeout:    60,
 				},
 			},
 		},
