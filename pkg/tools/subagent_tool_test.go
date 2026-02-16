@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
@@ -36,10 +37,20 @@ func (m *MockLLMProvider) GetContextWindow() int {
 	return 4096
 }
 
+// testConfig creates a minimal config for testing
+func testConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Model = "test-model"
+	cfg.Agents.Defaults.MaxIterationsSubagent = 5
+	cfg.Agents.Defaults.MaxTokensSubagent = 1024
+	cfg.Agents.Defaults.LLMTimeout = 30
+	return cfg
+}
+
 // TestSubagentTool_Name verifies tool name
 func TestSubagentTool_Name(t *testing.T) {
 	provider := &MockLLMProvider{}
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", nil)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", nil)
 	tool := NewSubagentTool(manager)
 
 	if tool.Name() != "subagent" {
@@ -50,7 +61,7 @@ func TestSubagentTool_Name(t *testing.T) {
 // TestSubagentTool_Description verifies tool description
 func TestSubagentTool_Description(t *testing.T) {
 	provider := &MockLLMProvider{}
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", nil)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", nil)
 	tool := NewSubagentTool(manager)
 
 	desc := tool.Description()
@@ -65,7 +76,7 @@ func TestSubagentTool_Description(t *testing.T) {
 // TestSubagentTool_Parameters verifies tool parameters schema
 func TestSubagentTool_Parameters(t *testing.T) {
 	provider := &MockLLMProvider{}
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", nil)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", nil)
 	tool := NewSubagentTool(manager)
 
 	params := tool.Parameters()
@@ -115,7 +126,7 @@ func TestSubagentTool_Parameters(t *testing.T) {
 // TestSubagentTool_SetContext verifies context setting
 func TestSubagentTool_SetContext(t *testing.T) {
 	provider := &MockLLMProvider{}
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", nil)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", nil)
 	tool := NewSubagentTool(manager)
 
 	tool.SetContext("test-channel", "test-chat")
@@ -129,7 +140,7 @@ func TestSubagentTool_SetContext(t *testing.T) {
 func TestSubagentTool_Execute_Success(t *testing.T) {
 	provider := &MockLLMProvider{}
 	msgBus := bus.NewMessageBus()
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", msgBus)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
 	tool := NewSubagentTool(manager)
 	tool.SetContext("telegram", "chat-123")
 
@@ -185,7 +196,7 @@ func TestSubagentTool_Execute_Success(t *testing.T) {
 func TestSubagentTool_Execute_NoLabel(t *testing.T) {
 	provider := &MockLLMProvider{}
 	msgBus := bus.NewMessageBus()
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", msgBus)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
 	tool := NewSubagentTool(manager)
 
 	ctx := context.Background()
@@ -208,7 +219,7 @@ func TestSubagentTool_Execute_NoLabel(t *testing.T) {
 // TestSubagentTool_Execute_MissingTask tests error handling for missing task
 func TestSubagentTool_Execute_MissingTask(t *testing.T) {
 	provider := &MockLLMProvider{}
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", nil)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", nil)
 	tool := NewSubagentTool(manager)
 
 	ctx := context.Background()
@@ -259,7 +270,7 @@ func TestSubagentTool_Execute_NilManager(t *testing.T) {
 func TestSubagentTool_Execute_ContextPassing(t *testing.T) {
 	provider := &MockLLMProvider{}
 	msgBus := bus.NewMessageBus()
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", msgBus)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
 	tool := NewSubagentTool(manager)
 
 	// Set context
@@ -288,7 +299,7 @@ func TestSubagentTool_ForUserTruncation(t *testing.T) {
 	// Create a mock provider that returns very long content
 	provider := &MockLLMProvider{}
 	msgBus := bus.NewMessageBus()
-	manager := NewSubagentManager(provider, "test-model", "/tmp/test", msgBus)
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
 	tool := NewSubagentTool(manager)
 
 	ctx := context.Background()
