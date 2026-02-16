@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
@@ -19,6 +20,7 @@ type SubagentTask struct {
 	Status        string
 	Result        string
 	Created       int64
+	PendingMsgs   []string // Queued guidance messages from supervisor
 }
 
 type SubagentManager struct {
@@ -30,18 +32,20 @@ type SubagentManager struct {
 	workspace     string
 	tools         *ToolRegistry
 	maxIterations int
+	maxTokens     int
 	nextID        int
 }
 
-func NewSubagentManager(provider providers.LLMProvider, defaultModel, workspace string, bus *bus.MessageBus) *SubagentManager {
+func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, workspace string, bus *bus.MessageBus) *SubagentManager {
 	return &SubagentManager{
 		tasks:         make(map[string]*SubagentTask),
 		provider:      provider,
-		defaultModel:  defaultModel,
+		defaultModel:  cfg.Agents.Defaults.Model,
 		bus:           bus,
 		workspace:     workspace,
 		tools:         NewToolRegistry(),
-		maxIterations: 10,
+		maxIterations: cfg.Agents.Defaults.MaxIterationsSubagent,
+		maxTokens:     cfg.Agents.Defaults.MaxTokensSubagent,
 		nextID:        1,
 	}
 }
@@ -89,8 +93,10 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, originChannel
 }
 
 func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, callback AsyncCallback) {
+	sm.mu.Lock()
 	task.Status = "running"
 	task.Created = time.Now().UnixMilli()
+	sm.mu.Unlock()
 
 	// Build system prompt for subagent
 	systemPrompt := `You are a subagent. Complete the given task independently and report the result.
@@ -123,6 +129,7 @@ After completing the task, provide a clear summary of what was done.`
 	sm.mu.RLock()
 	tools := sm.tools
 	maxIter := sm.maxIterations
+	maxTok := sm.maxTokens
 	sm.mu.RUnlock()
 
 	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
@@ -131,7 +138,7 @@ After completing the task, provide a clear summary of what was done.`
 		Tools:         tools,
 		MaxIterations: maxIter,
 		LLMOptions: map[string]any{
-			"max_tokens":  4096,
+			"max_tokens":  maxTok,
 			"temperature": 0.7,
 		},
 	}, messages, task.OriginChannel, task.OriginChatID)
@@ -203,6 +210,43 @@ func (sm *SubagentManager) ListTasks() []*SubagentTask {
 		tasks = append(tasks, task)
 	}
 	return tasks
+}
+
+// SendMessage sends a guidance message to a running subagent task.
+func (sm *SubagentManager) SendMessage(taskID, message string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	task, ok := sm.tasks[taskID]
+	if !ok {
+		return fmt.Errorf("task not found")
+	}
+	if task.Status != "running" {
+		return fmt.Errorf("task is not running (status: %s)", task.Status)
+	}
+
+	// Queue message for the running task
+	task.PendingMsgs = append(task.PendingMsgs, message)
+	return nil
+}
+
+// Cancel cancels a running subagent task.
+func (sm *SubagentManager) Cancel(taskID string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	task, ok := sm.tasks[taskID]
+	if !ok {
+		return fmt.Errorf("task not found")
+	}
+	if task.Status != "running" {
+		return fmt.Errorf("task is not running (status: %s)", task.Status)
+	}
+
+	// Mark as cancelled
+	task.Status = "cancelled"
+	task.Result = "Cancelled by user"
+	return nil
 }
 
 // SubagentTool executes a subagent task synchronously and returns the result.
@@ -281,6 +325,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	sm.mu.RLock()
 	tools := sm.tools
 	maxIter := sm.maxIterations
+	maxTok := sm.maxTokens
 	sm.mu.RUnlock()
 
 	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
@@ -289,7 +334,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		Tools:         tools,
 		MaxIterations: maxIter,
 		LLMOptions: map[string]any{
-			"max_tokens":  4096,
+			"max_tokens":  maxTok,
 			"temperature": 0.7,
 		},
 	}, messages, t.originChannel, t.originChatID)
