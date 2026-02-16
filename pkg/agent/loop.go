@@ -22,6 +22,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/mcp"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/state"
@@ -34,8 +35,11 @@ type AgentLoop struct {
 	provider       providers.LLMProvider
 	workspace      string
 	model          string
-	contextWindow  int // Maximum context window size in tokens
-	maxIterations  int
+	contextWindow  int     // Maximum context window size in tokens
+	maxIterations  int     // Max tool iterations for main agent
+	maxTokens      int     // Max tokens for LLM responses
+	temperature    float64 // LLM temperature
+	llmTimeout     int     // LLM API timeout in seconds
 	sessions       *session.SessionManager
 	state          *state.Manager
 	contextBuilder *ContextBuilder
@@ -71,16 +75,33 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// Shell execution
 	registry.Register(tools.NewExecTool(workspace, restrict))
 
+	// Web search - initialize ZAI client if enabled
+	var zaiClient *mcp.Client
+	if cfg.Tools.Web.ZAI.Enabled && cfg.Tools.Web.ZAI.APIKey != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		client, err := mcp.NewClient(ctx, cfg.Tools.Web.ZAI.Endpoint, cfg.Tools.Web.ZAI.APIKey)
+		if err != nil {
+			logger.WarnCF("agent", "Failed to connect ZAI MCP client: %v", map[string]interface{}{"error": err.Error()})
+		} else {
+			zaiClient = client
+			logger.InfoCF("agent", "ZAI MCP client connected", nil)
+		}
+	}
+
 	if searchTool := tools.NewWebSearchTool(tools.WebSearchToolOptions{
 		BraveAPIKey:          cfg.Tools.Web.Brave.APIKey,
 		BraveMaxResults:      cfg.Tools.Web.Brave.MaxResults,
 		BraveEnabled:         cfg.Tools.Web.Brave.Enabled,
 		DuckDuckGoMaxResults: cfg.Tools.Web.DuckDuckGo.MaxResults,
 		DuckDuckGoEnabled:    cfg.Tools.Web.DuckDuckGo.Enabled,
+		ZAIEnabled:           cfg.Tools.Web.ZAI.Enabled,
+		ZAIMaxResults:        cfg.Tools.Web.ZAI.MaxResults,
+		ZAIClient:            zaiClient,
 	}); searchTool != nil {
 		registry.Register(searchTool)
 	}
-	registry.Register(tools.NewWebFetchTool(50000))
+	registry.Register(tools.NewWebFetchTool(50000, zaiClient))
 
 	// Hardware tools (I2C, SPI) - Linux only, returns error on other platforms
 	registry.Register(tools.NewI2CTool())
@@ -139,8 +160,11 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		provider:       provider,
 		workspace:      workspace,
 		model:          cfg.Agents.Defaults.Model,
-		contextWindow:  cfg.Agents.Defaults.MaxTokens, // Restore context window for summarization
+		contextWindow:  cfg.Agents.Defaults.MaxTokens,
 		maxIterations:  cfg.Agents.Defaults.MaxToolIterations,
+		maxTokens:      cfg.Agents.Defaults.MaxTokens,
+		temperature:    cfg.Agents.Defaults.Temperature,
+		llmTimeout:     cfg.Agents.Defaults.LLMTimeout,
 		sessions:       sessionsManager,
 		state:          stateManager,
 		contextBuilder: contextBuilder,
@@ -432,8 +456,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"model":             al.model,
 				"messages_count":    len(messages),
 				"tools_count":       len(providerToolDefs),
-				"max_tokens":        8192,
-				"temperature":       0.7,
+				"max_tokens":        al.maxTokens,
+				"temperature":       al.temperature,
 				"system_prompt_len": len(messages[0].Content),
 			})
 
@@ -447,8 +471,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 		// Call LLM
 		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
-			"max_tokens":  8192,
-			"temperature": 0.7,
+			"max_tokens":  al.maxTokens,
+			"temperature": al.temperature,
 		})
 
 		if err != nil {
@@ -674,7 +698,7 @@ func formatToolsForLog(tools []providers.ToolDefinition) string {
 
 // summarizeSession summarizes the conversation history for a session.
 func (al *AgentLoop) summarizeSession(sessionKey string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(al.llmTimeout)*time.Second)
 	defer cancel()
 
 	history := al.sessions.GetHistory(sessionKey)

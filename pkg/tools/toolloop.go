@@ -52,14 +52,8 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 			providerToolDefs = config.Tools.ToProviderDefs()
 		}
 
-		// 2. Set default LLM options
+		// 2. Use LLM options from config (required)
 		llmOpts := config.LLMOptions
-		if llmOpts == nil {
-			llmOpts = map[string]any{
-				"max_tokens":  4096,
-				"temperature": 0.7,
-			}
-		}
 
 		// 3. Call LLM
 		response, err := config.Provider.Chat(ctx, messages, providerToolDefs, config.Model, llmOpts)

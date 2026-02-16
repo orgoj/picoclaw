@@ -276,15 +276,17 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]interface{}
 }
 
 type WebFetchTool struct {
-	maxChars int
+	maxChars  int
+	zaiClient *mcp.Client
 }
 
-func NewWebFetchTool(maxChars int) *WebFetchTool {
+func NewWebFetchTool(maxChars int, zaiClient *mcp.Client) *WebFetchTool {
 	if maxChars <= 0 {
 		maxChars = 50000
 	}
 	return &WebFetchTool{
-		maxChars: maxChars,
+		maxChars:  maxChars,
+		zaiClient: zaiClient,
 	}
 }
 
@@ -340,6 +342,28 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{})
 		}
 	}
 
+	// Use ZAI webReader if available
+	if t.zaiClient != nil {
+		result, err := t.zaiClient.CallTool(ctx, "webReader", map[string]any{
+			"url":           urlStr,
+			"return_format": "markdown",
+		})
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("ZAI webReader failed: %v", err))
+		}
+
+		truncated := len(result) > maxChars
+		if truncated {
+			result = result[:maxChars]
+		}
+
+		return &ToolResult{
+			ForLLM:  fmt.Sprintf("Fetched via ZAI webReader (%d bytes, truncated: %v):\n%s", len(result), truncated, result),
+			ForUser: result,
+		}
+	}
+
+	// Fallback: direct HTTP fetch
 	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create request: %v", err))

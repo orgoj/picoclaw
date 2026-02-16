@@ -210,9 +210,11 @@ type DuckDuckGoConfig struct {
 }
 
 type ZAIConfig struct {
-	Enabled    bool `json:"enabled" env:"PICOCLAW_TOOLS_WEB_ZAI_ENABLED"`
-	MaxResults int  `json:"max_results" env:"PICOCLAW_TOOLS_WEB_ZAI_MAX_RESULTS"`
-	Timeout    int  `json:"timeout" env:"PICOCLAW_TOOLS_WEB_ZAI_TIMEOUT"`
+	Enabled    bool   `json:"enabled" env:"PICOCLAW_TOOLS_WEB_ZAI_ENABLED"`
+	APIKey     string `json:"api_key" env:"PICOCLAW_TOOLS_WEB_ZAI_API_KEY"`
+	Endpoint   string `json:"endpoint" env:"PICOCLAW_TOOLS_WEB_ZAI_ENDPOINT"`
+	MaxResults int    `json:"max_results" env:"PICOCLAW_TOOLS_WEB_ZAI_MAX_RESULTS"`
+	Timeout    int    `json:"timeout" env:"PICOCLAW_TOOLS_WEB_ZAI_TIMEOUT"`
 }
 
 type WebToolsConfig struct {
@@ -336,6 +338,8 @@ func DefaultConfig() *Config {
 				},
 				ZAI: ZAIConfig{
 					Enabled:    false,
+					APIKey:     "",
+					Endpoint:   "https://mcp.zukijourney.com",
 					MaxResults: 5,
 					Timeout:    60,
 				},

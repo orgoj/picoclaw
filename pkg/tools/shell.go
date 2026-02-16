@@ -172,30 +172,38 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 	}
 
 	if t.restrictToWorkspace {
+		// Only block explicit path traversal with ..
 		if strings.Contains(cmd, "..\\") || strings.Contains(cmd, "../") {
 			return "Command blocked by safety guard (path traversal detected)"
 		}
 
-		cwdPath, err := filepath.Abs(cwd)
-		if err != nil {
-			return ""
+		// Get absolute workspace path
+		workspacePath, err := filepath.Abs(t.workingDir)
+		if err != nil || workspacePath == "" {
+			workspacePath, _ = filepath.Abs(cwd)
+		}
+		if workspacePath == "" {
+			return "" // No workspace restriction if we can't determine it
 		}
 
-		pathPattern := regexp.MustCompile(`[A-Za-z]:\\[^\\\"']+|/[^\s\"']+`)
-		matches := pathPattern.FindAllString(cmd, -1)
+		// Match only ABSOLUTE paths: /something or C:\something
+		// Must be preceded by start of string, whitespace, =, or quotes
+		absPathPattern := regexp.MustCompile(`(?:^|[\s="'` + "`" + `])([A-Za-z]:\\[^\s\\\"']+|/[^\s\"']+)`)
+		matches := absPathPattern.FindAllStringSubmatch(cmd, -1)
 
-		for _, raw := range matches {
+		for _, match := range matches {
+			if len(match) < 2 {
+				continue
+			}
+			raw := match[1]
+
 			p, err := filepath.Abs(raw)
 			if err != nil {
 				continue
 			}
 
-			rel, err := filepath.Rel(cwdPath, p)
-			if err != nil {
-				continue
-			}
-
-			if strings.HasPrefix(rel, "..") {
+			// Check if absolute path is inside workspace
+			if !strings.HasPrefix(p+string(filepath.Separator), workspacePath+string(filepath.Separator)) && p != workspacePath {
 				return "Command blocked by safety guard (path outside working dir)"
 			}
 		}

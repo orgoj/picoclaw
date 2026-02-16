@@ -195,7 +195,10 @@ picoclaw onboard
       "model": "glm-4.7",
       "max_tokens": 8192,
       "temperature": 0.7,
-      "max_tool_iterations": 20
+      "max_tool_iterations": 20,
+      "max_iterations_subagent": 20,
+      "max_tokens_subagent": 4096,
+      "llm_timeout": 120
     }
   },
   "providers": {
@@ -219,6 +222,14 @@ picoclaw onboard
   }
 }
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `max_tool_iterations` | `20` | Max tool calls per main agent loop |
+| `max_iterations_subagent` | 20 | Max tool calls per subagent |
+| `max_tokens` | 8192 | Max tokens for main agent |
+| `max_tokens_subagent` | 4096 | Max tokens for subagents |
+| `llm_timeout` | 120 | LLM API timeout in seconds |
 
 **3. Get API Keys**
 
@@ -248,6 +259,24 @@ Talk to your picoclaw through Telegram, Discord, DingTalk, or LINE
 | **QQ**       | Easy (AppID + AppSecret)           |
 | **DingTalk** | Medium (app credentials)           |
 | **LINE**     | Medium (credentials + webhook URL) |
+| **Slack**    | Medium (bot + app tokens)          |
+| **MaixCam**  | Easy (embedded device)             |
+| **OneBot**   | Medium (WebSocket bridge)          |
+| **WhatsApp** | Medium (bridge required)           |
+| **Feishu**   | Medium (app credentials)           |
+
+#### Channel Options
+
+| Channel | Option | Default | Description |
+|---------|--------|---------|-------------|
+| **Telegram** | `proxy` | `""` | HTTP proxy URL (e.g., `http://127.0.0.1:7890`) |
+| **LINE** | `webhook_host` | `0.0.0.0` | Webhook listen host |
+| **LINE** | `webhook_port` | `18791` | Webhook listen port |
+| **LINE** | `webhook_path` | `/webhook/line` | Webhook URL path |
+| **MaixCam** | `host` | `0.0.0.0` | Listen host |
+| **MaixCam** | `port` | `18790` | Listen port |
+| **OneBot** | `reconnect_interval` | `5` | Reconnect interval (seconds) |
+| **OneBot** | `group_trigger_prefix` | `[]` | Prefix to trigger in groups |
 
 <details>
 <summary><b>Telegram</b> (Recommended)</summary>
@@ -266,11 +295,18 @@ Talk to your picoclaw through Telegram, Discord, DingTalk, or LINE
     "telegram": {
       "enabled": true,
       "token": "YOUR_BOT_TOKEN",
-      "allowFrom": ["YOUR_USER_ID"]
+      "proxy": "",
+      "allow_from": ["YOUR_USER_ID"]
     }
   }
 }
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `token` | `""` | Bot token from @BotFather |
+| `proxy` | `""` | HTTP proxy URL (e.g., `http://127.0.0.1:7890`) |
+| `allow_from` | `[]` | Allowed user IDs (empty = all) |
 
 > Get your user ID from `@userinfobot` on Telegram.
 
@@ -444,6 +480,179 @@ picoclaw gateway
 > In group chats, the bot responds only when @mentioned. Replies quote the original message.
 
 > **Docker Compose**: Add `ports: ["18791:18791"]` to the `picoclaw-gateway` service to expose the webhook port.
+
+</details>
+
+<details>
+<summary><b>Slack</b></summary>
+
+**1. Create a Slack App**
+
+* Go to [Slack API](https://api.slack.com/apps)
+* Create New App → From scratch
+* Copy **Bot User OAuth Token** (starts with `xoxb-`)
+* Copy **App-Level Token** (starts with `xapp-`)
+
+**2. Enable Socket Mode**
+
+* Go to Socket Mode → Enable
+* Generate App-Level Token with `connections:write` scope
+
+**3. Configure**
+
+```json
+{
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "bot_token": "xoxb-xxx",
+      "app_token": "xapp-xxx",
+      "allow_from": []
+    }
+  }
+}
+```
+
+**4. Run**
+
+```bash
+picoclaw gateway
+```
+
+</details>
+
+<details>
+<summary><b>MaixCam</b></summary>
+
+MaixCam is an AI camera that can run PicoClaw for local AI assistant.
+
+**1. Configure**
+
+```json
+{
+  "channels": {
+    "maixcam": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 18790,
+      "allow_from": []
+    }
+  }
+}
+```
+
+**2. Run**
+
+```bash
+picoclaw gateway
+```
+
+</details>
+
+<details>
+<summary><b>OneBot</b></summary>
+
+OneBot is a protocol for QQ bots (go-cqhttp, etc.).
+
+**1. Configure your OneBot implementation**
+
+* Set up go-cqhttp or similar
+* Enable WebSocket reverse connection
+
+**2. Configure**
+
+```json
+{
+  "channels": {
+    "onebot": {
+      "enabled": true,
+      "ws_url": "ws://127.0.0.1:3001",
+      "access_token": "",
+      "reconnect_interval": 5,
+      "group_trigger_prefix": [".", "/"],
+      "allow_from": []
+    }
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ws_url` | `ws://127.0.0.1:3001` | WebSocket URL |
+| `access_token` | `""` | Access token |
+| `reconnect_interval` | `5` | Reconnect interval in seconds |
+| `group_trigger_prefix` | `[]` | Prefix to trigger bot in groups |
+
+**3. Run**
+
+```bash
+picoclaw gateway
+```
+
+</details>
+
+<details>
+<summary><b>WhatsApp</b></summary>
+
+WhatsApp requires a bridge service (e.g., whatsapp-web.js or mautrix-whatsapp).
+
+**1. Set up a bridge**
+
+* Run a WhatsApp bridge service
+* Note the WebSocket URL
+
+**2. Configure**
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "bridge_url": "ws://localhost:3001",
+      "allow_from": []
+    }
+  }
+}
+```
+
+**3. Run**
+
+```bash
+picoclaw gateway
+```
+
+</details>
+
+<details>
+<summary><b>Feishu (飞书)</b></summary>
+
+**1. Create a Feishu app**
+
+* Go to [Feishu Open Platform](https://open.feishu.cn/)
+* Create an app → Get **App ID** and **App Secret**
+
+**2. Configure**
+
+```json
+{
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "app_id": "cli_xxx",
+      "app_secret": "xxx",
+      "encrypt_key": "",
+      "verification_token": "",
+      "allow_from": []
+    }
+  }
+}
+```
+
+**3. Run**
+
+```bash
+picoclaw gateway
+```
 
 </details>
 
@@ -662,6 +871,56 @@ The subagent has access to tools (message, web_search, etc.) and can communicate
 | `deepseek(To be tested)`   | LLM (DeepSeek direct)                   | [platform.deepseek.com](https://platform.deepseek.com) |
 | `groq`                     | LLM + **Voice transcription** (Whisper) | [console.groq.com](https://console.groq.com)           |
 
+### Full Configuration Reference
+
+#### Agent Defaults
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `workspace` | `~/.picoclaw/workspace` | Working directory for the agent |
+| `restrict_to_workspace` | `true` | Restrict file/command access to workspace |
+| `provider` | `""` (auto-detect) | Force a specific provider: `openrouter`, `zhipu`, `anthropic`, `openai`, `gemini`, `groq`, etc. |
+| `model` | `glm-4.7` | Model to use (provider-specific) |
+| `max_tokens` | `8192` | Max tokens for main agent responses |
+| `temperature` | `0.7` | LLM temperature (0.0-2.0) |
+| `max_tool_iterations` | `20` | Max tool calls per main agent loop |
+| `max_iterations_subagent` | `20` | Max tool calls per subagent |
+| `max_tokens_subagent` | `4096` | Max tokens for subagent responses |
+| `llm_timeout` | `120` | LLM API timeout in seconds |
+
+#### Gateway
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `host` | `0.0.0.0` | Gateway listen host |
+| `port` | `18790` | Gateway listen port |
+
+#### Heartbeat
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `true` | Enable periodic task execution |
+| `interval` | `30` | Check interval in minutes (min: 5) |
+
+#### Devices
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable device monitoring |
+| `monitor_usb` | `true` | Monitor USB device changes |
+
+#### Provider Config
+
+Each provider supports these options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `api_key` | `""` | API key for the provider |
+| `api_base` | `""` | Custom API base URL |
+| `proxy` | `""` | HTTP proxy URL (e.g., `http://127.0.0.1:7890`) |
+| `auth_method` | `""` | Auth method (provider-specific) |
+| `connect_mode` | `""` | GitHub Copilot only: `stdio` or `grpc` |
+
 <details>
 <summary><b>Zhipu</b></summary>
 
@@ -706,21 +965,37 @@ picoclaw agent -m "Hello"
 {
   "agents": {
     "defaults": {
-      "model": "anthropic/claude-opus-4-5"
+      "workspace": "~/.picoclaw/workspace",
+      "restrict_to_workspace": true,
+      "provider": "",
+      "model": "anthropic/claude-opus-4-5",
+      "max_tokens": 8192,
+      "temperature": 0.7,
+      "max_tool_iterations": 20,
+      "max_iterations_subagent": 20,
+      "max_tokens_subagent": 4096,
+      "llm_timeout": 120
     }
   },
   "providers": {
     "openrouter": {
-      "api_key": "sk-or-v1-xxx"
+      "api_key": "sk-or-v1-xxx",
+      "api_base": "https://openrouter.ai/api/v1",
+      "proxy": ""
     },
     "groq": {
       "api_key": "gsk_xxx"
     }
   },
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 18790
+  },
   "channels": {
     "telegram": {
       "enabled": true,
       "token": "123456:ABC...",
+      "proxy": "",
       "allow_from": ["123456789"]
     },
     "discord": {
@@ -728,8 +1003,30 @@ picoclaw agent -m "Hello"
       "token": "",
       "allow_from": [""]
     },
+    "slack": {
+      "enabled": false,
+      "bot_token": "xoxb-xxx",
+      "app_token": "xapp-xxx",
+      "allow_from": []
+    },
+    "maixcam": {
+      "enabled": false,
+      "host": "0.0.0.0",
+      "port": 18790,
+      "allow_from": []
+    },
+    "onebot": {
+      "enabled": false,
+      "ws_url": "ws://127.0.0.1:3001",
+      "access_token": "",
+      "reconnect_interval": 5,
+      "group_trigger_prefix": [],
+      "allow_from": []
+    },
     "whatsapp": {
-      "enabled": false
+      "enabled": false,
+      "bridge_url": "ws://localhost:3001",
+      "allow_from": []
     },
     "feishu": {
       "enabled": false,
@@ -744,10 +1041,32 @@ picoclaw agent -m "Hello"
       "app_id": "",
       "app_secret": "",
       "allow_from": []
+    },
+    "dingtalk": {
+      "enabled": false,
+      "client_id": "",
+      "client_secret": "",
+      "allow_from": []
+    },
+    "line": {
+      "enabled": false,
+      "channel_secret": "",
+      "channel_access_token": "",
+      "webhook_host": "0.0.0.0",
+      "webhook_port": 18791,
+      "webhook_path": "/webhook/line",
+      "allow_from": []
     }
   },
   "tools": {
     "web": {
+      "zai": {
+        "enabled": false,
+        "api_key": "",
+        "endpoint": "https://mcp.zukijourney.com",
+        "max_results": 10,
+        "timeout": 60
+      },
       "brave": {
         "enabled": false,
         "api_key": "BSA...",
@@ -762,6 +1081,10 @@ picoclaw agent -m "Hello"
   "heartbeat": {
     "enabled": true,
     "interval": 30
+  },
+  "devices": {
+    "enabled": false,
+    "monitor_usb": true
   }
 }
 ```
@@ -812,24 +1135,48 @@ This is normal if you haven't configured a search API key yet. PicoClaw will pro
 
 To enable web search:
 
-1. **Option 1 (Recommended)**: Get a free API key at [https://brave.com/search/api](https://brave.com/search/api) (2000 free queries/month) for the best results.
-2. **Option 2 (No Credit Card)**: If you don't have a key, we automatically fall back to **DuckDuckGo** (no key required).
+1. **Option 1 (Recommended)**: **Z.AI** - Get [Coding Plan](https://zukijourney.com) for MCP-powered search + fetch + vision
+2. **Option 2**: [Brave Search API](https://brave.com/search/api) (2000 free queries/month)
+3. **Option 3 (No API Key)**: DuckDuckGo (free, no key required)
 
-Add the key to `~/.picoclaw/config.json` if using Brave:
+#### Z.AI Configuration (Recommended)
+
+Z.AI provides unified MCP tools: `webSearchPrime` (search), `webReader` (fetch), `zread` (deep research), `vision` (image understanding).
+
+```json
+{
+  "tools": {
+    "web": {
+      "zai": {
+        "enabled": true,
+        "api_key": "YOUR_ZAI_API_KEY",
+        "endpoint": "https://mcp.zukijourney.com",
+        "max_results": 10,
+        "timeout": 60
+      },
+      "brave": { "enabled": false },
+      "duckduckgo": { "enabled": false }
+    }
+  }
+}
+```
+
+#### Brave/DuckDuckGo Configuration
 
 ```json
 {
   "tools": {
     "web": {
       "brave": {
-        "enabled": false,
+        "enabled": true,
         "api_key": "YOUR_BRAVE_API_KEY",
         "max_results": 5
       },
       "duckduckgo": {
-        "enabled": true,
+        "enabled": false,
         "max_results": 5
-      }
+      },
+      "zai": { "enabled": false }
     }
   }
 }

@@ -31,6 +31,7 @@ type SubagentManager struct {
 	bus           *bus.MessageBus
 	workspace     string
 	tools         *ToolRegistry
+	cfg           *config.Config
 	maxIterations int
 	maxTokens     int
 	nextID        int
@@ -44,6 +45,7 @@ func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, work
 		bus:           bus,
 		workspace:     workspace,
 		tools:         NewToolRegistry(),
+		cfg:           cfg,
 		maxIterations: cfg.Agents.Defaults.MaxIterationsSubagent,
 		maxTokens:     cfg.Agents.Defaults.MaxTokensSubagent,
 		nextID:        1,
@@ -139,7 +141,7 @@ After completing the task, provide a clear summary of what was done.`
 		MaxIterations: maxIter,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
-			"temperature": 0.7,
+			"temperature": sm.cfg.Agents.Defaults.Temperature,
 		},
 	}, messages, task.OriginChannel, task.OriginChatID)
 
@@ -335,7 +337,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		MaxIterations: maxIter,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
-			"temperature": 0.7,
+			"temperature": sm.cfg.Agents.Defaults.Temperature,
 		},
 	}, messages, t.originChannel, t.originChatID)
 

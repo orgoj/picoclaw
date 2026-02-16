@@ -32,7 +32,7 @@
   - `max_tokens_main` (8192)
   - `max_tokens_subagent` (4096)
   - `llm_timeout` (120)
-- **Location:** `projects/picoclaw/docs/PICOCLAW_CONFIG_KISS.md`
+- **Location:** `projects/piclaw/docs/PICOCLAW_CONFIG_KISS.md`
 
 ### SUBAGENT_KISS.md
 - **Status:** ✅ APPROVED (Review V3 - minor issues, fix pending)
@@ -41,13 +41,13 @@
   - `subagent_history` - view conversation history
   - `subagent_message` - send guidance
   - `subagent_cancel` - cancel subagent
-- **Location:** `projects/picoclaw/docs/PICOCLAW_SUBAGENT_KISS.md`
+- **Location:** `projects/piclaw/docs/PICOCLAW_SUBAGENT_KISS.md`
 
 ### MCP_KISS.md
 - **Status:** ⚠️ NEEDS REVISION (Review V3 - SDK API issues, fix pending)
 - **Provider:** ZAI MCP for web search/fetch
 - **Issues:** SDK API calls must be fixed
-- **Location:** `projects/picoclaw/docs/PICOCLAW_MCP_KISS.md`
+- **Location:** `projects/piclaw/docs/PICOCLAW_MCP_KISS.md`
 
 ---
 
