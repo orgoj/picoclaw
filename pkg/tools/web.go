@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/mcp"
 )
 
 const (
@@ -187,14 +189,22 @@ type WebSearchToolOptions struct {
 	BraveEnabled         bool
 	DuckDuckGoMaxResults int
 	DuckDuckGoEnabled    bool
+	ZAIMaxResults        int
+	ZAIEnabled           bool
+	ZAIClient            *mcp.Client
 }
 
 func NewWebSearchTool(opts WebSearchToolOptions) *WebSearchTool {
 	var provider SearchProvider
 	maxResults := 5
 
-	// Priority: Brave > DuckDuckGo
-	if opts.BraveEnabled && opts.BraveAPIKey != "" {
+	// Priority: ZAI > Brave > DuckDuckGo
+	if opts.ZAIEnabled && opts.ZAIClient != nil {
+		provider = NewZAISearchProvider(opts.ZAIClient)
+		if opts.ZAIMaxResults > 0 {
+			maxResults = opts.ZAIMaxResults
+		}
+	} else if opts.BraveEnabled && opts.BraveAPIKey != "" {
 		provider = &BraveSearchProvider{apiKey: opts.BraveAPIKey}
 		if opts.BraveMaxResults > 0 {
 			maxResults = opts.BraveMaxResults
