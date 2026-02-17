@@ -216,11 +216,12 @@ type DuckDuckGoConfig struct {
 }
 
 type ZAIConfig struct {
-	Enabled    bool   `json:"enabled" env:"PICOCLAW_TOOLS_WEB_ZAI_ENABLED"`
-	APIKey     string `json:"api_key" env:"PICOCLAW_TOOLS_WEB_ZAI_API_KEY"`
-	Endpoint   string `json:"endpoint" env:"PICOCLAW_TOOLS_WEB_ZAI_ENDPOINT"`
-	MaxResults int    `json:"max_results" env:"PICOCLAW_TOOLS_WEB_ZAI_MAX_RESULTS"`
-	Timeout    int    `json:"timeout" env:"PICOCLAW_TOOLS_WEB_ZAI_TIMEOUT"`
+	Enabled       bool   `json:"enabled" env:"PICOCLAW_TOOLS_WEB_ZAI_ENABLED"`
+	APIKey        string `json:"api_key" env:"PICOCLAW_TOOLS_WEB_ZAI_API_KEY"`
+	Endpoint      string `json:"endpoint" env:"PICOCLAW_TOOLS_WEB_ZAI_ENDPOINT"`
+	MaxResults    int    `json:"max_results" env:"PICOCLAW_TOOLS_WEB_ZAI_MAX_RESULTS"`
+	Timeout       int    `json:"timeout" env:"PICOCLAW_TOOLS_WEB_ZAI_TIMEOUT"`
+	EndpointFetch string `json:"endpoint_fetch" env:"PICOCLAW_TOOLS_WEB_ZAI_ENDPOINT_FETCH"`
 }
 
 type WebToolsConfig struct {

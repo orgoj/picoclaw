@@ -76,16 +76,35 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	registry.Register(tools.NewExecTool(workspace, restrict))
 
 	// Web search - initialize ZAI client if enabled
-	var zaiClient *mcp.Client
+	var zaiSearchClient *mcp.Client
+	var zaiFetchClient *mcp.Client
+
 	if cfg.Tools.Web.ZAI.Enabled && cfg.Tools.Web.ZAI.APIKey != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		client, err := mcp.NewClient(ctx, cfg.Tools.Web.ZAI.Endpoint, cfg.Tools.Web.ZAI.APIKey)
-		if err != nil {
-			logger.WarnCF("agent", "Failed to connect ZAI MCP client: %v", map[string]interface{}{"error": err.Error()})
+
+		// Search client
+		if cfg.Tools.Web.ZAI.Endpoint != "" {
+			client, err := mcp.NewClient(ctx, cfg.Tools.Web.ZAI.Endpoint, cfg.Tools.Web.ZAI.APIKey)
+			if err != nil {
+				logger.WarnCF("agent", "Failed to connect ZAI Search MCP client: %v", map[string]interface{}{"error": err.Error(), "endpoint": cfg.Tools.Web.ZAI.Endpoint})
+			} else {
+				zaiSearchClient = client
+				logger.InfoCF("agent", "ZAI Search MCP client connected", map[string]interface{}{"endpoint": cfg.Tools.Web.ZAI.Endpoint})
+			}
+		}
+
+		// Fetch client (optional, fallback to Search client if not specified)
+		if cfg.Tools.Web.ZAI.EndpointFetch != "" {
+			client, err := mcp.NewClient(ctx, cfg.Tools.Web.ZAI.EndpointFetch, cfg.Tools.Web.ZAI.APIKey)
+			if err != nil {
+				logger.WarnCF("agent", "Failed to connect ZAI Fetch MCP client: %v", map[string]interface{}{"error": err.Error(), "endpoint": cfg.Tools.Web.ZAI.EndpointFetch})
+			} else {
+				zaiFetchClient = client
+				logger.InfoCF("agent", "ZAI Fetch MCP client connected", map[string]interface{}{"endpoint": cfg.Tools.Web.ZAI.EndpointFetch})
+			}
 		} else {
-			zaiClient = client
-			logger.InfoCF("agent", "ZAI MCP client connected", nil)
+			zaiFetchClient = zaiSearchClient
 		}
 	}
 
@@ -97,11 +116,11 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 		DuckDuckGoEnabled:    cfg.Tools.Web.DuckDuckGo.Enabled,
 		ZAIEnabled:           cfg.Tools.Web.ZAI.Enabled,
 		ZAIMaxResults:        cfg.Tools.Web.ZAI.MaxResults,
-		ZAIClient:            zaiClient,
+		ZAIClient:            zaiSearchClient,
 	}); searchTool != nil {
 		registry.Register(searchTool)
 	}
-	registry.Register(tools.NewWebFetchTool(50000, zaiClient))
+	registry.Register(tools.NewWebFetchTool(50000, zaiFetchClient))
 
 	// Hardware tools (I2C, SPI) - Linux only, returns error on other platforms
 	registry.Register(tools.NewI2CTool())
