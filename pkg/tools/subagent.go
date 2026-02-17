@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type SubagentTask struct {
 	ID            string
 	Task          string
 	Label         string
+	Name          string // Named agent identity (optional)
 	Directory     string // Project directory passed to subagent
 	OriginChannel string
 	OriginChatID  string
@@ -71,7 +73,7 @@ func (sm *SubagentManager) RegisterTool(tool Tool) {
 	sm.tools.Register(tool)
 }
 
-func (sm *SubagentManager) Spawn(ctx context.Context, task, label, directory, originChannel, originChatID string, callback AsyncCallback) (string, error) {
+func (sm *SubagentManager) Spawn(ctx context.Context, task, label, name, directory, originChannel, originChatID string, callback AsyncCallback) (string, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -82,6 +84,7 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, directory, or
 		ID:            taskID,
 		Task:          task,
 		Label:         label,
+		Name:          name,
 		Directory:     directory,
 		OriginChannel: originChannel,
 		OriginChatID:  originChatID,
@@ -93,29 +96,59 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, directory, or
 	// Start task in background with context cancellation support
 	go sm.runTask(ctx, subagentTask, callback)
 
+	nameTag := ""
+	if name != "" {
+		nameTag = fmt.Sprintf(" [agent: %s]", name)
+	}
 	switch {
 	case label != "" && directory != "":
-		return fmt.Sprintf("Spawned subagent '%s' in '%s' for task: %s", label, directory, task), nil
+		return fmt.Sprintf("Spawned subagent '%s'%s in '%s' for task: %s", label, nameTag, directory, task), nil
 	case label != "":
-		return fmt.Sprintf("Spawned subagent '%s' for task: %s", label, task), nil
+		return fmt.Sprintf("Spawned subagent '%s'%s for task: %s", label, nameTag, task), nil
 	case directory != "":
-		return fmt.Sprintf("Spawned subagent in '%s' for task: %s", directory, task), nil
+		return fmt.Sprintf("Spawned subagent%s in '%s' for task: %s", nameTag, directory, task), nil
 	default:
-		return fmt.Sprintf("Spawned subagent for task: %s", task), nil
+		return fmt.Sprintf("Spawned subagent%s for task: %s", nameTag, task), nil
 	}
 }
 
 // buildSubagentSystemPrompt builds the system prompt for subagents.
 // If SUBAGENTS.md exists in workspace, it replaces the hardcoded base prompt.
+// If name is set, loads agent identity and memory from workspace/agents/<name>/.
 // If directory is set and contains AGENTS.md, it is included as project context.
 // Workspace bootstrap files (SOUL.md, USER.md etc.) are NOT included — those are for main agent only.
-func (sm *SubagentManager) buildSubagentSystemPrompt(taskLabel, directory string) string {
+func (sm *SubagentManager) buildSubagentSystemPrompt(taskLabel, name, directory string) string {
 	base := `You are a subagent. Complete the given task independently and report the result.
 You have access to tools - use them as needed to complete your task.
 After completing the task, provide a clear summary of what was done.`
 
 	if data, err := os.ReadFile(filepath.Join(sm.workspace, "SUBAGENTS.md")); err == nil {
 		base = string(data)
+	}
+
+	if name != "" {
+		// Security: reject names with path separators or dots to prevent traversal
+		if strings.ContainsAny(name, "/\\.") {
+			logger.WarnCF("subagent", "Invalid agent name ignored (path traversal attempt)",
+				map[string]interface{}{"name": name})
+			name = ""
+		}
+	}
+
+	if name != "" {
+		agentDir := filepath.Join(sm.workspace, "agents", name)
+		// Load agent identity
+		if data, err := os.ReadFile(filepath.Join(agentDir, "AGENTS.md")); err == nil {
+			base += fmt.Sprintf("\n\n## Agent Identity: %s\n\n%s", name, string(data))
+		}
+		// Load agent memory
+		if data, err := os.ReadFile(filepath.Join(agentDir, "memory", "MEMORY.md")); err == nil {
+			base += "\n\n## Your Memory\n\n" + string(data)
+		}
+		// Memory save instructions
+		now := time.Now()
+		base += fmt.Sprintf("\n\n## Memory Instructions\nYou are a named agent with persistent memory. At the end of this task, save key learnings to your memory using write_file/append_file:\n- Long-term: agents/%s/memory/MEMORY.md\n- Daily notes: agents/%s/memory/%s/%s.md",
+			name, name, now.Format("200601"), now.Format("20060102"))
 	}
 
 	if taskLabel != "" {
@@ -146,10 +179,11 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		map[string]interface{}{
 			"task_id":   task.ID,
 			"label":     task.Label,
+			"name":      task.Name,
 			"directory": task.Directory,
 		})
 
-	systemPrompt := sm.buildSubagentSystemPrompt(task.Label, task.Directory)
+	systemPrompt := sm.buildSubagentSystemPrompt(task.Label, task.Name, task.Directory)
 
 	messages := []providers.Message{
 		{
@@ -231,7 +265,12 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 
 	// Send announce message back to main agent
 	if sm.bus != nil {
-		announceContent := fmt.Sprintf("Task '%s' completed.\n\nResult:\n%s", task.Label, task.Result)
+		var announceContent string
+		if task.Name != "" {
+			announceContent = fmt.Sprintf("Task '%s' [agent: %s] completed.\n\nResult:\n%s", task.Label, task.Name, task.Result)
+		} else {
+			announceContent = fmt.Sprintf("Task '%s' completed.\n\nResult:\n%s", task.Label, task.Result)
+		}
 		sm.bus.PublishInbound(bus.InboundMessage{
 			Channel:  "system",
 			SenderID: fmt.Sprintf("subagent:%s", task.ID),
@@ -334,6 +373,10 @@ func (t *SubagentTool) Parameters() map[string]interface{} {
 				"type":        "string",
 				"description": "Optional short label for the task (for display)",
 			},
+			"name": map[string]interface{}{
+				"type":        "string",
+				"description": "Optional named agent. If set, loads identity and memory from workspace/agents/<name>/. Agent saves learnings to its memory after each task.",
+			},
 			"directory": map[string]interface{}{
 				"type":        "string",
 				"description": "Optional project directory. If AGENTS.md exists there, it will be included. Relative paths are resolved against workspace.",
@@ -355,13 +398,14 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	}
 
 	label, _ := args["label"].(string)
+	name, _ := args["name"].(string)
 	directory, _ := args["directory"].(string)
 
 	if t.manager == nil {
 		return ErrorResult("Subagent manager not configured").WithError(fmt.Errorf("manager is nil"))
 	}
 
-	systemPrompt := t.manager.buildSubagentSystemPrompt(label, directory)
+	systemPrompt := t.manager.buildSubagentSystemPrompt(label, name, directory)
 
 	// Build messages for subagent
 	messages := []providers.Message{

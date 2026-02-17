@@ -51,8 +51,8 @@ PicoClaw is an ultra-lightweight personal AI assistant designed to run on low-re
 | `pkg/tools/registry.go` | Central registry for available agent tools. |
 | `pkg/tools/filesystem.go` | Tools for reading, writing, and listing files. |
 | `pkg/tools/shell.go` | Tool for executing shell commands. |
-| `pkg/tools/spawn.go` | Spawns asynchronous subagents for long-running tasks. |
-| `pkg/tools/subagent.go` | Synchronous subagent execution tool. |
+| `pkg/tools/spawn.go` | Spawns asynchronous subagents for long-running tasks. Supports optional `name` for named agents. |
+| `pkg/tools/subagent.go` | Synchronous subagent execution and `SubagentManager`. Named agents load identity/memory from `workspace/agents/<name>/`. |
 | `pkg/tools/web.go` | Web search tool supporting multiple backends (Brave, DDG, ZAI). |
 | `pkg/tools/zai.go` | Specialized tools for Z.AI MCP services. |
 | `pkg/state/state.go` | Manages persistent system state (e.g., last active channel). |

@@ -84,6 +84,21 @@ Your workspace is at: %s
 		now, runtime, workspacePath, workspacePath, workspacePath, workspacePath, toolsSection, workspacePath)
 }
 
+func (cb *ContextBuilder) buildNamedAgentsSummary() string {
+	agents := tools.LoadAvailableAgents(cb.workspace)
+	if len(agents) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Named Agents\n\n")
+	sb.WriteString("The following named agents are available. Use the `name` parameter in `subagent` or `spawn` tools to delegate tasks to them. Each named agent carries its own identity and persistent memory.\n\n")
+	for _, a := range agents {
+		sb.WriteString(fmt.Sprintf("- **%s** — %s\n", a.Name, a.Description))
+	}
+	return sb.String()
+}
+
 func (cb *ContextBuilder) buildToolsSection() string {
 	if cb.tools == nil {
 		return ""
@@ -126,6 +141,12 @@ func (cb *ContextBuilder) BuildSystemPrompt() string {
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 
 %s`, skillsSummary))
+	}
+
+	// Named agents available for delegation
+	agentsSummary := cb.buildNamedAgentsSummary()
+	if agentsSummary != "" {
+		parts = append(parts, agentsSummary)
 	}
 
 	// Memory context

@@ -113,6 +113,15 @@ func TestSubagentTool_Parameters(t *testing.T) {
 		t.Errorf("Label type should be 'string', got: %v", label["type"])
 	}
 
+	// Verify name parameter
+	nameParam, ok := props["name"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Name parameter should exist")
+	}
+	if nameParam["type"] != "string" {
+		t.Errorf("Name type should be 'string', got: %v", nameParam["type"])
+	}
+
 	// Check required fields
 	required, ok := params["required"].([]string)
 	if !ok {
@@ -292,6 +301,47 @@ func TestSubagentTool_Execute_ContextPassing(t *testing.T) {
 
 	// The context is used internally; we can't directly test it
 	// but execution success indicates context was handled properly
+}
+
+// TestSubagentTool_Execute_WithName tests that named agent executes successfully
+// even when the agent directory doesn't exist (silent fallback).
+func TestSubagentTool_Execute_WithName(t *testing.T) {
+	provider := &MockLLMProvider{}
+	msgBus := bus.NewMessageBus()
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
+	tool := NewSubagentTool(manager)
+
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"task":  "Test with name",
+		"name":  "test-agent", // workspace/agents/test-agent/ doesn't exist → ignored silently
+		"label": "named-test",
+	}
+
+	result := tool.Execute(ctx, args)
+	if result.IsError {
+		t.Errorf("Should succeed even without agent dir: %s", result.ForLLM)
+	}
+}
+
+// TestSubagentTool_Execute_InvalidName tests that path traversal names are ignored safely.
+func TestSubagentTool_Execute_InvalidName(t *testing.T) {
+	provider := &MockLLMProvider{}
+	msgBus := bus.NewMessageBus()
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
+	tool := NewSubagentTool(manager)
+
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"task": "Test",
+		"name": "../../etc",
+	}
+
+	result := tool.Execute(ctx, args)
+	// Should succeed (name ignored), not panic/error
+	if result.IsError {
+		t.Errorf("Invalid name should be ignored, not cause error: %s", result.ForLLM)
+	}
 }
 
 // TestSubagentTool_ForUserTruncation verifies long content is truncated for user

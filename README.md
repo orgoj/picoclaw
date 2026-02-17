@@ -835,6 +835,48 @@ Respond HEARTBEAT_OK      User receives result directly
 
 The subagent has access to tools (message, web_search, etc.) and can communicate with the user independently without going through the main agent.
 
+#### Named Sub-agents with Persistent Memory
+
+Both `spawn` and `subagent` tools support an optional `name` parameter. A named agent has a persistent home in `workspace/agents/<name>/`:
+
+```
+workspace/
+  agents/
+    <name>/
+      AGENTS.md          ← agent identity (create manually or via main agent)
+      memory/
+        MEMORY.md        ← long-term memory (agent writes here after tasks)
+        YYYYMM/
+          YYYYMMDD.md    ← daily notes
+```
+
+When `name` is set, the agent's identity and memory are automatically loaded into its system prompt, and the agent receives instructions to save learnings back to its memory files using `write_file`/`append_file`.
+
+```markdown
+## In HEARTBEAT.md or task prompt
+Use spawn tool with name="coder" to handle the coding task
+```
+
+**`AGENTS.md` format** (YAML frontmatter required for discovery):
+
+```markdown
+---
+name: coder
+description: Senior Go developer specializing in clean architecture and testing
+---
+
+## Identity
+
+You are a senior Go developer...
+```
+
+The `name` and `description` fields in the frontmatter are used to advertise the agent in the main agent's system prompt — so the main agent knows which named agents are available and what they do.
+
+- **Identity** (`AGENTS.md`): Role definition, skills, and personality for the agent.
+- **Memory** (`memory/MEMORY.md`): Persists across sessions — the agent grows over time.
+- **Backward compatible**: Without `name`, behavior is identical to before.
+- **Security**: Names with path separators or dots are silently ignored to prevent traversal.
+
 **Configuration:**
 
 ```json

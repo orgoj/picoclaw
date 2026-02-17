@@ -71,11 +71,15 @@ func (t *SubagentStatusTool) Execute(ctx context.Context, args map[string]interf
 		if label == "" {
 			label = "(unnamed)"
 		}
+		agentInfo := ""
+		if task.Name != "" {
+			agentInfo = fmt.Sprintf(" [agent: %s]", task.Name)
+		}
 		dirInfo := ""
 		if task.Directory != "" {
 			dirInfo = fmt.Sprintf(" @ %s", task.Directory)
 		}
-		sb.WriteString(fmt.Sprintf("- **%s** [%s] - %s%s (created: %s)\n", task.ID, task.Status, label, dirInfo, created))
+		sb.WriteString(fmt.Sprintf("- **%s** [%s] - %s%s%s (created: %s)\n", task.ID, task.Status, label, agentInfo, dirInfo, created))
 	}
 
 	return UserResult(sb.String())
@@ -138,6 +142,9 @@ func (t *SubagentHistoryTool) Execute(ctx context.Context, args map[string]inter
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("**Subagent: %s**\n", task.ID))
 	sb.WriteString(fmt.Sprintf("- Label: %s\n", label))
+	if task.Name != "" {
+		sb.WriteString(fmt.Sprintf("- Agent: %s\n", task.Name))
+	}
 	sb.WriteString(fmt.Sprintf("- Status: %s\n", task.Status))
 	sb.WriteString(fmt.Sprintf("- Created: %s\n", created))
 	if task.Directory != "" {
