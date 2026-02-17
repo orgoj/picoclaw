@@ -50,6 +50,7 @@ type Config struct {
 	Gateway   GatewayConfig   `json:"gateway"`
 	Tools     ToolsConfig     `json:"tools"`
 	Heartbeat HeartbeatConfig `json:"heartbeat"`
+	Idle      IdleConfig      `json:"idle"`
 	Devices   DevicesConfig   `json:"devices"`
 	Logging   LoggingConfig   `json:"logging"`
 	mu        sync.RWMutex
@@ -169,6 +170,12 @@ type OneBotConfig struct {
 type HeartbeatConfig struct {
 	Enabled  bool `json:"enabled" env:"PICOCLAW_HEARTBEAT_ENABLED"`
 	Interval int  `json:"interval" env:"PICOCLAW_HEARTBEAT_INTERVAL"` // minutes, min 5
+}
+
+type IdleConfig struct {
+	Enabled        bool `json:"enabled" env:"PICOCLAW_IDLE_ENABLED"`
+	TimeoutMinutes int  `json:"timeout_minutes" env:"PICOCLAW_IDLE_TIMEOUT_MINUTES"` // default 5
+	Repeat         bool `json:"repeat" env:"PICOCLAW_IDLE_REPEAT"`                   // if true, repeat while still idle
 }
 
 type DevicesConfig struct {
@@ -357,6 +364,11 @@ func DefaultConfig() *Config {
 		Heartbeat: HeartbeatConfig{
 			Enabled:  true,
 			Interval: 30, // default 30 minutes
+		},
+		Idle: IdleConfig{
+			Enabled:        false,
+			TimeoutMinutes: 5,
+			Repeat:         true,
 		},
 		Devices: DevicesConfig{
 			Enabled:    false,

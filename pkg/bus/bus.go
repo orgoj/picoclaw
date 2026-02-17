@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 type MessageBus struct {
@@ -30,6 +31,24 @@ func (mb *MessageBus) ConsumeInbound(ctx context.Context) (InboundMessage, bool)
 		return msg, true
 	case <-ctx.Done():
 		return InboundMessage{}, false
+	}
+}
+
+// ConsumeInboundWithTimeout attempts to consume a message with a timeout.
+// Returns: (message, gotMessage, timedOut)
+// If context cancelled: gotMessage=false, timedOut=false
+// If timeout expires:   gotMessage=false, timedOut=true
+// If message received:  gotMessage=true,  timedOut=false
+func (mb *MessageBus) ConsumeInboundWithTimeout(ctx context.Context, timeout time.Duration) (InboundMessage, bool, bool) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case msg := <-mb.inbound:
+		return msg, true, false
+	case <-timer.C:
+		return InboundMessage{}, false, true
+	case <-ctx.Done():
+		return InboundMessage{}, false, false
 	}
 }
 

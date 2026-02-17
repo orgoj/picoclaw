@@ -48,6 +48,9 @@ type AgentLoop struct {
 	subagentManager *tools.SubagentManager
 	running         atomic.Bool
 	summarizing     sync.Map // Tracks which sessions are currently being summarized
+	idleEnabled     bool
+	idleTimeout     time.Duration
+	idleRepeat      bool
 }
 
 // processOptions configures how a message is processed
@@ -193,6 +196,15 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		temperature:     cfg.Agents.Defaults.Temperature,
 		llmTimeout:      cfg.Agents.Defaults.LLMTimeout,
 		memoryThreshold: cfg.Agents.Defaults.MemoryThreshold,
+		idleEnabled:     cfg.Idle.Enabled,
+		idleTimeout: func() time.Duration {
+			minutes := cfg.Idle.TimeoutMinutes
+			if minutes <= 0 {
+				minutes = 5
+			}
+			return time.Duration(minutes) * time.Minute
+		}(),
+		idleRepeat:      cfg.Idle.Repeat,
 		sessions:        sessionsManager,
 		state:           stateManager,
 		contextBuilder:  contextBuilder,
@@ -205,15 +217,36 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 func (al *AgentLoop) Run(ctx context.Context) error {
 	al.running.Store(true)
 
+	idleTriggered := false
+
 	for al.running.Load() {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			msg, ok := al.bus.ConsumeInbound(ctx)
+			var msg bus.InboundMessage
+			var ok bool
+
+			if al.idleEnabled && al.idleTimeout > 0 {
+				var timedOut bool
+				msg, ok, timedOut = al.bus.ConsumeInboundWithTimeout(ctx, al.idleTimeout)
+				if timedOut {
+					if !idleTriggered || al.idleRepeat {
+						idleTriggered = true
+						al.triggerIdle(ctx)
+					}
+					continue
+				}
+			} else {
+				msg, ok = al.bus.ConsumeInbound(ctx)
+			}
+
 			if !ok {
 				continue
 			}
+
+			// Got a message — reset idle state
+			idleTriggered = false
 
 			response, err := al.processMessage(ctx, msg)
 			if err != nil {
@@ -246,6 +279,74 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 
 func (al *AgentLoop) Stop() {
 	al.running.Store(false)
+}
+
+// triggerIdle runs IDLE.md as a prompt when the agent has been idle.
+// Uses heartbeat-style processing: no session history, result sent to last channel.
+func (al *AgentLoop) triggerIdle(ctx context.Context) {
+	idlePath := filepath.Join(al.workspace, "IDLE.md")
+	data, err := os.ReadFile(idlePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.ErrorCF("agent", "Error reading IDLE.md", map[string]interface{}{"error": err.Error()})
+		}
+		return
+	}
+
+	content := strings.TrimSpace(string(data))
+	if content == "" {
+		return
+	}
+
+	// LastChannel stores "platform:chatID" format (same as heartbeat)
+	lastChannel := al.state.GetLastChannel()
+	if lastChannel == "" {
+		logger.DebugC("agent", "No last channel for idle trigger, skipping")
+		return
+	}
+	parts := strings.SplitN(lastChannel, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		logger.WarnCF("agent", "Invalid last channel format for idle", map[string]interface{}{"last_channel": lastChannel})
+		return
+	}
+	channel, chatID := parts[0], parts[1]
+
+	if constants.IsInternalChannel(channel) {
+		logger.DebugC("agent", "No external channel for idle trigger, skipping")
+		return
+	}
+
+	logger.InfoCF("agent", "Triggering idle processing", map[string]interface{}{
+		"channel": channel,
+		"chat_id": chatID,
+	})
+
+	now := time.Now().Format("2006-01-02 15:04:05")
+	prompt := fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s", now, content)
+
+	response, err := al.runAgentLoop(ctx, processOptions{
+		SessionKey:      "idle",
+		Channel:         channel,
+		ChatID:          chatID,
+		UserMessage:     prompt,
+		DefaultResponse: "",
+		EnableSummary:   false,
+		SendResponse:    false,
+		NoHistory:       true,
+	})
+
+	if err != nil {
+		logger.ErrorCF("agent", "Idle processing error", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	if response != "" && response != "IDLE_OK" {
+		al.bus.PublishOutbound(bus.OutboundMessage{
+			Channel: channel,
+			ChatID:  chatID,
+			Content: response,
+		})
+	}
 }
 
 func (al *AgentLoop) RegisterTool(tool tools.Tool) {
