@@ -51,7 +51,13 @@ type Config struct {
 	Tools     ToolsConfig     `json:"tools"`
 	Heartbeat HeartbeatConfig `json:"heartbeat"`
 	Devices   DevicesConfig   `json:"devices"`
+	Logging   LoggingConfig   `json:"logging"`
 	mu        sync.RWMutex
+}
+
+type LoggingConfig struct {
+	Enabled  bool   `json:"enabled" env:"PICOCLAW_LOGGING_ENABLED"`
+	FilePath string `json:"file_path" env:"PICOCLAW_LOGGING_FILE_PATH"`
 }
 
 type AgentsConfig struct {
@@ -352,6 +358,10 @@ func DefaultConfig() *Config {
 		Devices: DevicesConfig{
 			Enabled:    false,
 			MonitorUSB: true,
+		},
+		Logging: LoggingConfig{
+			Enabled:  false,
+			FilePath: "~/.picoclaw/logs/agent.log",
 		},
 	}
 }

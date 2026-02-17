@@ -370,6 +370,32 @@ func migrateHelp() {
 	fmt.Println("  picoclaw migrate --force      Migrate without confirmation")
 }
 
+// setupLogging initializes file logging if enabled in config
+func setupLogging(cfg *config.Config) {
+	if !cfg.Logging.Enabled {
+		return
+	}
+
+	logPath := cfg.Logging.FilePath
+	if strings.HasPrefix(logPath, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Printf("Warning: could not determine home directory for logging: %v\n", err)
+			return
+		}
+		logPath = filepath.Join(home, logPath[1:])
+	}
+
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		fmt.Printf("Warning: could not create log directory %s: %v\n", filepath.Dir(logPath), err)
+		return
+	}
+
+	if err := logger.EnableFileLogging(logPath); err != nil {
+		fmt.Printf("Warning: could not enable file logging at %s: %v\n", logPath, err)
+	}
+}
+
 func agentCmd() {
 	message := ""
 	sessionKey := "cli:default"
@@ -407,6 +433,9 @@ func agentCmd() {
 
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
+
+	// Enable file logging if configured
+	setupLogging(cfg)
 
 	// Print agent startup info (only for interactive mode)
 	startupInfo := agentLoop.GetStartupInfo()
@@ -542,6 +571,9 @@ func gatewayCmd() {
 
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
+
+	// Enable file logging if configured
+	setupLogging(cfg)
 
 	// Print agent startup info
 	fmt.Println("\n📦 Agent Status:")

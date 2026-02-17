@@ -146,6 +146,12 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	subagentTool := tools.NewSubagentTool(subagentManager)
 	toolsRegistry.Register(subagentTool)
 
+	// Register subagent management tools
+	toolsRegistry.Register(tools.NewSubagentStatusTool(subagentManager))
+	toolsRegistry.Register(tools.NewSubagentHistoryTool(subagentManager))
+	toolsRegistry.Register(tools.NewSubagentMessageTool(subagentManager))
+	toolsRegistry.Register(tools.NewSubagentCancelTool(subagentManager))
+
 	sessionsManager := session.NewSessionManager(filepath.Join(workspace, "sessions"))
 
 	// Create state manager for atomic state persistence

@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 type ExecTool struct {
@@ -23,7 +25,9 @@ type ExecTool struct {
 
 func NewExecTool(workingDir string, restrict bool) *ExecTool {
 	denyPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`\brm\s+-[rf]{1,2}\b`),
+		regexp.MustCompile(`\brm\s+-[rf]{1,2}\s+/`), // Block rm -rf /
+		regexp.MustCompile(`\brm\s+-[rf]{1,2}\s+\$HOME\b`),
+		regexp.MustCompile(`\brm\s+-[rf]{1,2}\s+~\b`),
 		regexp.MustCompile(`\bdel\s+/[fq]\b`),
 		regexp.MustCompile(`\brmdir\s+/s\b`),
 		regexp.MustCompile(`\b(format|mkfs|diskpart)\b\s`), // Match disk wiping commands (must be followed by space/args)
@@ -154,6 +158,10 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 
 	for _, pattern := range t.denyPatterns {
 		if pattern.MatchString(lower) {
+			logger.WarnCF("exec", "Command blocked by dangerous pattern", map[string]interface{}{
+				"command": command,
+				"pattern": pattern.String(),
+			})
 			return "Command blocked by safety guard (dangerous pattern detected)"
 		}
 	}
@@ -167,6 +175,9 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 			}
 		}
 		if !allowed {
+			logger.WarnCF("exec", "Command blocked by allowlist", map[string]interface{}{
+				"command": command,
+			})
 			return "Command blocked by safety guard (not in allowlist)"
 		}
 	}
@@ -174,6 +185,9 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 	if t.restrictToWorkspace {
 		// Only block explicit path traversal with ..
 		if strings.Contains(cmd, "..\\") || strings.Contains(cmd, "../") {
+			logger.WarnCF("exec", "Command blocked by path traversal", map[string]interface{}{
+				"command": command,
+			})
 			return "Command blocked by safety guard (path traversal detected)"
 		}
 
@@ -188,7 +202,8 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 
 		// Match only ABSOLUTE paths: /something or C:\something
 		// Must be preceded by start of string, whitespace, =, or quotes
-		absPathPattern := regexp.MustCompile(`(?:^|[\s="'` + "`" + `])([A-Za-z]:\\[^\s\\\"']+|/[^\s\"']+)`)
+		// EXCLUSION: Ignore paths that look like URLs (http://, https://) or contain only localhost/IPs without leading slash
+		absPathPattern := regexp.MustCompile(`(?:^|[\s="'` + "`" + `])([A-Za-z]:\\[^\s\\\"']+|/(?:[^\s\"'/][^\s\"']*))`)
 		matches := absPathPattern.FindAllStringSubmatch(cmd, -1)
 
 		for _, match := range matches {
@@ -197,6 +212,17 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 			}
 			raw := match[1]
 
+			// Skip if it looks like a URL (contains ://)
+			if strings.Contains(raw, "://") {
+				continue
+			}
+
+			// Skip common safe system paths/devices
+			if raw == "/dev/null" || raw == "/dev/stdout" || raw == "/dev/stderr" ||
+				raw == "/dev/stdin" || raw == "/dev/zero" || raw == "/dev/random" || raw == "/dev/urandom" {
+				continue
+			}
+
 			p, err := filepath.Abs(raw)
 			if err != nil {
 				continue
@@ -204,6 +230,12 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 
 			// Check if absolute path is inside workspace
 			if !strings.HasPrefix(p+string(filepath.Separator), workspacePath+string(filepath.Separator)) && p != workspacePath {
+				logger.WarnCF("exec", "Command blocked by path restriction", map[string]interface{}{
+					"command":   command,
+					"path":      p,
+					"raw":       raw,
+					"workspace": workspacePath,
+				})
 				return "Command blocked by safety guard (path outside working dir)"
 			}
 		}
