@@ -75,6 +75,7 @@ type AgentDefaults struct {
 	MaxIterationsSubagent int     `json:"max_iterations_subagent"`
 	MaxTokensSubagent     int     `json:"max_tokens_subagent"`
 	LLMTimeout            int     `json:"llm_timeout"`
+	MemoryThreshold       float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
 }
 
 type ChannelsConfig struct {
@@ -248,6 +249,7 @@ func DefaultConfig() *Config {
 				MaxIterationsSubagent: 20,
 				MaxTokensSubagent:     4096,
 				LLMTimeout:            120,
+				MemoryThreshold:       0.8,
 			},
 		},
 		Channels: ChannelsConfig{

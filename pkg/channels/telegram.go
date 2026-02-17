@@ -20,19 +20,21 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/utils"
 	"github.com/sipeed/picoclaw/pkg/voice"
 )
 
 type TelegramChannel struct {
 	*BaseChannel
-	bot          *telego.Bot
-	commands     TelegramCommander
-	config       *config.Config
-	chatIDs      map[string]int64
-	transcriber  *voice.GroqTranscriber
-	placeholders sync.Map // chatID -> messageID
-	stopThinking sync.Map // chatID -> thinkingCancel
+	bot             *telego.Bot
+	commands        TelegramCommander
+	config          *config.Config
+	subagentManager *tools.SubagentManager
+	chatIDs         map[string]int64
+	transcriber     *voice.GroqTranscriber
+	placeholders    sync.Map // chatID -> messageID
+	stopThinking    sync.Map // chatID -> thinkingCancel
 }
 
 type thinkingCancel struct {
@@ -45,7 +47,7 @@ func (c *thinkingCancel) Cancel() {
 	}
 }
 
-func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus) (*TelegramChannel, error) {
+func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus, subagentManager *tools.SubagentManager) (*TelegramChannel, error) {
 	var opts []telego.BotOption
 	telegramCfg := cfg.Channels.Telegram
 
@@ -69,14 +71,15 @@ func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus) (*TelegramChann
 	base := NewBaseChannel("telegram", telegramCfg, bus, telegramCfg.AllowFrom)
 
 	return &TelegramChannel{
-		BaseChannel:  base,
-		commands:     NewTelegramCommands(bot, cfg),
-		bot:          bot,
-		config:       cfg,
-		chatIDs:      make(map[string]int64),
-		transcriber:  nil,
-		placeholders: sync.Map{},
-		stopThinking: sync.Map{},
+		BaseChannel:     base,
+		commands:        NewTelegramCommands(bot, cfg, subagentManager),
+		bot:             bot,
+		config:          cfg,
+		subagentManager: subagentManager,
+		chatIDs:         make(map[string]int64),
+		transcriber:     nil,
+		placeholders:    sync.Map{},
+		stopThinking:    sync.Map{},
 	}, nil
 }
 
@@ -108,12 +111,16 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	}, th.CommandEqual("start"))
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-		return c.commands.Show(ctx, message)
-	}, th.CommandEqual("show"))
+		return c.commands.Models(ctx, message)
+	}, th.CommandEqual("models"))
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-		return c.commands.List(ctx, message)
-	}, th.CommandEqual("list"))
+		return c.commands.Channels(ctx, message)
+	}, th.CommandEqual("channels"))
+
+	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
+		return c.commands.Status(ctx, message)
+	}, th.CommandEqual("status"))
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.handleMessage(ctx, &message)
@@ -123,6 +130,22 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	logger.InfoCF("telegram", "Telegram bot connected", map[string]interface{}{
 		"username": c.bot.Username(),
 	})
+
+	// Register commands
+	err = c.bot.SetMyCommands(ctx, &telego.SetMyCommandsParams{
+		Commands: []telego.BotCommand{
+			{Command: "start", Description: "Start the bot"},
+			{Command: "help", Description: "Show available commands"},
+			{Command: "status", Description: "Show subagents status"},
+			{Command: "models", Description: "List configured models"},
+			{Command: "channels", Description: "List available channels"},
+		},
+	})
+	if err != nil {
+		logger.ErrorCF("telegram", "Failed to set bot commands", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
 
 	go bh.Start()
 

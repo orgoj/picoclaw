@@ -31,21 +31,23 @@ import (
 )
 
 type AgentLoop struct {
-	bus            *bus.MessageBus
-	provider       providers.LLMProvider
-	workspace      string
-	model          string
-	contextWindow  int     // Maximum context window size in tokens
-	maxIterations  int     // Max tool iterations for main agent
-	maxTokens      int     // Max tokens for LLM responses
-	temperature    float64 // LLM temperature
-	llmTimeout     int     // LLM API timeout in seconds
-	sessions       *session.SessionManager
-	state          *state.Manager
-	contextBuilder *ContextBuilder
-	tools          *tools.ToolRegistry
-	running        atomic.Bool
-	summarizing    sync.Map // Tracks which sessions are currently being summarized
+	bus             *bus.MessageBus
+	provider        providers.LLMProvider
+	workspace       string
+	model           string
+	contextWindow   int     // Maximum context window size in tokens
+	maxIterations   int     // Max tool iterations for main agent
+	maxTokens       int     // Max tokens for LLM responses
+	temperature     float64 // LLM temperature
+	llmTimeout      int     // LLM API timeout in seconds
+	memoryThreshold float64 // Threshold for memory summarization (0.0-1.0)
+	sessions        *session.SessionManager
+	state           *state.Manager
+	contextBuilder  *ContextBuilder
+	tools           *tools.ToolRegistry
+	subagentManager *tools.SubagentManager
+	running         atomic.Bool
+	summarizing     sync.Map // Tracks which sessions are currently being summarized
 }
 
 // processOptions configures how a message is processed
@@ -181,20 +183,22 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	contextBuilder.SetToolsRegistry(toolsRegistry)
 
 	return &AgentLoop{
-		bus:            msgBus,
-		provider:       provider,
-		workspace:      workspace,
-		model:          cfg.Agents.Defaults.Model,
-		contextWindow:  cfg.Agents.Defaults.MaxTokens,
-		maxIterations:  cfg.Agents.Defaults.MaxToolIterations,
-		maxTokens:      cfg.Agents.Defaults.MaxTokens,
-		temperature:    cfg.Agents.Defaults.Temperature,
-		llmTimeout:     cfg.Agents.Defaults.LLMTimeout,
-		sessions:       sessionsManager,
-		state:          stateManager,
-		contextBuilder: contextBuilder,
-		tools:          toolsRegistry,
-		summarizing:    sync.Map{},
+		bus:             msgBus,
+		provider:        provider,
+		workspace:       workspace,
+		model:           cfg.Agents.Defaults.Model,
+		contextWindow:   cfg.Agents.Defaults.MaxTokens,
+		maxIterations:   cfg.Agents.Defaults.MaxToolIterations,
+		maxTokens:       cfg.Agents.Defaults.MaxTokens,
+		temperature:     cfg.Agents.Defaults.Temperature,
+		llmTimeout:      cfg.Agents.Defaults.LLMTimeout,
+		memoryThreshold: cfg.Agents.Defaults.MemoryThreshold,
+		sessions:        sessionsManager,
+		state:           stateManager,
+		contextBuilder:  contextBuilder,
+		tools:           toolsRegistry,
+		subagentManager: subagentManager,
+		summarizing:     sync.Map{},
 	}
 }
 
@@ -246,6 +250,10 @@ func (al *AgentLoop) Stop() {
 
 func (al *AgentLoop) RegisterTool(tool tools.Tool) {
 	al.tools.Register(tool)
+}
+
+func (al *AgentLoop) GetSubagentManager() *tools.SubagentManager {
+	return al.subagentManager
 }
 
 // RecordLastChannel records the last active channel for this workspace.
@@ -641,7 +649,8 @@ func (al *AgentLoop) updateToolContexts(channel, chatID string) {
 func (al *AgentLoop) maybeSummarize(sessionKey string) {
 	newHistory := al.sessions.GetHistory(sessionKey)
 	tokenEstimate := al.estimateTokens(newHistory)
-	threshold := al.contextWindow * 75 / 100
+
+	threshold := int(float64(al.contextWindow) * al.memoryThreshold)
 
 	if len(newHistory) > 20 || tokenEstimate > threshold {
 		if _, loading := al.summarizing.LoadOrStore(sessionKey, true); !loading {
