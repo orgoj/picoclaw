@@ -386,6 +386,19 @@ func setupLogging(cfg *config.Config) {
 		logPath = filepath.Join(home, logPath[1:])
 	}
 
+	// Rotate existing log file before opening new one
+	if _, err := os.Stat(logPath); err == nil {
+		timestamp := time.Now().Format("20060102-150405")
+		ext := filepath.Ext(logPath)
+		base := strings.TrimSuffix(logPath, ext)
+		archivePath := fmt.Sprintf("%s-%s%s", base, timestamp, ext)
+		if err := os.Rename(logPath, archivePath); err != nil {
+			fmt.Printf("Warning: could not rotate log file: %v\n", err)
+		} else {
+			fmt.Printf("Archived previous log to %s\n", archivePath)
+		}
+	}
+
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
 		fmt.Printf("Warning: could not create log directory %s: %v\n", filepath.Dir(logPath), err)
 		return
@@ -394,6 +407,15 @@ func setupLogging(cfg *config.Config) {
 	if err := logger.EnableFileLogging(logPath); err != nil {
 		fmt.Printf("Warning: could not enable file logging at %s: %v\n", logPath, err)
 	}
+
+	// Log version info immediately after enabling file logging
+	logger.InfoCF("system", "PicoClaw started", map[string]interface{}{
+		"version":    formatVersion(),
+		"git_commit": gitCommit,
+		"build_time": buildTime,
+		"os":         runtime.GOOS,
+		"arch":       runtime.GOARCH,
+	})
 }
 
 func agentCmd() {
