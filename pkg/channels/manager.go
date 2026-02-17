@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -23,6 +24,7 @@ type Manager struct {
 	bus             *bus.MessageBus
 	config          *config.Config
 	subagentManager *tools.SubagentManager
+	agentLoop       *agent.AgentLoop
 	dispatchTask    *asyncTask
 	mu              sync.RWMutex
 }
@@ -31,12 +33,13 @@ type asyncTask struct {
 	cancel context.CancelFunc
 }
 
-func NewManager(cfg *config.Config, messageBus *bus.MessageBus, subagentManager *tools.SubagentManager) (*Manager, error) {
+func NewManager(cfg *config.Config, messageBus *bus.MessageBus, subagentManager *tools.SubagentManager, agentLoop *agent.AgentLoop) (*Manager, error) {
 	m := &Manager{
 		channels:        make(map[string]Channel),
 		bus:             messageBus,
 		config:          cfg,
 		subagentManager: subagentManager,
+		agentLoop:       agentLoop,
 	}
 
 	if err := m.initChannels(); err != nil {
@@ -51,7 +54,7 @@ func (m *Manager) initChannels() error {
 
 	if m.config.Channels.Telegram.Enabled && m.config.Channels.Telegram.Token != "" {
 		logger.DebugC("channels", "Attempting to initialize Telegram channel")
-		telegram, err := NewTelegramChannel(m.config, m.bus, m.subagentManager)
+		telegram, err := NewTelegramChannel(m.config, m.bus, m.subagentManager, m.agentLoop)
 		if err != nil {
 			logger.ErrorCF("channels", "Failed to initialize Telegram channel", map[string]interface{}{
 				"error": err.Error(),

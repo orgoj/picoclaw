@@ -45,6 +45,10 @@ func (t *SpawnTool) Parameters() map[string]interface{} {
 				"type":        "string",
 				"description": "Optional short label for the task (for display)",
 			},
+			"directory": map[string]interface{}{
+				"type":        "string",
+				"description": "Optional project directory for the subagent. If AGENTS.md exists there, it will be included as project context. Relative paths resolved against workspace.",
+			},
 		},
 		"required": []string{"task"},
 	}
@@ -62,13 +66,14 @@ func (t *SpawnTool) Execute(ctx context.Context, args map[string]interface{}) *T
 	}
 
 	label, _ := args["label"].(string)
+	directory, _ := args["directory"].(string)
 
 	if t.manager == nil {
 		return ErrorResult("Subagent manager not configured")
 	}
 
 	// Pass callback to manager for async completion notification
-	result, err := t.manager.Spawn(ctx, task, label, t.originChannel, t.originChatID, t.callback)
+	result, err := t.manager.Spawn(ctx, task, label, directory, t.originChannel, t.originChatID, t.callback)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to spawn subagent: %v", err))
 	}

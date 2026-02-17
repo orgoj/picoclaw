@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mymmrac/telego"
+	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
@@ -23,13 +24,15 @@ type cmd struct {
 	bot             *telego.Bot
 	config          *config.Config
 	subagentManager *tools.SubagentManager
+	agentLoop       *agent.AgentLoop
 }
 
-func NewTelegramCommands(bot *telego.Bot, cfg *config.Config, subagentManager *tools.SubagentManager) TelegramCommander {
+func NewTelegramCommands(bot *telego.Bot, cfg *config.Config, subagentManager *tools.SubagentManager, agentLoop *agent.AgentLoop) TelegramCommander {
 	return &cmd{
 		bot:             bot,
 		config:          cfg,
 		subagentManager: subagentManager,
+		agentLoop:       agentLoop,
 	}
 }
 
@@ -166,7 +169,11 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 			if label == "" {
 				label = "(unnamed)"
 			}
-			sb.WriteString(fmt.Sprintf("- `%s`: %s (since %s)\n", t.ID, label, created))
+			dir := ""
+			if t.Directory != "" {
+				dir = fmt.Sprintf(" @ `%s`", t.Directory)
+			}
+			sb.WriteString(fmt.Sprintf("- `%s`: %s%s (since %s)\n", t.ID, label, dir, created))
 		}
 	}
 
@@ -187,8 +194,36 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 			} else if t.Status == "cancelled" {
 				statusIcon = "🚫"
 			}
-			sb.WriteString(fmt.Sprintf("- %s `%s`: %s\n", statusIcon, t.ID, label))
+			dir := ""
+			if t.Directory != "" {
+				dir = fmt.Sprintf(" @ `%s`", t.Directory)
+			}
+			sb.WriteString(fmt.Sprintf("- %s `%s`: %s%s\n", statusIcon, t.ID, label, dir))
 		}
+	}
+
+	// Main agent session stats
+	sessionKey := fmt.Sprintf("telegram:%d", message.Chat.ID)
+	if c.agentLoop != nil {
+		stats := c.agentLoop.GetSessionStats(sessionKey)
+		var memPct int
+		if stats.ContextWindow > 0 {
+			memPct = int(float64(stats.TokenEstimate) / float64(stats.ContextWindow) * 100)
+		}
+		summaryInfo := "no"
+		if stats.HasSummary {
+			summaryInfo = "yes"
+		}
+		summarizingInfo := ""
+		if stats.IsSummarizing {
+			summarizingInfo = " _(summarizing...)_"
+		}
+		sb.WriteString("\n🤖 *Main Agent (this session):*\n")
+		sb.WriteString(fmt.Sprintf("- Model: `%s`\n", c.config.Agents.Defaults.Model))
+		sb.WriteString(fmt.Sprintf("- Messages: %d\n", stats.MessageCount))
+		sb.WriteString(fmt.Sprintf("- Context: ~%d/%d tokens (%d%%)%s\n",
+			stats.TokenEstimate, stats.ContextWindow, memPct, summarizingInfo))
+		sb.WriteString(fmt.Sprintf("- Summary: %s\n", summaryInfo))
 	}
 
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{

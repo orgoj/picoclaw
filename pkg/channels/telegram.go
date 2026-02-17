@@ -17,6 +17,7 @@ import (
 	"github.com/mymmrac/telego/telegohandler"
 	tu "github.com/mymmrac/telego/telegoutil"
 
+	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -47,7 +48,7 @@ func (c *thinkingCancel) Cancel() {
 	}
 }
 
-func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus, subagentManager *tools.SubagentManager) (*TelegramChannel, error) {
+func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus, subagentManager *tools.SubagentManager, agentLoop *agent.AgentLoop) (*TelegramChannel, error) {
 	var opts []telego.BotOption
 	telegramCfg := cfg.Channels.Telegram
 
@@ -72,7 +73,7 @@ func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus, subagentManager
 
 	return &TelegramChannel{
 		BaseChannel:     base,
-		commands:        NewTelegramCommands(bot, cfg, subagentManager),
+		commands:        NewTelegramCommands(bot, cfg, subagentManager, agentLoop),
 		bot:             bot,
 		config:          cfg,
 		subagentManager: subagentManager,

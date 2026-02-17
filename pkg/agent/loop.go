@@ -256,6 +256,31 @@ func (al *AgentLoop) GetSubagentManager() *tools.SubagentManager {
 	return al.subagentManager
 }
 
+// AgentStats holds runtime statistics for a specific agent session.
+type AgentStats struct {
+	MessageCount    int
+	TokenEstimate   int
+	ContextWindow   int
+	MemoryThreshold float64
+	HasSummary      bool
+	IsSummarizing   bool
+}
+
+// GetSessionStats returns runtime statistics for the given session key.
+func (al *AgentLoop) GetSessionStats(sessionKey string) AgentStats {
+	history := al.sessions.GetHistory(sessionKey)
+	summary := al.sessions.GetSummary(sessionKey)
+	_, isSummarizing := al.summarizing.Load(sessionKey)
+	return AgentStats{
+		MessageCount:    len(history),
+		TokenEstimate:   al.estimateTokens(history),
+		ContextWindow:   al.contextWindow,
+		MemoryThreshold: al.memoryThreshold,
+		HasSummary:      summary != "",
+		IsSummarizing:   isSummarizing,
+	}
+}
+
 // RecordLastChannel records the last active channel for this workspace.
 // This uses the atomic state save mechanism to prevent data loss on crash.
 func (al *AgentLoop) RecordLastChannel(channel string) error {
@@ -360,6 +385,15 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 		content = content[idx+8:] // Extract just the result part
 	}
 
+	// Extract directory from subagent task if available
+	var directory string
+	if strings.HasPrefix(msg.SenderID, "subagent:") {
+		taskID := strings.TrimPrefix(msg.SenderID, "subagent:")
+		if task, ok := al.subagentManager.GetTask(taskID); ok {
+			directory = task.Directory
+		}
+	}
+
 	// Skip internal channels - only log, don't send to user
 	if constants.IsInternalChannel(originChannel) {
 		logger.InfoCF("agent", "Subagent completed (internal channel)",
@@ -367,6 +401,7 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 				"sender_id":   msg.SenderID,
 				"content_len": len(content),
 				"channel":     originChannel,
+				"directory":   directory,
 			})
 		return "", nil
 	}
@@ -378,6 +413,7 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 			"sender_id":   msg.SenderID,
 			"channel":     originChannel,
 			"content_len": len(content),
+			"directory":   directory,
 		})
 
 	// Agent only logs, does not respond to user
