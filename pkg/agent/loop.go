@@ -266,33 +266,93 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 			// Got a message — reset idle state
 			idleTriggered = false
 
-			response, err := al.processMessage(ctx, msg)
-			if err != nil {
-				response = fmt.Sprintf("Error processing message: %v", err)
-			}
+			// Recover from panics to prevent agent crash
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.ErrorCF("agent", "Recovered from panic in message processing",
+							map[string]interface{}{
+								"panic":      fmt.Sprintf("%v", r),
+								"channel":    msg.Channel,
+								"chat_id":    msg.ChatID,
+								"session":    msg.SessionKey,
+							})
+						// Send user-friendly error message
+						al.bus.PublishOutbound(bus.OutboundMessage{
+							Channel: msg.Channel,
+							ChatID:  msg.ChatID,
+							Content: "⚠️ An internal error occurred. The agent has recovered and is still running. Please try again.",
+						})
+					}
+				}()
 
-			if response != "" {
-				// Check if the message tool already sent a response during this round.
-				// If so, skip publishing to avoid duplicate messages to the user.
-				alreadySent := false
-				if tool, ok := al.tools.Get("message"); ok {
-					if mt, ok := tool.(*tools.MessageTool); ok {
-						alreadySent = mt.HasSentInRound()
+				response, err := al.processMessage(ctx, msg)
+				if err != nil {
+					// Check if it's an API/network error and provide user-friendly message
+					response = al.formatErrorMessage(err)
+				}
+
+				if response != "" {
+					// Check if the message tool already sent a response during this round.
+					// If so, skip publishing to avoid duplicate messages to the user.
+					alreadySent := false
+					if tool, ok := al.tools.Get("message"); ok {
+						if mt, ok := tool.(*tools.MessageTool); ok {
+							alreadySent = mt.HasSentInRound()
+						}
+					}
+
+					if !alreadySent {
+						al.bus.PublishOutbound(bus.OutboundMessage{
+							Channel: msg.Channel,
+							ChatID:  msg.ChatID,
+							Content: response,
+						})
 					}
 				}
-
-				if !alreadySent {
-					al.bus.PublishOutbound(bus.OutboundMessage{
-						Channel: msg.Channel,
-						ChatID:  msg.ChatID,
-						Content: response,
-					})
-				}
-			}
+			}()
 		}
 	}
 
 	return nil
+}
+
+// formatErrorMessage converts technical errors into user-friendly messages
+func (al *AgentLoop) formatErrorMessage(err error) string {
+	errStr := err.Error()
+	
+	// Check for common API/network errors
+	if strings.Contains(errStr, "unexpected EOF") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "network is unreachable") {
+		logger.ErrorCF("agent", "Network/API error occurred", map[string]interface{}{
+			"error": errStr,
+		})
+		return "⚠️ API service is temporarily unavailable. Please try again in a moment."
+	}
+	
+	if strings.Contains(errStr, "API request failed") ||
+		strings.Contains(errStr, "status=") {
+		logger.ErrorCF("agent", "API request failed", map[string]interface{}{
+			"error": errStr,
+		})
+		return "⚠️ The AI service encountered an error. Please try again."
+	}
+	
+	if strings.Contains(errStr, "LLM call failed") {
+		logger.ErrorCF("agent", "LLM call failed", map[string]interface{}{
+			"error": errStr,
+		})
+		return "⚠️ Failed to communicate with the AI service. Please try again."
+	}
+	
+	// Generic error - still log but give user-friendly message
+	logger.ErrorCF("agent", "Error processing message", map[string]interface{}{
+		"error": errStr,
+	})
+	return fmt.Sprintf("⚠️ An error occurred: %s", errStr)
 }
 
 func (al *AgentLoop) Stop() {
@@ -302,6 +362,13 @@ func (al *AgentLoop) Stop() {
 // triggerIdle runs IDLE.md as a prompt when the agent has been idle.
 // Uses heartbeat-style processing: no session history, result sent to last channel.
 func (al *AgentLoop) triggerIdle(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.ErrorCF("agent", "Recovered from panic in idle processing",
+				map[string]interface{}{"panic": fmt.Sprintf("%v", r)})
+		}
+	}()
+
 	idlePath := filepath.Join(al.workspace, "IDLE.md")
 	data, err := os.ReadFile(idlePath)
 	if err != nil {
@@ -657,11 +724,43 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"tools_json":    formatToolsForLog(providerToolDefs),
 			})
 
-		// Call LLM
-		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
-			"max_tokens":  al.maxTokens,
-			"temperature": al.temperature,
-		})
+		// Call LLM with retry logic for transient errors
+		var response *providers.LLMResponse
+		var err error
+		maxRetries := 2
+		for retry := 0; retry <= maxRetries; retry++ {
+			response, err = al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
+				"max_tokens":  al.maxTokens,
+				"temperature": al.temperature,
+			})
+
+			if err == nil {
+				break // Success
+			}
+
+			// Check if error is retryable (network/transient errors)
+			errStr := err.Error()
+			isRetryable := strings.Contains(errStr, "unexpected EOF") ||
+				strings.Contains(errStr, "connection reset") ||
+				strings.Contains(errStr, "timeout") ||
+				strings.Contains(errStr, "temporary failure")
+
+			if isRetryable && retry < maxRetries {
+				logger.WarnCF("agent", "LLM call failed, retrying",
+					map[string]interface{}{
+						"iteration": iteration,
+						"retry":     retry + 1,
+						"max_retries": maxRetries,
+						"error":     err.Error(),
+					})
+				// Brief backoff before retry
+				time.Sleep(time.Duration(retry+1) * time.Second)
+				continue
+			}
+
+			// Non-retryable error or max retries exceeded
+			break
+		}
 
 		if err != nil {
 			logger.ErrorCF("agent", "LLM call failed",
@@ -810,7 +909,16 @@ func (al *AgentLoop) maybeSummarize(sessionKey string) {
 	if len(newHistory) > al.historyMessageThreshold || tokenEstimate > threshold {
 		if _, loading := al.summarizing.LoadOrStore(sessionKey, true); !loading {
 			go func() {
-				defer al.summarizing.Delete(sessionKey)
+				defer func() {
+					if r := recover(); r != nil {
+						logger.ErrorCF("agent", "Recovered from panic in summarization",
+							map[string]interface{}{
+								"panic":       fmt.Sprintf("%v", r),
+								"session_key": sessionKey,
+							})
+					}
+					al.summarizing.Delete(sessionKey)
+				}()
 				al.summarizeSession(sessionKey)
 			}()
 		}
@@ -887,6 +995,16 @@ func formatToolsForLog(tools []providers.ToolDefinition) string {
 
 // summarizeSession summarizes the conversation history for a session.
 func (al *AgentLoop) summarizeSession(sessionKey string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.ErrorCF("agent", "Recovered from panic in summarizeSession",
+				map[string]interface{}{
+					"panic":       fmt.Sprintf("%v", r),
+					"session_key": sessionKey,
+				})
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(al.llmTimeout)*time.Second)
 	defer cancel()
 
@@ -926,6 +1044,7 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 	// Multi-Part Summarization
 	// Split into two parts if history is significant
 	var finalSummary string
+	var err error
 	if len(validMessages) > 10 {
 		mid := len(validMessages) / 2
 		part1 := validMessages[:mid]
@@ -936,7 +1055,8 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 
 		// Merge them
 		mergePrompt := fmt.Sprintf("Merge these two conversation summaries into one cohesive summary:\n\n1: %s\n\n2: %s", s1, s2)
-		resp, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.model, map[string]interface{}{
+		var resp *providers.LLMResponse
+		resp, err = al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.model, map[string]interface{}{
 			"max_tokens":  1024,
 			"temperature": 0.3,
 		})
@@ -944,9 +1064,22 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 			finalSummary = resp.Content
 		} else {
 			finalSummary = s1 + " " + s2
+			logger.WarnCF("agent", "Failed to merge summaries, using concatenation",
+				map[string]interface{}{
+					"session_key": sessionKey,
+					"error":       err.Error(),
+				})
 		}
 	} else {
-		finalSummary, _ = al.summarizeBatch(ctx, validMessages, summary)
+		finalSummary, err = al.summarizeBatch(ctx, validMessages, summary)
+		if err != nil {
+			logger.WarnCF("agent", "Failed to summarize batch",
+				map[string]interface{}{
+					"session_key": sessionKey,
+					"error":       err.Error(),
+				})
+			return
+		}
 	}
 
 	if omitted && finalSummary != "" {
