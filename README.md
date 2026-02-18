@@ -944,6 +944,23 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `enabled` | `true` | Enable periodic task execution |
 | `interval` | `30` | Check interval in minutes (min: 5) |
 
+#### Idle
+
+When no message is received for `timeout_minutes`, the agent reads `IDLE.md` from the workspace and executes it as a prompt.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable idle trigger |
+| `timeout_minutes` | `5` | Minutes of inactivity before triggering |
+| `repeat` | `true` | Re-trigger on every interval while still idle |
+
+#### Logging
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable file logging |
+| `file_path` | `~/.picoclaw/logs/agent.log` | Log file path |
+
 #### Devices
 
 | Option | Default | Description |
@@ -1105,7 +1122,8 @@ picoclaw agent -m "Hello"
       "zai": {
         "enabled": false,
         "api_key": "",
-        "endpoint": "https://mcp.zukijourney.com",
+        "endpoint": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+        "endpoint_fetch": "https://api.z.ai/api/mcp/web_reader/mcp",
         "max_results": 10,
         "timeout": 60
       },
@@ -1124,9 +1142,18 @@ picoclaw agent -m "Hello"
     "enabled": true,
     "interval": 30
   },
+  "idle": {
+    "enabled": false,
+    "timeout_minutes": 5,
+    "repeat": true
+  },
   "devices": {
     "enabled": false,
     "monitor_usb": true
+  },
+  "logging": {
+    "enabled": false,
+    "file_path": "~/.picoclaw/logs/agent.log"
   }
 }
 ```
@@ -1177,7 +1204,7 @@ This is normal if you haven't configured a search API key yet. PicoClaw will pro
 
 To enable web search:
 
-1. **Option 1 (Recommended)**: **Z.AI** - Get [Coding Plan](https://zukijourney.com) for MCP-powered search + fetch + vision
+1. **Option 1 (Recommended)**: **Z.AI** - Get API key at [z.ai](https://z.ai) for MCP-powered search + fetch + vision
 2. **Option 2**: [Brave Search API](https://brave.com/search/api) (2000 free queries/month)
 3. **Option 3 (No API Key)**: DuckDuckGo (free, no key required)
 
@@ -1192,7 +1219,8 @@ Z.AI provides unified MCP tools: `webSearchPrime` (search), `webReader` (fetch),
       "zai": {
         "enabled": true,
         "api_key": "YOUR_ZAI_API_KEY",
-        "endpoint": "https://mcp.zukijourney.com",
+        "endpoint": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+        "endpoint_fetch": "https://api.z.ai/api/mcp/web_reader/mcp",
         "max_results": 10,
         "timeout": 60
       },

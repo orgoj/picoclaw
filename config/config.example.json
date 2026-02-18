@@ -3,6 +3,7 @@
     "defaults": {
       "workspace": "~/.picoclaw/workspace",
       "restrict_to_workspace": true,
+      "provider": "",
       "model": "glm-4.7",
       "max_tokens": 8192,
       "temperature": 0.7,
@@ -24,6 +25,12 @@
       "token": "YOUR_DISCORD_BOT_TOKEN",
       "allow_from": []
     },
+    "slack": {
+      "enabled": false,
+      "bot_token": "xoxb-YOUR-BOT-TOKEN",
+      "app_token": "xapp-YOUR-APP-TOKEN",
+      "allow_from": []
+    },
     "maixcam": {
       "enabled": false,
       "host": "0.0.0.0",
@@ -43,16 +50,16 @@
       "verification_token": "",
       "allow_from": []
     },
+    "qq": {
+      "enabled": false,
+      "app_id": "",
+      "app_secret": "",
+      "allow_from": []
+    },
     "dingtalk": {
       "enabled": false,
       "client_id": "YOUR_CLIENT_ID",
       "client_secret": "YOUR_CLIENT_SECRET",
-      "allow_from": []
-    },
-    "slack": {
-      "enabled": false,
-      "bot_token": "xoxb-YOUR-BOT-TOKEN",
-      "app_token": "xapp-YOUR-APP-TOKEN",
       "allow_from": []
     },
     "line": {
@@ -98,6 +105,10 @@
       "api_key": "",
       "api_base": ""
     },
+    "deepseek": {
+      "api_key": "",
+      "api_base": ""
+    },
     "vllm": {
       "api_key": "",
       "api_base": ""
@@ -114,12 +125,29 @@
     "ollama": {
       "api_key": "",
       "api_base": "http://localhost:11434/v1"
+    },
+    "shengsuanyun": {
+      "api_key": "",
+      "api_base": ""
     }
   },
   "tools": {
     "web": {
-      "search": {
+      "zai": {
+        "enabled": false,
+        "api_key": "YOUR_ZAI_API_KEY",
+        "endpoint": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+        "endpoint_fetch": "https://api.z.ai/api/mcp/web_reader/mcp",
+        "max_results": 10,
+        "timeout": 60
+      },
+      "brave": {
+        "enabled": false,
         "api_key": "YOUR_BRAVE_API_KEY",
+        "max_results": 5
+      },
+      "duckduckgo": {
+        "enabled": true,
         "max_results": 5
       }
     }
@@ -128,6 +156,11 @@
     "enabled": true,
     "interval": 30
   },
+  "idle": {
+    "enabled": false,
+    "timeout_minutes": 5,
+    "repeat": true
+  },
   "devices": {
     "enabled": false,
     "monitor_usb": true
@@ -135,5 +168,9 @@
   "gateway": {
     "host": "0.0.0.0",
     "port": 18790
+  },
+  "logging": {
+    "enabled": false,
+    "file_path": "~/.picoclaw/logs/agent.log"
   }
 }
