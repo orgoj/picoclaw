@@ -231,6 +231,17 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		sb.WriteString(fmt.Sprintf("- Summary: %s\n", summaryInfo))
 	}
 
+	// Context configuration
+	sb.WriteString("\n📊 *Context Config:*\n")
+	sb.WriteString("  *Main Agent:*\n")
+	sb.WriteString(fmt.Sprintf("    history\\_message\\_threshold: %d\n", c.config.Agents.Defaults.HistoryMessageThreshold))
+	sb.WriteString(fmt.Sprintf("    max\\_tokens: %d\n", c.config.Agents.Defaults.MaxTokens))
+	sb.WriteString(fmt.Sprintf("    context\\_window: %d\n", c.config.Agents.Defaults.ContextWindow))
+	sb.WriteString("  *Subagent:*\n")
+	sb.WriteString(fmt.Sprintf("    history\\_message\\_threshold: %d\n", c.config.Agents.Defaults.HistoryMessageThreshold/2))
+	sb.WriteString(fmt.Sprintf("    max\\_tokens: %d\n", c.config.Agents.Defaults.MaxTokensSubagent))
+	sb.WriteString(fmt.Sprintf("    max\\_iterations: %d\n", c.config.Agents.Defaults.MaxIterationsSubagent))
+
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      sb.String(),
