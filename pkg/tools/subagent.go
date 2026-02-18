@@ -42,6 +42,7 @@ type SubagentManager struct {
 	maxTokens               int
 	contextLimit            int // Max total chars in subagent message history (0 = no limit)
 	historyMessageThreshold int // Max number of messages before trimming (0 = no limit)
+	maxConcurrentSubagents  int // Max number of concurrently running subagents
 	nextID                  int
 }
 
@@ -73,6 +74,7 @@ func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, work
 		maxTokens:               defaultCfg.MaxTokens,
 		contextLimit:            contextLimit,
 		historyMessageThreshold: msgThreshold,
+		maxConcurrentSubagents:  cfg.Agents.Defaults.MaxConcurrentSubagents,
 		nextID:                  1,
 	}
 }
@@ -92,9 +94,26 @@ func (sm *SubagentManager) RegisterTool(tool Tool) {
 	sm.tools.Register(tool)
 }
 
+// countRunningTasks returns the number of subagent tasks with status "running"
+func (sm *SubagentManager) countRunningTasks() int {
+	count := 0
+	for _, task := range sm.tasks {
+		if task.Status == "running" {
+			count++
+		}
+	}
+	return count
+}
+
 func (sm *SubagentManager) Spawn(ctx context.Context, task, label, name, directory, originChannel, originChatID string, callback AsyncCallback) (string, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+
+	// Check concurrent subagent limit
+	runningCount := sm.countRunningTasks()
+	if runningCount >= sm.maxConcurrentSubagents {
+		return "", fmt.Errorf("maximum concurrent subagents limit reached (%d/%d running). Please wait for existing subagents to complete", runningCount, sm.maxConcurrentSubagents)
+	}
 
 	taskID := fmt.Sprintf("subagent-%d", sm.nextID)
 	sm.nextID++

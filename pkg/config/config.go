@@ -215,6 +215,7 @@ type AgentDefaults struct {
 	MaxToolIterations       int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
 	MaxIterationsSubagent   int     `json:"max_iterations_subagent"`
 	MaxTokensSubagent       int     `json:"max_tokens_subagent"`
+	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_CONCURRENT_SUBAGENTS"`
 	LLMTimeout              int     `json:"llm_timeout"`
 	MemoryThreshold         float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
 	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_HISTORY_MESSAGE_THRESHOLD"`
@@ -397,6 +398,7 @@ func DefaultConfig() *Config {
 				MaxToolIterations:       20,
 				MaxIterationsSubagent:   20,
 				MaxTokensSubagent:       4096,
+				MaxConcurrentSubagents:  2,
 				LLMTimeout:              120,
 				MemoryThreshold:         0.8,
 				HistoryMessageThreshold: 100,

@@ -230,6 +230,7 @@ picoclaw onboard
 | `max_iterations_subagent` | 20 | Max tool calls per subagent |
 | `max_tokens` | 8192 | Max tokens for main agent |
 | `max_tokens_subagent` | 4096 | Max tokens for subagents |
+| `max_concurrent_subagents` | 2 | Max number of subagents that can run simultaneously |
 | `llm_timeout` | 120 | LLM API timeout in seconds |
 | `history_message_threshold` | 100 | Number of messages before triggering summarization |
 
@@ -930,6 +931,7 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `max_tool_iterations` | `20` | Max tool calls per main agent loop |
 | `max_iterations_subagent` | `20` | Max tool calls per subagent |
 | `max_tokens_subagent` | `4096` | Max tokens for subagent responses |
+| `max_concurrent_subagents` | `2` | Max number of subagents that can run simultaneously |
 | `llm_timeout` | `120` | LLM API timeout in seconds |
 | `history_message_threshold` | `100` | Number of messages before triggering summarization |
 
@@ -1036,6 +1038,7 @@ picoclaw agent -m "Hello"
       "max_tool_iterations": 20,
       "max_iterations_subagent": 20,
       "max_tokens_subagent": 4096,
+      "max_concurrent_subagents": 2,
       "llm_timeout": 120,
       "history_message_threshold": 100
     }

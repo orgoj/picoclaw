@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+// TestDefaultConfig_MaxConcurrentSubagents verifies max_concurrent_subagents default is 2
+func TestDefaultConfig_MaxConcurrentSubagents(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Agents.Defaults.MaxConcurrentSubagents != 2 {
+		t.Errorf("Expected MaxConcurrentSubagents default 2, got %d", cfg.Agents.Defaults.MaxConcurrentSubagents)
+	}
+}
+
+// TestDefaultConfig_MaxConcurrentSubagents_Parsing verifies config parsing
+func TestDefaultConfig_MaxConcurrentSubagents_Parsing(t *testing.T) {
+	jsonData := `{
+		"agents": {
+			"defaults": {
+				"max_concurrent_subagents": 5
+			}
+		}
+	}`
+
+	var cfg Config
+	if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+		t.Fatalf("Failed to unmarshal config: %v", err)
+	}
+
+	if cfg.Agents.Defaults.MaxConcurrentSubagents != 5 {
+		t.Errorf("Expected MaxConcurrentSubagents 5, got %d", cfg.Agents.Defaults.MaxConcurrentSubagents)
+	}
+}
+
 // TestDefaultConfig_HeartbeatEnabled verifies heartbeat is enabled by default
 func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
 	cfg := DefaultConfig()
