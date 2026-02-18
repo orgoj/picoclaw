@@ -23,6 +23,7 @@ type ToolLoopConfig struct {
 	Tools         *ToolRegistry
 	MaxIterations int
 	LLMOptions    map[string]any
+	ContextLimit  int // Max total chars in message history. 0 = no limit.
 }
 
 // ToolLoopResult contains the result of running the tool loop.
@@ -39,6 +40,11 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 
 	for iteration < config.MaxIterations {
 		iteration++
+
+		// Trim context if limit configured
+		if config.ContextLimit > 0 {
+			messages = trimMessages(messages, config.ContextLimit)
+		}
 
 		logger.DebugCF("toolloop", "LLM iteration",
 			map[string]any{
@@ -145,4 +151,78 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		Content:    finalContent,
 		Iterations: iteration,
 	}, nil
+}
+
+// trimMessages reduces message history when total chars exceed maxChars.
+// It preserves messages[0] (system prompt) and messages[1] (initial user message),
+// and removes the oldest complete "rounds" (assistant + tool results) from the middle.
+// A round is one assistant message with tool_calls plus all immediately following tool messages.
+// This ensures tool_call_id references are never broken.
+func trimMessages(messages []providers.Message, maxChars int) []providers.Message {
+	if maxChars <= 0 || len(messages) <= 2 {
+		return messages
+	}
+
+	total := 0
+	for _, m := range messages {
+		total += len(m.Content)
+	}
+	if total <= maxChars {
+		return messages
+	}
+
+	// Find complete rounds starting from index 2 (after system + initial user).
+	// A round = one assistant message + all immediately following tool messages.
+	type roundSpan struct{ start, end int }
+	var rounds []roundSpan
+	i := 2
+	for i < len(messages) {
+		if messages[i].Role == "assistant" {
+			j := i + 1
+			for j < len(messages) && messages[j].Role == "tool" {
+				j++
+			}
+			rounds = append(rounds, roundSpan{i, j})
+			i = j
+		} else {
+			i++
+		}
+	}
+
+	if len(rounds) <= 1 {
+		return messages
+	}
+
+	// Drop oldest rounds one at a time until under limit.
+	trimFrom := 1
+	for trimFrom < len(rounds) {
+		total = 0
+		for _, m := range messages[:2] {
+			total += len(m.Content)
+		}
+		for _, r := range rounds[trimFrom:] {
+			for _, m := range messages[r.start:r.end] {
+				total += len(m.Content)
+			}
+		}
+		if total <= maxChars || trimFrom == len(rounds)-1 {
+			break
+		}
+		trimFrom++
+	}
+
+	result := make([]providers.Message, 0, len(messages))
+	result = append(result, messages[:2]...)
+	for _, r := range rounds[trimFrom:] {
+		result = append(result, messages[r.start:r.end]...)
+	}
+
+	logger.InfoCF("toolloop", "Context trimmed",
+		map[string]any{
+			"rounds_dropped": trimFrom,
+			"rounds_kept":    len(rounds) - trimFrom,
+			"new_msgs":       len(result),
+		})
+
+	return result
 }

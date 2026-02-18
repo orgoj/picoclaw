@@ -122,7 +122,8 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed:\n  Status: %d\n  Body:   %s", resp.StatusCode, string(body))
+		bodyStr := strings.ReplaceAll(strings.TrimSpace(string(body)), "\n", " ")
+		return nil, fmt.Errorf("API request failed: status=%d body=%s", resp.StatusCode, bodyStr)
 	}
 
 	return p.parseResponse(body)

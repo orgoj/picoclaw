@@ -40,10 +40,19 @@ type SubagentManager struct {
 	cfg           *config.Config
 	maxIterations int
 	maxTokens     int
+	contextLimit  int // Max total chars in subagent message history (0 = no limit)
 	nextID        int
 }
 
 func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, workspace string, bus *bus.MessageBus) *SubagentManager {
+	// Derive context limit from max output tokens.
+	// Rough estimate: 4 chars/token × 20× input/output ratio.
+	// E.g. MaxTokensSubagent=4096 → ~81K chars ≈ 20K tokens context.
+	contextLimit := cfg.Agents.Defaults.MaxTokensSubagent * 20
+	if contextLimit <= 0 {
+		contextLimit = 4096 * 20 // fallback default
+	}
+
 	return &SubagentManager{
 		tasks:         make(map[string]*SubagentTask),
 		provider:      provider,
@@ -54,6 +63,7 @@ func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, work
 		cfg:           cfg,
 		maxIterations: cfg.Agents.Defaults.MaxIterationsSubagent,
 		maxTokens:     cfg.Agents.Defaults.MaxTokensSubagent,
+		contextLimit:  contextLimit,
 		nextID:        1,
 	}
 }
@@ -219,6 +229,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		Model:         sm.defaultModel,
 		Tools:         tools,
 		MaxIterations: maxIter,
+		ContextLimit:  sm.contextLimit,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
 			"temperature": sm.cfg.Agents.Defaults.Temperature,
@@ -432,6 +443,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		Model:         sm.defaultModel,
 		Tools:         tools,
 		MaxIterations: maxIter,
+		ContextLimit:  sm.contextLimit,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
 			"temperature": sm.cfg.Agents.Defaults.Temperature,
