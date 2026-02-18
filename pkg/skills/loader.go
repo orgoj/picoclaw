@@ -307,8 +307,8 @@ func (sl *SkillsLoader) parseSimpleYAML(content string) map[string]string {
 
 func (sl *SkillsLoader) extractFrontmatter(content string) string {
 	// (?s) enables DOTALL mode so . matches newlines
-	// Match first ----, capture everything until NEXT ---- on its own line (non-greedy)
-	re := regexp.MustCompile(`(?s)^----\n(.*?)\n----`)
+	// Match first --- (YAML standard), capture everything until NEXT --- on its own line (non-greedy)
+	re := regexp.MustCompile(`(?s)^---\n(.*?)\n---`)
 	match := re.FindStringSubmatch(content)
 	if len(match) > 1 {
 		return match[1]
@@ -317,7 +317,7 @@ func (sl *SkillsLoader) extractFrontmatter(content string) string {
 }
 
 func (sl *SkillsLoader) stripFrontmatter(content string) string {
-	re := regexp.MustCompile(`^----\n.*?\n----\n`)
+	re := regexp.MustCompile(`^---\n.*?\n---\n`)
 	return re.ReplaceAllString(content, "")
 }
 
