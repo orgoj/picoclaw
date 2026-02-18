@@ -18,12 +18,13 @@ import (
 
 // ToolLoopConfig configures the tool execution loop.
 type ToolLoopConfig struct {
-	Provider      providers.LLMProvider
-	Model         string
-	Tools         *ToolRegistry
-	MaxIterations int
-	LLMOptions    map[string]any
-	ContextLimit  int // Max total chars in message history. 0 = no limit.
+	Provider                providers.LLMProvider
+	Model                   string
+	Tools                   *ToolRegistry
+	MaxIterations           int
+	LLMOptions              map[string]any
+	ContextLimit            int // Max total chars in message history. 0 = no limit.
+	HistoryMessageThreshold int // Max number of messages before trimming. 0 = no limit.
 }
 
 // ToolLoopResult contains the result of running the tool loop.
@@ -41,7 +42,12 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 	for iteration < config.MaxIterations {
 		iteration++
 
-		// Trim context if limit configured
+		// Trim by message count if threshold configured
+		if config.HistoryMessageThreshold > 0 {
+			messages = trimMessagesByCount(messages, config.HistoryMessageThreshold)
+		}
+
+		// Trim by character count if limit configured
 		if config.ContextLimit > 0 {
 			messages = trimMessages(messages, config.ContextLimit)
 		}
@@ -222,6 +228,86 @@ func trimMessages(messages []providers.Message, maxChars int) []providers.Messag
 			"rounds_dropped": trimFrom,
 			"rounds_kept":    len(rounds) - trimFrom,
 			"new_msgs":       len(result),
+		})
+
+	return result
+}
+
+// trimMessagesByCount trims message history when the message count exceeds maxMessages.
+// It preserves messages[0] (system prompt) and messages[1] (initial user message),
+// and removes the oldest complete "rounds" (assistant + tool results) from the middle.
+// This is similar to trimMessages but based on message count instead of character count.
+func trimMessagesByCount(messages []providers.Message, maxMessages int) []providers.Message {
+	if maxMessages <= 0 || len(messages) <= maxMessages {
+		return messages
+	}
+
+	// Always preserve system prompt (index 0) and initial user message (index 1)
+	// Find complete rounds starting from index 2
+	type roundSpan struct{ start, end int }
+	var rounds []roundSpan
+	i := 2
+	for i < len(messages) {
+		if messages[i].Role == "assistant" {
+			j := i + 1
+			for j < len(messages) && messages[j].Role == "tool" {
+				j++
+			}
+			rounds = append(rounds, roundSpan{i, j})
+			i = j
+		} else {
+			i++
+		}
+	}
+
+	if len(rounds) == 0 {
+		return messages
+	}
+
+	// Calculate how many messages to keep
+	messagesToKeep := maxMessages - 2 // Reserve 2 for system + initial user
+
+	// Count messages in rounds from newest to oldest
+	keptMessages := 0
+	trimFrom := len(rounds)
+	for trimFrom > 0 {
+		roundIdx := trimFrom - 1
+		roundMsgs := rounds[roundIdx].end - rounds[roundIdx].start
+		if keptMessages+roundMsgs > messagesToKeep {
+			break
+		}
+		keptMessages += roundMsgs
+		trimFrom = roundIdx
+	}
+
+	// If we can't keep any rounds, just return the first 2 messages
+	if trimFrom >= len(rounds) {
+		logger.InfoCF("toolloop", "Context trimmed by count",
+			map[string]any{
+				"method":      "count",
+				"original":    len(messages),
+				"max":         maxMessages,
+				"rounds_kept": 0,
+				"final_count": 2,
+			})
+		return messages[:2]
+	}
+
+	// Build result
+	result := make([]providers.Message, 0, 2+keptMessages)
+	result = append(result, messages[:2]...)
+	for _, r := range rounds[trimFrom:] {
+		result = append(result, messages[r.start:r.end]...)
+	}
+
+	logger.InfoCF("toolloop", "Context trimmed by count",
+		map[string]any{
+			"method":         "count",
+			"original":       len(messages),
+			"max":            maxMessages,
+			"rounds_dropped": trimFrom,
+			"rounds_kept":    len(rounds) - trimFrom,
+			"final_count":    len(result),
 		})
 
 	return result

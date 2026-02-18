@@ -272,10 +272,10 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 					if r := recover(); r != nil {
 						logger.ErrorCF("agent", "Recovered from panic in message processing",
 							map[string]interface{}{
-								"panic":      fmt.Sprintf("%v", r),
-								"channel":    msg.Channel,
-								"chat_id":    msg.ChatID,
-								"session":    msg.SessionKey,
+								"panic":   fmt.Sprintf("%v", r),
+								"channel": msg.Channel,
+								"chat_id": msg.ChatID,
+								"session": msg.SessionKey,
 							})
 						// Send user-friendly error message
 						al.bus.PublishOutbound(bus.OutboundMessage{
@@ -320,7 +320,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 // formatErrorMessage converts technical errors into user-friendly messages
 func (al *AgentLoop) formatErrorMessage(err error) string {
 	errStr := err.Error()
-	
+
 	// Check for common API/network errors
 	if strings.Contains(errStr, "unexpected EOF") ||
 		strings.Contains(errStr, "connection reset") ||
@@ -332,7 +332,7 @@ func (al *AgentLoop) formatErrorMessage(err error) string {
 		})
 		return "⚠️ API service is temporarily unavailable. Please try again in a moment."
 	}
-	
+
 	if strings.Contains(errStr, "API request failed") ||
 		strings.Contains(errStr, "status=") {
 		logger.ErrorCF("agent", "API request failed", map[string]interface{}{
@@ -340,14 +340,14 @@ func (al *AgentLoop) formatErrorMessage(err error) string {
 		})
 		return "⚠️ The AI service encountered an error. Please try again."
 	}
-	
+
 	if strings.Contains(errStr, "LLM call failed") {
 		logger.ErrorCF("agent", "LLM call failed", map[string]interface{}{
 			"error": errStr,
 		})
 		return "⚠️ Failed to communicate with the AI service. Please try again."
 	}
-	
+
 	// Generic error - still log but give user-friendly message
 	logger.ErrorCF("agent", "Error processing message", map[string]interface{}{
 		"error": errStr,
@@ -748,10 +748,10 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			if isRetryable && retry < maxRetries {
 				logger.WarnCF("agent", "LLM call failed, retrying",
 					map[string]interface{}{
-						"iteration": iteration,
-						"retry":     retry + 1,
+						"iteration":   iteration,
+						"retry":       retry + 1,
 						"max_retries": maxRetries,
-						"error":     err.Error(),
+						"error":       err.Error(),
 					})
 				// Brief backoff before retry
 				time.Sleep(time.Duration(retry+1) * time.Second)

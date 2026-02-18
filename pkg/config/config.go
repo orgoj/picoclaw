@@ -63,8 +63,145 @@ type LoggingConfig struct {
 	FilePath string `json:"file_path" env:"PICOCLAW_LOGGING_FILE_PATH"`
 }
 
+// AgentsConfig holds all agent configurations.
+// It uses custom UnmarshalJSON to support a flat structure where:
+// - "defaults" and "subagents" are reserved keys
+// - Any other key is treated as a named agent configuration
 type AgentsConfig struct {
-	Defaults AgentDefaults `json:"defaults"`
+	Defaults    AgentDefaults               `json:"defaults"`
+	Subagents   SubagentsConfig             `json:"subagents"`
+	NamedAgents map[string]NamedAgentConfig `json:"-"` // Populated by custom UnmarshalJSON
+}
+
+// SubagentsConfig holds default configuration for anonymous subagents.
+// These settings apply when no named agent is specified.
+type SubagentsConfig struct {
+	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOKENS"`
+	MaxIterations           int     `json:"max_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_ITERATIONS"`
+	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_SUBAGENTS_TEMPERATURE"`
+	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_SUBAGENTS_HISTORY_MESSAGE_THRESHOLD"`
+}
+
+// NamedAgentConfig holds configuration for a named agent.
+// All fields are optional and will be merged with defaults.
+type NamedAgentConfig struct {
+	MaxTokens               int     `json:"max_tokens"`
+	MaxIterations           int     `json:"max_iterations"`
+	Temperature             float64 `json:"temperature"`
+	HistoryMessageThreshold int     `json:"history_message_threshold"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for AgentsConfig.
+// It extracts known fields (defaults, subagents) and collects all other
+// keys into the NamedAgents map.
+func (a *AgentsConfig) UnmarshalJSON(data []byte) error {
+	// Use an alias to avoid infinite recursion
+	type Alias AgentsConfig
+
+	// First, unmarshal into a raw map to extract named agents
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawMap); err != nil {
+		return err
+	}
+
+	// Initialize NamedAgents map
+	a.NamedAgents = make(map[string]NamedAgentConfig)
+
+	// Reserved keys that are not named agents
+	reservedKeys := map[string]bool{
+		"defaults":  true,
+		"subagents": true,
+	}
+
+	// Process each key
+	for key, rawValue := range rawMap {
+		if reservedKeys[key] {
+			continue
+		}
+
+		// This is a named agent
+		var namedCfg NamedAgentConfig
+		if err := json.Unmarshal(rawValue, &namedCfg); err != nil {
+			return fmt.Errorf("failed to parse named agent '%s': %w", key, err)
+		}
+		a.NamedAgents[key] = namedCfg
+	}
+
+	// Now unmarshal the standard fields using the alias
+	var alias Alias
+	alias.Defaults = a.Defaults
+	alias.Subagents = a.Subagents
+	alias.NamedAgents = a.NamedAgents
+
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+
+	a.Defaults = alias.Defaults
+	a.Subagents = alias.Subagents
+	a.NamedAgents = alias.NamedAgents
+
+	return nil
+}
+
+// ResolvedAgentConfig is the final merged configuration for an agent.
+type ResolvedAgentConfig struct {
+	MaxTokens               int
+	MaxIterations           int
+	Temperature             float64
+	HistoryMessageThreshold int
+}
+
+// ResolveAgentConfig returns the merged configuration for a given agent name.
+// Priority: named_agent > subagents > defaults
+//
+// If name is empty "", returns subagents config merged with defaults.
+// If name exists in NamedAgents, returns that named config merged with defaults.
+// If name doesn't exist, returns defaults (for subagent compatibility).
+func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
+	// Start with defaults
+	result := ResolvedAgentConfig{
+		MaxTokens:               a.Defaults.MaxTokensSubagent,
+		MaxIterations:           a.Defaults.MaxIterationsSubagent,
+		Temperature:             a.Defaults.Temperature,
+		HistoryMessageThreshold: a.Defaults.HistoryMessageThreshold,
+	}
+
+	// If name is empty, this is an anonymous subagent - apply subagents config
+	if name == "" {
+		if a.Subagents.MaxTokens > 0 {
+			result.MaxTokens = a.Subagents.MaxTokens
+		}
+		if a.Subagents.MaxIterations > 0 {
+			result.MaxIterations = a.Subagents.MaxIterations
+		}
+		if a.Subagents.Temperature > 0 {
+			result.Temperature = a.Subagents.Temperature
+		}
+		if a.Subagents.HistoryMessageThreshold > 0 {
+			result.HistoryMessageThreshold = a.Subagents.HistoryMessageThreshold
+		}
+		return result
+	}
+
+	// Check if this named agent exists
+	if named, ok := a.NamedAgents[name]; ok {
+		// Named agent config overrides defaults
+		if named.MaxTokens > 0 {
+			result.MaxTokens = named.MaxTokens
+		}
+		if named.MaxIterations > 0 {
+			result.MaxIterations = named.MaxIterations
+		}
+		if named.Temperature > 0 {
+			result.Temperature = named.Temperature
+		}
+		if named.HistoryMessageThreshold > 0 {
+			result.HistoryMessageThreshold = named.HistoryMessageThreshold
+		}
+	}
+
+	return result
 }
 
 type AgentDefaults struct {
@@ -262,6 +399,12 @@ func DefaultConfig() *Config {
 				MaxTokensSubagent:       4096,
 				LLMTimeout:              120,
 				MemoryThreshold:         0.8,
+				HistoryMessageThreshold: 100,
+			},
+			Subagents: SubagentsConfig{
+				MaxTokens:               4096,
+				MaxIterations:           20,
+				Temperature:             0.7,
 				HistoryMessageThreshold: 100,
 			},
 		},

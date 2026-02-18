@@ -27,9 +27,9 @@ func TestFormatErrorMessage(t *testing.T) {
 	cfg := config.DefaultConfig()
 	msgBus := bus.NewMessageBus()
 	provider := &MockErrorProvider{err: errors.New("test error")}
-	
+
 	agentLoop := NewAgentLoop(cfg, msgBus, provider)
-	
+
 	tests := []struct {
 		name     string
 		err      error
@@ -66,7 +66,7 @@ func TestFormatErrorMessage(t *testing.T) {
 			contains: "An error occurred",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := agentLoop.formatErrorMessage(tt.err)

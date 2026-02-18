@@ -30,18 +30,19 @@ type SubagentTask struct {
 }
 
 type SubagentManager struct {
-	tasks         map[string]*SubagentTask
-	mu            sync.RWMutex
-	provider      providers.LLMProvider
-	defaultModel  string
-	bus           *bus.MessageBus
-	workspace     string
-	tools         *ToolRegistry
-	cfg           *config.Config
-	maxIterations int
-	maxTokens     int
-	contextLimit  int // Max total chars in subagent message history (0 = no limit)
-	nextID        int
+	tasks                   map[string]*SubagentTask
+	mu                      sync.RWMutex
+	provider                providers.LLMProvider
+	defaultModel            string
+	bus                     *bus.MessageBus
+	workspace               string
+	tools                   *ToolRegistry
+	cfg                     *config.Config
+	maxIterations           int
+	maxTokens               int
+	contextLimit            int // Max total chars in subagent message history (0 = no limit)
+	historyMessageThreshold int // Max number of messages before trimming (0 = no limit)
+	nextID                  int
 }
 
 func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, workspace string, bus *bus.MessageBus) *SubagentManager {
@@ -53,18 +54,26 @@ func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, work
 		contextLimit = 4096 * 20 // fallback default
 	}
 
+	// Get default subagent config (for anonymous subagents)
+	defaultCfg := cfg.Agents.ResolveAgentConfig("")
+	msgThreshold := defaultCfg.HistoryMessageThreshold
+	if msgThreshold <= 0 {
+		msgThreshold = 100
+	}
+
 	return &SubagentManager{
-		tasks:         make(map[string]*SubagentTask),
-		provider:      provider,
-		defaultModel:  cfg.Agents.Defaults.Model,
-		bus:           bus,
-		workspace:     workspace,
-		tools:         NewToolRegistry(),
-		cfg:           cfg,
-		maxIterations: cfg.Agents.Defaults.MaxIterationsSubagent,
-		maxTokens:     cfg.Agents.Defaults.MaxTokensSubagent,
-		contextLimit:  contextLimit,
-		nextID:        1,
+		tasks:                   make(map[string]*SubagentTask),
+		provider:                provider,
+		defaultModel:            cfg.Agents.Defaults.Model,
+		bus:                     bus,
+		workspace:               workspace,
+		tools:                   NewToolRegistry(),
+		cfg:                     cfg,
+		maxIterations:           defaultCfg.MaxIterations,
+		maxTokens:               defaultCfg.MaxTokens,
+		contextLimit:            contextLimit,
+		historyMessageThreshold: msgThreshold,
+		nextID:                  1,
 	}
 }
 
@@ -217,22 +226,29 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	default:
 	}
 
+	// Resolve config based on agent name
+	// Priority: named_agent > subagents > defaults
+	resolvedCfg := sm.cfg.Agents.ResolveAgentConfig(task.Name)
+	maxIter := resolvedCfg.MaxIterations
+	maxTok := resolvedCfg.MaxTokens
+	msgThreshold := resolvedCfg.HistoryMessageThreshold
+	temperature := resolvedCfg.Temperature
+
 	// Run tool loop with access to tools
 	sm.mu.RLock()
 	tools := sm.tools
-	maxIter := sm.maxIterations
-	maxTok := sm.maxTokens
 	sm.mu.RUnlock()
 
 	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
-		Provider:      sm.provider,
-		Model:         sm.defaultModel,
-		Tools:         tools,
-		MaxIterations: maxIter,
-		ContextLimit:  sm.contextLimit,
+		Provider:                sm.provider,
+		Model:                   sm.defaultModel,
+		Tools:                   tools,
+		MaxIterations:           maxIter,
+		ContextLimit:            sm.contextLimit,
+		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
-			"temperature": sm.cfg.Agents.Defaults.Temperature,
+			"temperature": temperature,
 		},
 	}, messages, task.OriginChannel, task.OriginChatID)
 
@@ -430,23 +446,29 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		},
 	}
 
-	// Use RunToolLoop to execute with tools (same as async SpawnTool)
+	// Resolve config based on agent name
+	// Priority: named_agent > subagents > defaults
 	sm := t.manager
+	resolvedCfg := sm.cfg.Agents.ResolveAgentConfig(name)
+	maxIter := resolvedCfg.MaxIterations
+	maxTok := resolvedCfg.MaxTokens
+	msgThreshold := resolvedCfg.HistoryMessageThreshold
+	temperature := resolvedCfg.Temperature
+
 	sm.mu.RLock()
 	tools := sm.tools
-	maxIter := sm.maxIterations
-	maxTok := sm.maxTokens
 	sm.mu.RUnlock()
 
 	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
-		Provider:      sm.provider,
-		Model:         sm.defaultModel,
-		Tools:         tools,
-		MaxIterations: maxIter,
-		ContextLimit:  sm.contextLimit,
+		Provider:                sm.provider,
+		Model:                   sm.defaultModel,
+		Tools:                   tools,
+		MaxIterations:           maxIter,
+		ContextLimit:            sm.contextLimit,
+		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
-			"temperature": sm.cfg.Agents.Defaults.Temperature,
+			"temperature": temperature,
 		},
 	}, messages, t.originChannel, t.originChatID)
 
