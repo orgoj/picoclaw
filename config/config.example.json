@@ -10,7 +10,8 @@
       "max_tool_iterations": 20,
       "max_iterations_subagent": 20,
       "max_tokens_subagent": 4096,
-      "llm_timeout": 120
+      "llm_timeout": 120,
+      "history_message_threshold": 100
     }
   },
   "channels": {

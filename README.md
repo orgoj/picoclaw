@@ -198,7 +198,8 @@ picoclaw onboard
       "max_tool_iterations": 20,
       "max_iterations_subagent": 20,
       "max_tokens_subagent": 4096,
-      "llm_timeout": 120
+      "llm_timeout": 120,
+      "history_message_threshold": 100
     }
   },
   "providers": {
@@ -230,6 +231,7 @@ picoclaw onboard
 | `max_tokens` | 8192 | Max tokens for main agent |
 | `max_tokens_subagent` | 4096 | Max tokens for subagents |
 | `llm_timeout` | 120 | LLM API timeout in seconds |
+| `history_message_threshold` | 100 | Number of messages before triggering summarization |
 
 **3. Get API Keys**
 
@@ -929,6 +931,7 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `max_iterations_subagent` | `20` | Max tool calls per subagent |
 | `max_tokens_subagent` | `4096` | Max tokens for subagent responses |
 | `llm_timeout` | `120` | LLM API timeout in seconds |
+| `history_message_threshold` | `100` | Number of messages before triggering summarization |
 
 #### Gateway
 
@@ -1033,7 +1036,8 @@ picoclaw agent -m "Hello"
       "max_tool_iterations": 20,
       "max_iterations_subagent": 20,
       "max_tokens_subagent": 4096,
-      "llm_timeout": 120
+      "llm_timeout": 120,
+      "history_message_threshold": 100
     }
   },
   "providers": {

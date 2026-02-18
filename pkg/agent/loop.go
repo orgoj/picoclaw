@@ -31,26 +31,27 @@ import (
 )
 
 type AgentLoop struct {
-	bus             *bus.MessageBus
-	provider        providers.LLMProvider
-	workspace       string
-	model           string
-	contextWindow   int     // Maximum context window size in tokens
-	maxIterations   int     // Max tool iterations for main agent
-	maxTokens       int     // Max tokens for LLM responses
-	temperature     float64 // LLM temperature
-	llmTimeout      int     // LLM API timeout in seconds
-	memoryThreshold float64 // Threshold for memory summarization (0.0-1.0)
-	sessions        *session.SessionManager
-	state           *state.Manager
-	contextBuilder  *ContextBuilder
-	tools           *tools.ToolRegistry
-	subagentManager *tools.SubagentManager
-	running         atomic.Bool
-	summarizing     sync.Map // Tracks which sessions are currently being summarized
-	idleEnabled     bool
-	idleTimeout     time.Duration
-	idleRepeat      bool
+	bus                     *bus.MessageBus
+	provider                providers.LLMProvider
+	workspace               string
+	model                   string
+	contextWindow           int     // Maximum context window size in tokens
+	maxIterations           int     // Max tool iterations for main agent
+	maxTokens               int     // Max tokens for LLM responses
+	temperature             float64 // LLM temperature
+	llmTimeout              int     // LLM API timeout in seconds
+	memoryThreshold         float64 // Threshold for memory summarization (0.0-1.0)
+	historyMessageThreshold int     // Number of messages before triggering summarization
+	sessions                *session.SessionManager
+	state                   *state.Manager
+	contextBuilder          *ContextBuilder
+	tools                   *tools.ToolRegistry
+	subagentManager         *tools.SubagentManager
+	running                 atomic.Bool
+	summarizing             sync.Map // Tracks which sessions are currently being summarized
+	idleEnabled             bool
+	idleTimeout             time.Duration
+	idleRepeat              bool
 }
 
 // processOptions configures how a message is processed
@@ -192,17 +193,18 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	}
 
 	return &AgentLoop{
-		bus:             msgBus,
-		provider:        provider,
-		workspace:       workspace,
-		model:           cfg.Agents.Defaults.Model,
-		contextWindow:   contextWindow,
-		maxIterations:   cfg.Agents.Defaults.MaxToolIterations,
-		maxTokens:       cfg.Agents.Defaults.MaxTokens,
-		temperature:     cfg.Agents.Defaults.Temperature,
-		llmTimeout:      cfg.Agents.Defaults.LLMTimeout,
-		memoryThreshold: cfg.Agents.Defaults.MemoryThreshold,
-		idleEnabled:     cfg.Idle.Enabled,
+		bus:                     msgBus,
+		provider:                provider,
+		workspace:               workspace,
+		model:                   cfg.Agents.Defaults.Model,
+		contextWindow:           contextWindow,
+		maxIterations:           cfg.Agents.Defaults.MaxToolIterations,
+		maxTokens:               cfg.Agents.Defaults.MaxTokens,
+		temperature:             cfg.Agents.Defaults.Temperature,
+		llmTimeout:              cfg.Agents.Defaults.LLMTimeout,
+		memoryThreshold:         cfg.Agents.Defaults.MemoryThreshold,
+		historyMessageThreshold: cfg.Agents.Defaults.HistoryMessageThreshold,
+		idleEnabled:             cfg.Idle.Enabled,
 		idleTimeout: func() time.Duration {
 			minutes := cfg.Idle.TimeoutMinutes
 			if minutes <= 0 {
@@ -795,7 +797,7 @@ func (al *AgentLoop) maybeSummarize(sessionKey string) {
 
 	threshold := int(float64(al.contextWindow) * al.memoryThreshold)
 
-	if len(newHistory) > 20 || tokenEstimate > threshold {
+	if len(newHistory) > al.historyMessageThreshold || tokenEstimate > threshold {
 		if _, loading := al.summarizing.LoadOrStore(sessionKey, true); !loading {
 			go func() {
 				defer al.summarizing.Delete(sessionKey)

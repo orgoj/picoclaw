@@ -66,18 +66,19 @@ type AgentsConfig struct {
 }
 
 type AgentDefaults struct {
-	Workspace             string  `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
-	RestrictToWorkspace   bool    `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
-	Provider              string  `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
-	Model                 string  `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
-	MaxTokens             int     `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
-	ContextWindow         int     `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
-	Temperature           float64 `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
-	MaxToolIterations     int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
-	MaxIterationsSubagent int     `json:"max_iterations_subagent"`
-	MaxTokensSubagent     int     `json:"max_tokens_subagent"`
-	LLMTimeout            int     `json:"llm_timeout"`
-	MemoryThreshold       float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
+	Workspace               string  `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
+	RestrictToWorkspace     bool    `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
+	Provider                string  `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
+	Model                   string  `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
+	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	ContextWindow           int     `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
+	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
+	MaxToolIterations       int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
+	MaxIterationsSubagent   int     `json:"max_iterations_subagent"`
+	MaxTokensSubagent       int     `json:"max_tokens_subagent"`
+	LLMTimeout              int     `json:"llm_timeout"`
+	MemoryThreshold         float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
+	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_HISTORY_MESSAGE_THRESHOLD"`
 }
 
 type ChannelsConfig struct {
@@ -247,18 +248,19 @@ func DefaultConfig() *Config {
 	return &Config{
 		Agents: AgentsConfig{
 			Defaults: AgentDefaults{
-				Workspace:             "~/.picoclaw/workspace",
-				RestrictToWorkspace:   true,
-				Provider:              "",
-				Model:                 "glm-4.7",
-				MaxTokens:             8192,
-				ContextWindow:         131072, // 128K tokens default context window
-				Temperature:           0.7,
-				MaxToolIterations:     20,
-				MaxIterationsSubagent: 20,
-				MaxTokensSubagent:     4096,
-				LLMTimeout:            120,
-				MemoryThreshold:       0.8,
+				Workspace:               "~/.picoclaw/workspace",
+				RestrictToWorkspace:     true,
+				Provider:                "",
+				Model:                   "glm-4.7",
+				MaxTokens:               8192,
+				ContextWindow:           131072, // 128K tokens default context window
+				Temperature:             0.7,
+				MaxToolIterations:       20,
+				MaxIterationsSubagent:   20,
+				MaxTokensSubagent:       4096,
+				LLMTimeout:              120,
+				MemoryThreshold:         0.8,
+				HistoryMessageThreshold: 100,
 			},
 		},
 		Channels: ChannelsConfig{
