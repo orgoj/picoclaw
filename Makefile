@@ -1,4 +1,4 @@
-.PHONY: all build install uninstall clean help test
+.PHONY: all build install uninstall clean help fmt vet test
 
 # Build variables
 BINARY_NAME=picoclaw
@@ -119,11 +119,11 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@echo "Clean complete"
 
-## fmt: Format Go code
+## vet: Run go vet
 vet:
 	@$(GO) vet ./...
 
-## fmt: Format Go code
+## test: Run tests
 test:
 	@$(GO) test ./...
 
