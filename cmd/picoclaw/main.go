@@ -37,6 +37,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/skills"
 	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
+	pkgversion "github.com/sipeed/picoclaw/pkg/version"
 	"github.com/sipeed/picoclaw/pkg/voice"
 )
 
@@ -50,6 +51,11 @@ var (
 	buildTime string
 	goVersion string
 )
+
+func init() {
+	// Initialize version package for use by other packages
+	pkgversion.Set(version, gitCommit, buildTime, goVersion)
+}
 
 const logo = "🦞"
 

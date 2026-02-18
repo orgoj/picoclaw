@@ -185,12 +185,18 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	contextBuilder := NewContextBuilder(workspace)
 	contextBuilder.SetToolsRegistry(toolsRegistry)
 
+	// Context window fallback: use ContextWindow if set, otherwise MaxTokens
+	contextWindow := cfg.Agents.Defaults.ContextWindow
+	if contextWindow <= 0 {
+		contextWindow = cfg.Agents.Defaults.MaxTokens
+	}
+
 	return &AgentLoop{
 		bus:             msgBus,
 		provider:        provider,
 		workspace:       workspace,
 		model:           cfg.Agents.Defaults.Model,
-		contextWindow:   cfg.Agents.Defaults.MaxTokens,
+		contextWindow:   contextWindow,
 		maxIterations:   cfg.Agents.Defaults.MaxToolIterations,
 		maxTokens:       cfg.Agents.Defaults.MaxTokens,
 		temperature:     cfg.Agents.Defaults.Temperature,

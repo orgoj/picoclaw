@@ -10,6 +10,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/tools"
+	"github.com/sipeed/picoclaw/pkg/version"
 )
 
 type TelegramCommander interface {
@@ -158,6 +159,10 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 
 	var sb strings.Builder
 	sb.WriteString("🦞 *PicoClaw Status*\n\n")
+
+	// Version info
+	sb.WriteString(fmt.Sprintf("📦 *Version:* `%s`\n", version.Format()))
+	sb.WriteString(fmt.Sprintf("🔧 *Go:* `%s`\n\n", version.GetGoVersion()))
 
 	sb.WriteString("🟢 *Running Subagents:*\n")
 	if len(running) == 0 {

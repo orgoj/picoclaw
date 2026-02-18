@@ -71,6 +71,7 @@ type AgentDefaults struct {
 	Provider              string  `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
 	Model                 string  `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
 	MaxTokens             int     `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	ContextWindow         int     `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
 	Temperature           float64 `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
 	MaxToolIterations     int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
 	MaxIterationsSubagent int     `json:"max_iterations_subagent"`
@@ -251,6 +252,7 @@ func DefaultConfig() *Config {
 				Provider:              "",
 				Model:                 "glm-4.7",
 				MaxTokens:             8192,
+				ContextWindow:         131072, // 128K tokens default context window
 				Temperature:           0.7,
 				MaxToolIterations:     20,
 				MaxIterationsSubagent: 20,
