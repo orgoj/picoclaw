@@ -930,14 +930,25 @@ func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
 	info := make(map[string]interface{})
 
 	// Tools info
-	tools := al.tools.List()
+	toolList := al.tools.List()
 	info["tools"] = map[string]interface{}{
-		"count": len(tools),
-		"names": tools,
+		"count": len(toolList),
+		"names": toolList,
 	}
 
 	// Skills info
 	info["skills"] = al.contextBuilder.GetSkillsInfo()
+
+	// Named agents info
+	agentInfos := tools.LoadAvailableAgents(al.workspace)
+	agentNames := make([]string, 0, len(agentInfos))
+	for _, a := range agentInfos {
+		agentNames = append(agentNames, a.Name)
+	}
+	info["agents"] = map[string]interface{}{
+		"count": len(agentNames),
+		"names": agentNames,
+	}
 
 	return info
 }
