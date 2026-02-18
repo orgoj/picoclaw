@@ -31,6 +31,7 @@ import (
 )
 
 type AgentLoop struct {
+	cfg                     *config.Config
 	bus                     *bus.MessageBus
 	provider                providers.LLMProvider
 	workspace               string
@@ -193,6 +194,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	}
 
 	return &AgentLoop{
+		cfg:                     cfg,
 		bus:                     msgBus,
 		provider:                provider,
 		workspace:               workspace,
@@ -224,6 +226,14 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 
 func (al *AgentLoop) Run(ctx context.Context) error {
 	al.running.Store(true)
+
+	// Log config at session start
+	if al.cfg != nil {
+		summary := al.cfg.Summary()
+		if err := config.AppendToDailyLog(al.workspace, summary); err != nil {
+			logger.WarnCF("agent", "Failed to log config to daily log: %v", map[string]interface{}{"error": err.Error()})
+		}
+	}
 
 	idleTriggered := false
 

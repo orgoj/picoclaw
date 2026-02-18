@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -491,4 +493,101 @@ func expandHome(path string) string {
 		return home
 	}
 	return path
+}
+
+// Summary returns a concise markdown-formatted summary of the session configuration.
+// This is logged at the start of each session.
+func (c *Config) Summary() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	now := time.Now()
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("## Session Config (%s)\n", now.Format("15:04")))
+	sb.WriteString(fmt.Sprintf("- Model: %s\n", c.Agents.Defaults.Model))
+	sb.WriteString(fmt.Sprintf("- MaxTokens: %d\n", c.Agents.Defaults.MaxTokens))
+	sb.WriteString(fmt.Sprintf("- ContextWindow: %d\n", c.Agents.Defaults.ContextWindow))
+	sb.WriteString(fmt.Sprintf("- HistoryThreshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
+	return sb.String()
+}
+
+// FormatConfigForLog returns a markdown-formatted string of the current configuration
+// suitable for logging to daily notes.
+func (c *Config) FormatConfigForLog() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var sb strings.Builder
+	now := time.Now()
+	sb.WriteString(fmt.Sprintf("## Session Start (%s)\n\n", now.Format("15:04")))
+
+	// Main agent config
+	sb.WriteString("### Config\n")
+	sb.WriteString(fmt.Sprintf("- Model: %s\n", c.Agents.Defaults.Model))
+	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Defaults.MaxTokens))
+	sb.WriteString(fmt.Sprintf("- context_window: %d\n", c.Agents.Defaults.ContextWindow))
+	sb.WriteString(fmt.Sprintf("- history_threshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
+	if c.Agents.Defaults.Temperature > 0 {
+		sb.WriteString(fmt.Sprintf("- temperature: %.2f\n", c.Agents.Defaults.Temperature))
+	}
+
+	// Web search status
+	webSearchEnabled := c.Tools.Web.Brave.Enabled || c.Tools.Web.DuckDuckGo.Enabled || c.Tools.Web.ZAI.Enabled
+	sb.WriteString(fmt.Sprintf("- web_search: %s\n", map[bool]string{true: "enabled", false: "disabled"}[webSearchEnabled]))
+
+	// Subagent config
+	sb.WriteString("\n### Subagent Config\n")
+	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Defaults.MaxTokensSubagent))
+	sb.WriteString(fmt.Sprintf("- max_iterations: %d\n", c.Agents.Defaults.MaxIterationsSubagent))
+
+	return sb.String()
+}
+
+// GetDailyLogPath returns the path to the daily log file for the given workspace.
+// Format: workspace/memory/YYYYMM/YYYYMMDD.md
+func GetDailyLogPath(workspace string) string {
+	now := time.Now()
+	monthDir := now.Format("200601")
+	fileName := now.Format("20060102") + ".md"
+	return filepath.Join(workspace, "memory", monthDir, fileName)
+}
+
+// AppendToDailyLog appends a message to the daily log file.
+// Creates the directory and file if they don't exist.
+func AppendToDailyLog(workspace, content string) error {
+	logPath := GetDailyLogPath(workspace)
+
+	// Create directory if needed
+	dir := filepath.Dir(logPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create daily log directory: %w", err)
+	}
+
+	// Check if file exists to determine if we need to add header
+	fileExists := true
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		fileExists = false
+	}
+
+	// Open file in append mode
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open daily log: %w", err)
+	}
+	defer f.Close()
+
+	// Add header if new file
+	if !fileExists {
+		header := fmt.Sprintf("# Daily Log - %s\n\n", time.Now().Format("2006-01-02"))
+		if _, err := f.WriteString(header); err != nil {
+			return fmt.Errorf("failed to write header: %w", err)
+		}
+	}
+
+	// Append content
+	if _, err := f.WriteString(content + "\n"); err != nil {
+		return fmt.Errorf("failed to append to daily log: %w", err)
+	}
+
+	return nil
 }

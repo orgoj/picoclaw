@@ -474,6 +474,11 @@ func agentCmd() {
 			"skills_available": startupInfo["skills"].(map[string]interface{})["available"],
 		})
 
+	// Log config to daily log file
+	if err := config.AppendToDailyLog(cfg.WorkspacePath(), cfg.FormatConfigForLog()); err != nil {
+		logger.WarnCF("agent", "Failed to log config to daily log", map[string]interface{}{"error": err.Error()})
+	}
+
 	if message != "" {
 		ctx := context.Background()
 		response, err := agentLoop.ProcessDirect(ctx, message, sessionKey)
@@ -620,6 +625,11 @@ func gatewayCmd() {
 			"skills_total":     skillsInfo["total"],
 			"skills_available": skillsInfo["available"],
 		})
+
+	// Log config to daily log file
+	if err := config.AppendToDailyLog(cfg.WorkspacePath(), cfg.FormatConfigForLog()); err != nil {
+		logger.WarnCF("agent", "Failed to log config to daily log", map[string]interface{}{"error": err.Error()})
+	}
 
 	// Setup cron tool and service
 	cronService := setupCronTool(agentLoop, msgBus, cfg.WorkspacePath())
