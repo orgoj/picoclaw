@@ -60,6 +60,7 @@ type AgentLoop struct {
 	idleTimeout             time.Duration
 	idleRepeat              bool
 	idleRecentSubagents     int // Number of recent subagents to show in IDLE prompt
+	runCounter              atomic.Uint64
 }
 
 // processOptions configures how a message is processed
@@ -784,6 +785,14 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 // runAgentLoop is the core message processing logic.
 // It handles context building, LLM calls, tool execution, and response handling.
 func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (string, error) {
+	runID := al.nextRunID(opts.SessionKey)
+	logger.InfoCF("agent", "Run started", map[string]interface{}{
+		"run_id":      runID,
+		"session_key": opts.SessionKey,
+		"channel":     opts.Channel,
+		"chat_id":     opts.ChatID,
+	})
+
 	// 0. Record last channel for heartbeat notifications (skip internal channels)
 	if opts.Channel != "" && opts.ChatID != "" {
 		// Don't record internal channels (cli, system, subagent)
@@ -817,7 +826,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	// 3. Run LLM iteration loop
-	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(ctx, messages, opts)
+	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(ctx, messages, opts, runID)
 	if err != nil {
 		return "", err
 	}
@@ -859,6 +868,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	responsePreview := utils.Truncate(finalContent, 120)
 	logger.InfoCF("agent", fmt.Sprintf("Response: %s", responsePreview),
 		map[string]interface{}{
+			"run_id":       runID,
 			"session_key":  opts.SessionKey,
 			"iterations":   iteration,
 			"final_length": len(finalContent),
@@ -873,7 +883,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 // runLLMIteration executes the LLM call loop with tool handling.
 // Returns the final content, iteration count, and any error.
-func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions) (string, int, bool, error) {
+func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions, runID string) (string, int, bool, error) {
 	iteration := 0
 	var finalContent string
 	sentUserViaTool := false
@@ -883,8 +893,10 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 		logger.DebugCF("agent", "LLM iteration",
 			map[string]interface{}{
-				"iteration": iteration,
-				"max":       al.maxIterations,
+				"run_id":      runID,
+				"session_key": opts.SessionKey,
+				"iteration":   iteration,
+				"max":         al.maxIterations,
 			})
 
 		// Build tool definitions
@@ -893,6 +905,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Log LLM request details
 		logger.DebugCF("agent", "LLM request",
 			map[string]interface{}{
+				"run_id":            runID,
+				"session_key":       opts.SessionKey,
 				"iteration":         iteration,
 				"model":             al.model,
 				"messages_count":    len(messages),
@@ -905,6 +919,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Log full messages (detailed)
 		logger.DebugCF("agent", "Full LLM request",
 			map[string]interface{}{
+				"run_id":        runID,
+				"session_key":   opts.SessionKey,
 				"iteration":     iteration,
 				"messages_json": formatMessagesForLog(messages),
 				"tools_json":    formatToolsForLog(providerToolDefs),
@@ -955,6 +971,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				}
 				logger.WarnCF("agent", "Rate limited, waiting",
 					map[string]interface{}{
+						"run_id":       runID,
+						"session_key":  opts.SessionKey,
 						"iteration":    iteration,
 						"retry":        retry + 1,
 						"max_retries":  maxRetries,
@@ -980,6 +998,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				}
 				logger.WarnCF("agent", "LLM call failed, retrying",
 					map[string]interface{}{
+						"run_id":       runID,
+						"session_key":  opts.SessionKey,
 						"iteration":    iteration,
 						"retry":        retry + 1,
 						"max_retries":  maxRetries,
@@ -999,8 +1019,10 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		if err != nil {
 			logger.ErrorCF("agent", "LLM call failed",
 				map[string]interface{}{
-					"iteration": iteration,
-					"error":     err.Error(),
+					"run_id":      runID,
+					"session_key": opts.SessionKey,
+					"iteration":   iteration,
+					"error":       err.Error(),
 				})
 			return "", iteration, sentUserViaTool, fmt.Errorf("LLM call failed: %w", err)
 		}
@@ -1011,7 +1033,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			if strings.TrimSpace(finalContent) == "" {
 				logger.WarnCF("agent", "LLM returned empty direct response, requesting retry",
 					map[string]interface{}{
-						"iteration": iteration,
+						"run_id":      runID,
+						"session_key": opts.SessionKey,
+						"iteration":   iteration,
 					})
 				if iteration < al.maxIterations {
 					messages = append(messages, providers.Message{
@@ -1024,6 +1048,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			}
 			logger.InfoCF("agent", "LLM response without tool calls (direct answer)",
 				map[string]interface{}{
+					"run_id":        runID,
+					"session_key":   opts.SessionKey,
 					"iteration":     iteration,
 					"content_chars": len(finalContent),
 				})
@@ -1037,9 +1063,11 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 		logger.InfoCF("agent", "LLM requested tool calls",
 			map[string]interface{}{
-				"tools":     toolNames,
-				"count":     len(response.ToolCalls),
-				"iteration": iteration,
+				"run_id":      runID,
+				"session_key": opts.SessionKey,
+				"tools":       toolNames,
+				"count":       len(response.ToolCalls),
+				"iteration":   iteration,
 			})
 
 		// Build assistant message with tool calls
@@ -1070,8 +1098,10 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			argsPreview := utils.Truncate(string(argsJSON), 200)
 			logger.InfoCF("agent", fmt.Sprintf("Tool call: %s(%s)", tc.Name, argsPreview),
 				map[string]interface{}{
-					"tool":      tc.Name,
-					"iteration": iteration,
+					"run_id":      runID,
+					"session_key": opts.SessionKey,
+					"tool":        tc.Name,
+					"iteration":   iteration,
 				})
 
 			// Create async callback for tools that implement AsyncTool
@@ -1084,6 +1114,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				if !result.Silent && result.ForUser != "" {
 					logger.InfoCF("agent", "Async tool completed, agent will handle notification",
 						map[string]interface{}{
+							"run_id":      runID,
+							"session_key": opts.SessionKey,
 							"tool":        tc.Name,
 							"content_len": len(result.ForUser),
 						})
@@ -1103,13 +1135,17 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 					Content: toolResult.ForUser,
 				}); !ok {
 					logger.WarnCF("agent", "Failed to publish tool result: outbound queue timeout", map[string]interface{}{
-						"tool":    tc.Name,
-						"channel": opts.Channel,
-						"chat_id": opts.ChatID,
+						"run_id":      runID,
+						"session_key": opts.SessionKey,
+						"tool":        tc.Name,
+						"channel":     opts.Channel,
+						"chat_id":     opts.ChatID,
 					})
 				}
 				logger.DebugCF("agent", "Sent tool result to user",
 					map[string]interface{}{
+						"run_id":      runID,
+						"session_key": opts.SessionKey,
 						"tool":        tc.Name,
 						"content_len": len(toolResult.ForUser),
 					})
@@ -1134,6 +1170,16 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 	}
 
 	return finalContent, iteration, sentUserViaTool, nil
+}
+
+func (al *AgentLoop) nextRunID(sessionKey string) string {
+	n := al.runCounter.Add(1)
+	base := strings.TrimSpace(sessionKey)
+	if base == "" {
+		base = "no-session"
+	}
+	base = strings.ReplaceAll(base, ":", "_")
+	return fmt.Sprintf("%s-%06d", base, n)
 }
 
 func (al *AgentLoop) clampRetryWait(wait time.Duration, retryStart time.Time) (time.Duration, bool) {
