@@ -26,8 +26,8 @@ type SubagentTask struct {
 	Status        string
 	Result        string
 	Created       int64
-	Started       int64 // When the task actually started execution
-	Ended         int64 // When the task completed/failed/cancelled
+	Started       int64    // When the task actually started execution
+	Ended         int64    // When the task completed/failed/cancelled
 	PendingMsgs   []string // Queued guidance messages from supervisor
 }
 

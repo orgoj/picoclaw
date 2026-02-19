@@ -202,7 +202,8 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 	if queueCount > 0 {
 		firstMsg := c.subagentManager.GetFirstQueuedMessage()
 		if firstMsg != "" {
-			sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", escapeMD(truncateStr(firstMsg, 80))))
+			// IMPORTANT: escape BEFORE truncate to avoid breaking markdown entities
+			sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", truncateStr(escapeMD(firstMsg), 80)))
 		}
 	}
 

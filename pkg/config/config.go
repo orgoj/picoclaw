@@ -315,10 +315,10 @@ type HeartbeatConfig struct {
 }
 
 type IdleConfig struct {
-	Enabled          bool `json:"enabled" env:"PICOCLAW_IDLE_ENABLED"`
-	TimeoutMinutes   int  `json:"timeout_minutes" env:"PICOCLAW_IDLE_TIMEOUT_MINUTES"`   // default 5
-	Repeat           bool `json:"repeat" env:"PICOCLAW_IDLE_REPEAT"`                     // if true, repeat while still idle
-	RecentSubagents  int  `json:"recent_subagents" env:"PICOCLAW_IDLE_RECENT_SUBAGENTS"` // number of recent subagents to show (default 5)
+	Enabled         bool `json:"enabled" env:"PICOCLAW_IDLE_ENABLED"`
+	TimeoutMinutes  int  `json:"timeout_minutes" env:"PICOCLAW_IDLE_TIMEOUT_MINUTES"`   // default 5
+	Repeat          bool `json:"repeat" env:"PICOCLAW_IDLE_REPEAT"`                     // if true, repeat while still idle
+	RecentSubagents int  `json:"recent_subagents" env:"PICOCLAW_IDLE_RECENT_SUBAGENTS"` // number of recent subagents to show (default 5)
 }
 
 type DevicesConfig struct {

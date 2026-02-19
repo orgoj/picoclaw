@@ -218,11 +218,11 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		idleRepeat:          cfg.Idle.Repeat,
 		idleRecentSubagents: cfg.Idle.RecentSubagents,
 		sessions:            sessionsManager,
-		state:           stateManager,
-		contextBuilder:  contextBuilder,
-		tools:           toolsRegistry,
-		subagentManager: subagentManager,
-		summarizing:     sync.Map{},
+		state:               stateManager,
+		contextBuilder:      contextBuilder,
+		tools:               toolsRegistry,
+		subagentManager:     subagentManager,
+		summarizing:         sync.Map{},
 	}
 }
 
