@@ -140,6 +140,12 @@
     }
   },
   "tools": {
+    "spawn": {
+      "enabled": true
+    },
+    "subagent": {
+      "enabled": true
+    },
     "web": {
       "zai": {
         "enabled": false,

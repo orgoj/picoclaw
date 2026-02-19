@@ -215,6 +215,12 @@ picoclaw onboard
     }
   },
   "tools": {
+    "spawn": {
+      "enabled": true
+    },
+    "subagent": {
+      "enabled": true
+    },
     "web": {
       "brave": {
         "enabled": false,
@@ -245,6 +251,8 @@ picoclaw onboard
 | `llm_rate_limit_max_backoff_seconds` | 30 | Max backoff (seconds) for rate-limit errors |
 | `llm_retry_max_elapsed_seconds` | 60 | Max total retry wait time per LLM call (0 = unlimited) |
 | `history_message_threshold` | 100 | Number of messages before triggering summarization |
+| `tools.spawn.enabled` | `true` | Enable async subagent delegation tool (`spawn`) |
+| `tools.subagent.enabled` | `true` | Enable sync delegation tool (`subagent`) |
 
 **3. Get API Keys**
 
@@ -1179,6 +1187,12 @@ picoclaw agent -m "Hello"
     }
   },
   "tools": {
+    "spawn": {
+      "enabled": true
+    },
+    "subagent": {
+      "enabled": true
+    },
     "web": {
       "zai": {
         "enabled": false,

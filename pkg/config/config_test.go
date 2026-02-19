@@ -227,6 +227,13 @@ func TestDefaultConfig_Channels(t *testing.T) {
 func TestDefaultConfig_WebTools(t *testing.T) {
 	cfg := DefaultConfig()
 
+	if !cfg.Tools.Spawn.Enabled {
+		t.Error("Spawn tool should be enabled by default")
+	}
+	if !cfg.Tools.Subagent.Enabled {
+		t.Error("Subagent tool should be enabled by default")
+	}
+
 	// Verify web tools defaults
 	if cfg.Tools.Web.Brave.MaxResults != 5 {
 		t.Error("Expected Brave MaxResults 5, got ", cfg.Tools.Web.Brave.MaxResults)
@@ -236,6 +243,27 @@ func TestDefaultConfig_WebTools(t *testing.T) {
 	}
 	if cfg.Tools.Web.DuckDuckGo.MaxResults != 5 {
 		t.Error("Expected DuckDuckGo MaxResults 5, got ", cfg.Tools.Web.DuckDuckGo.MaxResults)
+	}
+}
+
+func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
+	jsonData := `{
+		"tools": {
+			"spawn": {"enabled": false},
+			"subagent": {"enabled": true}
+		}
+	}`
+
+	var cfg Config
+	if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+		t.Fatalf("Failed to unmarshal config: %v", err)
+	}
+
+	if cfg.Tools.Spawn.Enabled {
+		t.Error("Expected spawn tool disabled")
+	}
+	if !cfg.Tools.Subagent.Enabled {
+		t.Error("Expected subagent tool enabled")
 	}
 }
 

@@ -173,19 +173,23 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	// Subagent doesn't need spawn/subagent tools to avoid recursion
 	subagentManager.SetTools(subagentTools)
 
-	// Register spawn tool (for main agent)
-	spawnTool := tools.NewSpawnTool(subagentManager)
-	toolsRegistry.Register(spawnTool)
+	// Register spawn/subagent tools (configurable)
+	if cfg.Tools.Spawn.Enabled {
+		spawnTool := tools.NewSpawnTool(subagentManager)
+		toolsRegistry.Register(spawnTool)
+	}
+	if cfg.Tools.Subagent.Enabled {
+		subagentTool := tools.NewSubagentTool(subagentManager)
+		toolsRegistry.Register(subagentTool)
+	}
 
-	// Register subagent tool (synchronous execution)
-	subagentTool := tools.NewSubagentTool(subagentManager)
-	toolsRegistry.Register(subagentTool)
-
-	// Register subagent management tools
-	toolsRegistry.Register(tools.NewSubagentStatusTool(subagentManager))
-	toolsRegistry.Register(tools.NewSubagentHistoryTool(subagentManager))
-	toolsRegistry.Register(tools.NewSubagentMessageTool(subagentManager))
-	toolsRegistry.Register(tools.NewSubagentCancelTool(subagentManager))
+	// Register subagent management tools only when async spawn is enabled.
+	if cfg.Tools.Spawn.Enabled {
+		toolsRegistry.Register(tools.NewSubagentStatusTool(subagentManager))
+		toolsRegistry.Register(tools.NewSubagentHistoryTool(subagentManager))
+		toolsRegistry.Register(tools.NewSubagentMessageTool(subagentManager))
+		toolsRegistry.Register(tools.NewSubagentCancelTool(subagentManager))
+	}
 
 	sessionsManager := session.NewSessionManager(filepath.Join(workspace, "sessions"))
 

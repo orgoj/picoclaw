@@ -387,8 +387,18 @@ type WebToolsConfig struct {
 	ZAI        ZAIConfig        `json:"zai"`
 }
 
+type SpawnToolConfig struct {
+	Enabled bool `json:"enabled" env:"PICOCLAW_TOOLS_SPAWN_ENABLED"`
+}
+
+type SubagentToolConfig struct {
+	Enabled bool `json:"enabled" env:"PICOCLAW_TOOLS_SUBAGENT_ENABLED"`
+}
+
 type ToolsConfig struct {
-	Web WebToolsConfig `json:"web"`
+	Web      WebToolsConfig     `json:"web"`
+	Spawn    SpawnToolConfig    `json:"spawn"`
+	Subagent SubagentToolConfig `json:"subagent"`
 }
 
 func DefaultConfig() *Config {
@@ -524,6 +534,12 @@ func DefaultConfig() *Config {
 					MaxResults:    5,
 					Timeout:       60,
 				},
+			},
+			Spawn: SpawnToolConfig{
+				Enabled: true,
+			},
+			Subagent: SubagentToolConfig{
+				Enabled: true,
 			},
 		},
 		Heartbeat: HeartbeatConfig{

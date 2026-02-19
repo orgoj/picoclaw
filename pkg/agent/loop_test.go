@@ -322,6 +322,46 @@ func TestAgentLoop_GetStartupInfo(t *testing.T) {
 	}
 }
 
+func TestAgentLoop_SubagentToolToggles(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Workspace = tmpDir
+	cfg.Tools.Spawn.Enabled = false
+	cfg.Tools.Subagent.Enabled = true
+
+	msgBus := bus.NewMessageBus()
+	provider := &mockProvider{}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	info := al.GetStartupInfo()
+	toolsInfo := info["tools"].(map[string]interface{})
+	toolsList := toolsInfo["names"].([]string)
+
+	has := func(name string) bool {
+		for _, toolName := range toolsList {
+			if toolName == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	if has("spawn") {
+		t.Error("spawn tool should be disabled")
+	}
+	if !has("subagent") {
+		t.Error("subagent tool should be enabled")
+	}
+	if has("subagent_status") {
+		t.Error("subagent_status tool should be disabled when spawn is disabled")
+	}
+}
+
 // TestAgentLoop_Stop verifies Stop() sets running to false
 func TestAgentLoop_Stop(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "agent-test-*")
