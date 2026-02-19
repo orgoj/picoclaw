@@ -26,6 +26,8 @@ type SubagentTask struct {
 	Status        string
 	Result        string
 	Created       int64
+	Started       int64 // When the task actually started execution
+	Ended         int64 // When the task completed/failed/cancelled
 	PendingMsgs   []string // Queued guidance messages from supervisor
 }
 
@@ -211,6 +213,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	sm.mu.Lock()
 	task.Status = "running"
 	task.Created = time.Now().UnixMilli()
+	task.Started = time.Now().UnixMilli()
 	sm.mu.Unlock()
 
 	logger.InfoCF("subagent", "Starting subagent task",
@@ -240,6 +243,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		sm.mu.Lock()
 		task.Status = "cancelled"
 		task.Result = "Task cancelled before execution"
+		task.Ended = time.Now().UnixMilli()
 		sm.mu.Unlock()
 		return
 	default:
@@ -273,6 +277,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 
 	sm.mu.Lock()
 	var result *ToolResult
+	task.Ended = time.Now().UnixMilli()
 	defer func() {
 		sm.mu.Unlock()
 		// Call callback if provided and result is set
@@ -345,6 +350,83 @@ func (sm *SubagentManager) ListTasks() []*SubagentTask {
 	return tasks
 }
 
+// CountRunning returns the number of currently running subagent tasks.
+func (sm *SubagentManager) CountRunning() int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.countRunningTasks()
+}
+
+// GetRunningTasks returns all currently running tasks.
+func (sm *SubagentManager) GetRunningTasks() []*SubagentTask {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	tasks := make([]*SubagentTask, 0)
+	for _, task := range sm.tasks {
+		if task.Status == "running" {
+			tasks = append(tasks, task)
+		}
+	}
+	return tasks
+}
+
+// GetRecentTasks returns the most recent non-running tasks, up to limit.
+func (sm *SubagentManager) GetRecentTasks(limit int) []*SubagentTask {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	// Get all non-running tasks
+	var completed []*SubagentTask
+	for _, task := range sm.tasks {
+		if task.Status != "running" {
+			completed = append(completed, task)
+		}
+	}
+
+	// Sort by Ended time (most recent first)
+	for i := 0; i < len(completed); i++ {
+		for j := i + 1; j < len(completed); j++ {
+			if completed[j].Ended > completed[i].Ended {
+				completed[i], completed[j] = completed[j], completed[i]
+			}
+		}
+	}
+
+	// Limit results
+	if len(completed) > limit {
+		completed = completed[:limit]
+	}
+	return completed
+}
+
+// GetMessageQueueCount returns the total count of pending messages across all running subagents.
+func (sm *SubagentManager) GetMessageQueueCount() int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	count := 0
+	for _, task := range sm.tasks {
+		if task.Status == "running" {
+			count += len(task.PendingMsgs)
+		}
+	}
+	return count
+}
+
+// GetFirstQueuedMessage returns the first queued message from any running subagent.
+func (sm *SubagentManager) GetFirstQueuedMessage() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	for _, task := range sm.tasks {
+		if task.Status == "running" && len(task.PendingMsgs) > 0 {
+			return task.PendingMsgs[0]
+		}
+	}
+	return ""
+}
+
 // SendMessage sends a guidance message to a running subagent task.
 func (sm *SubagentManager) SendMessage(taskID, message string) error {
 	sm.mu.Lock()
@@ -379,6 +461,7 @@ func (sm *SubagentManager) Cancel(taskID string) error {
 	// Mark as cancelled
 	task.Status = "cancelled"
 	task.Result = "Cancelled by user"
+	task.Ended = time.Now().UnixMilli()
 	return nil
 }
 

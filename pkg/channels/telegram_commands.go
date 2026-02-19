@@ -130,80 +130,79 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		return err
 	}
 
-	tasks := c.subagentManager.ListTasks()
-
-	var running []*tools.SubagentTask
-	var stopped []*tools.SubagentTask
-
-	for _, t := range tasks {
-		if t.Status == "running" {
-			running = append(running, t)
-		} else {
-			stopped = append(stopped, t)
-		}
-	}
-
-	// Sort stopped by created time descending
-	for i := 0; i < len(stopped); i++ {
-		for j := i + 1; j < len(stopped); j++ {
-			if stopped[i].Created < stopped[j].Created {
-				stopped[i], stopped[j] = stopped[j], stopped[i]
-			}
-		}
-	}
-
-	// Limit to last 10
-	if len(stopped) > 10 {
-		stopped = stopped[:10]
-	}
+	// Get enhanced task information
+	running := c.subagentManager.GetRunningTasks()
+	recent := c.subagentManager.GetRecentTasks(5)
+	queueCount := c.subagentManager.GetMessageQueueCount()
 
 	var sb strings.Builder
-	sb.WriteString("🦞 *PicoClaw Status*\n\n")
+	sb.WriteString("📊 *PicoClaw Status*\n\n")
 
 	// Version info
 	sb.WriteString(fmt.Sprintf("📦 *Version:* `%s`\n", version.Format()))
 	sb.WriteString(fmt.Sprintf("🔧 *Go:* `%s`\n\n", version.GetGoVersion()))
 
-	sb.WriteString("🟢 *Running Subagents:*\n")
+	// Running subagents with enhanced details
+	sb.WriteString("🔄 *Running Subagents:*\n")
 	if len(running) == 0 {
-		sb.WriteString("- None\n")
+		sb.WriteString("  None\n")
 	} else {
 		for _, t := range running {
-			created := time.UnixMilli(t.Created).Format("15:04:05")
-			label := t.Label
-			if label == "" {
-				label = "(unnamed)"
+			// Format time range
+			startTime := formatTimeShort(t.Started)
+			timeRange := fmt.Sprintf("[%s - ...]", startTime)
+
+			sb.WriteString(fmt.Sprintf("• `%s` %s\n", t.ID, timeRange))
+
+			// Label (if set)
+			if t.Label != "" {
+				sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
 			}
-			dir := ""
-			if t.Directory != "" {
-				dir = fmt.Sprintf(" @ `%s`", t.Directory)
+
+			// Task preview (first 30 chars)
+			taskPreview := truncateStr(t.Task, 30)
+			sb.WriteString(fmt.Sprintf("  Task: %s\n", escapeMD(taskPreview)))
+
+			// Pending messages count for this task
+			if len(t.PendingMsgs) > 0 {
+				sb.WriteString(fmt.Sprintf("  📬 Pending: %d message(s)\n", len(t.PendingMsgs)))
 			}
-			sb.WriteString(fmt.Sprintf("- `%s`: %s%s (since %s)\n", t.ID, label, dir, created))
+			sb.WriteString("\n")
 		}
 	}
 
-	sb.WriteString("\n⚪ *Last 10 Stopped:*\n")
-	if len(stopped) == 0 {
-		sb.WriteString("- None\n")
+	// Recent completed tasks
+	sb.WriteString(fmt.Sprintf("\n✅ *Recent \\(%d\\):*\n", len(recent)))
+	if len(recent) == 0 {
+		sb.WriteString("  None\n")
 	} else {
-		for _, t := range stopped {
-			label := t.Label
-			if label == "" {
-				label = "(unnamed)"
-			}
-			statusIcon := "⚪"
-			if t.Status == "completed" {
-				statusIcon = "✅"
-			} else if t.Status == "failed" {
-				statusIcon = "🔴"
+		for _, t := range recent {
+			startTime := formatTimeShort(t.Started)
+			endTime := formatTimeShort(t.Ended)
+
+			// Status icon
+			statusIcon := "✅"
+			if t.Status == "failed" {
+				statusIcon = "❌"
 			} else if t.Status == "cancelled" {
 				statusIcon = "🚫"
 			}
-			dir := ""
-			if t.Directory != "" {
-				dir = fmt.Sprintf(" @ `%s`", t.Directory)
+
+			timeRange := fmt.Sprintf("[%s - %s]", startTime, endTime)
+			sb.WriteString(fmt.Sprintf("• `%s` %s %s\n", t.ID, timeRange, statusIcon))
+
+			if t.Label != "" {
+				sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
 			}
-			sb.WriteString(fmt.Sprintf("- %s `%s`: %s%s\n", statusIcon, t.ID, label, dir))
+		}
+	}
+
+	// Message queue info
+	sb.WriteString(fmt.Sprintf("\n📬 *Message Queue:* %d\n", queueCount))
+	if queueCount > 0 {
+		firstMsg := c.subagentManager.GetFirstQueuedMessage()
+		if firstMsg != "" {
+			sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", escapeMD(truncateStr(firstMsg, 80))))
 		}
 	}
 
@@ -223,32 +222,51 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		if stats.IsSummarizing {
 			summarizingInfo = " _(summarizing...)_"
 		}
-		sb.WriteString("\n🤖 *Main Agent (this session):*\n")
-		sb.WriteString(fmt.Sprintf("- Model: `%s`\n", c.config.Agents.Defaults.Model))
-		sb.WriteString(fmt.Sprintf("- Messages: %d\n", stats.MessageCount))
-		sb.WriteString(fmt.Sprintf("- Context: ~%d/%d tokens (%d%%)%s\n",
+		sb.WriteString("\n🤖 *Main Agent \\(this session\\):*\n")
+		sb.WriteString(fmt.Sprintf("  Model: `%s`\n", c.config.Agents.Defaults.Model))
+		sb.WriteString(fmt.Sprintf("  Messages: %d\n", stats.MessageCount))
+		sb.WriteString(fmt.Sprintf("  Context: ~%d/%d tokens \\(%d%%\\)%s\n",
 			stats.TokenEstimate, stats.ContextWindow, memPct, summarizingInfo))
-		sb.WriteString(fmt.Sprintf("- Summary: %s\n", summaryInfo))
+		sb.WriteString(fmt.Sprintf("  Summary: %s\n", summaryInfo))
 	}
-
-	// Context configuration
-	sb.WriteString("\n📊 *Context Config:*\n")
-	sb.WriteString("  *Main Agent:*\n")
-	sb.WriteString(fmt.Sprintf("    history\\_message\\_threshold: %d\n", c.config.Agents.Defaults.HistoryMessageThreshold))
-	sb.WriteString(fmt.Sprintf("    max\\_tokens: %d\n", c.config.Agents.Defaults.MaxTokens))
-	sb.WriteString(fmt.Sprintf("    context\\_window: %d\n", c.config.Agents.Defaults.ContextWindow))
-	sb.WriteString("  *Subagent:*\n")
-	sb.WriteString(fmt.Sprintf("    history\\_message\\_threshold: %d\n", c.config.Agents.Defaults.HistoryMessageThreshold/2))
-	sb.WriteString(fmt.Sprintf("    max\\_tokens: %d\n", c.config.Agents.Defaults.MaxTokensSubagent))
-	sb.WriteString(fmt.Sprintf("    max\\_iterations: %d\n", c.config.Agents.Defaults.MaxIterationsSubagent))
 
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      sb.String(),
-		ParseMode: telego.ModeMarkdown,
+		ParseMode: telego.ModeMarkdownV2,
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
 	})
 	return err
+}
+
+// formatTimeShort formats Unix millisecond timestamp to HH:MM:SS
+func formatTimeShort(unixMilli int64) string {
+	if unixMilli == 0 {
+		return "--:--:--"
+	}
+	return time.UnixMilli(unixMilli).Format("15:04:05")
+}
+
+// truncateStr truncates a string to maxLen characters
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// escapeMD escapes special characters for MarkdownV2
+func escapeMD(text string) string {
+	// MarkdownV2 special characters that need escaping
+	specialChars := "_*[]()~`>#+-=|{}.!"
+	var result strings.Builder
+	for _, c := range text {
+		if strings.ContainsRune(specialChars, c) {
+			result.WriteRune('\\')
+		}
+		result.WriteRune(c)
+	}
+	return result.String()
 }
