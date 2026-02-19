@@ -254,6 +254,23 @@ picoclaw onboard
 | `tools.spawn.enabled` | `true` | Enable async subagent delegation tool (`spawn`) |
 | `tools.subagent.enabled` | `true` | Enable sync delegation tool (`subagent`) |
 
+Retry semantics (exact):
+- Total attempts = `1 + llm_max_retries` (initial call + retries).
+- Retryable/API 5xx wait uses exponential backoff:
+  `wait = min(llm_retry_backoff_seconds * 2^retry_index, llm_retry_max_backoff_seconds)`.
+  `retry_index` starts at 0 for the first retry.
+- Rate-limit (429) wait uses linear backoff:
+  `wait = min(llm_rate_limit_backoff_seconds * (retry_index + 1), llm_rate_limit_max_backoff_seconds)`.
+- `llm_retry_max_elapsed_seconds` limits only cumulative retry sleep/wait time for one LLM call (not the request execution time itself). `0` means no limit.
+
+Example (3 retries within 300s budget):
+- `llm_max_retries=3`
+- `llm_retry_backoff_seconds=30`
+- `llm_retry_max_backoff_seconds=120`
+- `llm_rate_limit_backoff_seconds=60`
+- `llm_rate_limit_max_backoff_seconds=120`
+- `llm_retry_max_elapsed_seconds=300`
+
 **3. Get API Keys**
 
 * **LLM Provider**: [OpenRouter](https://openrouter.ai/keys) · [Zhipu](https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys) · [Anthropic](https://console.anthropic.com) · [OpenAI](https://platform.openai.com) · [Gemini](https://aistudio.google.com/api-keys)
@@ -990,6 +1007,15 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `llm_rate_limit_max_backoff_seconds` | `30` | Max backoff (seconds) for rate-limit errors |
 | `llm_retry_max_elapsed_seconds` | `60` | Max total retry wait time per LLM call (0 = unlimited) |
 | `history_message_threshold` | `100` | Number of messages before triggering summarization |
+
+Retry semantics (exact):
+- Total attempts = `1 + llm_max_retries` (initial call + retries).
+- Retryable/API 5xx wait uses exponential backoff:
+  `wait = min(llm_retry_backoff_seconds * 2^retry_index, llm_retry_max_backoff_seconds)`.
+  `retry_index` starts at 0 for the first retry.
+- Rate-limit (429) wait uses linear backoff:
+  `wait = min(llm_rate_limit_backoff_seconds * (retry_index + 1), llm_rate_limit_max_backoff_seconds)`.
+- `llm_retry_max_elapsed_seconds` limits only cumulative retry sleep/wait time for one LLM call (not the request execution time itself). `0` means no limit.
 
 #### Gateway
 
