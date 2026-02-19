@@ -602,8 +602,9 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 			"directory":   directory,
 		})
 
-	// Agent only logs, does not respond to user
-	return "", nil
+	// Return notification for main agent - it decides what to do with it
+	notification := fmt.Sprintf("📢 Subagent %s completed:\n\n%s", msg.SenderID, content)
+	return notification, nil
 }
 
 // runAgentLoop is the core message processing logic.
