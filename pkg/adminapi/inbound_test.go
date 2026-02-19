@@ -2,10 +2,13 @@ package adminapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -155,5 +158,26 @@ func TestDashboardRoute(t *testing.T) {
 	}
 	if rr.Body.Len() == 0 {
 		t.Fatal("dashboard response is empty")
+	}
+}
+
+func TestEventsRoute_StreamsSnapshot(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	_, _ = msgBus.PublishInboundWithID(bus.InboundMessage{Content: "x"})
+	mux := http.NewServeMux()
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?session_key=telegram:1", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	got := rr.Body.String()
+	if !strings.Contains(got, "event: snapshot") {
+		t.Fatalf("expected SSE snapshot event, got: %q", got)
+	}
+	if !strings.Contains(got, "\"session_key\":\"telegram:1\"") {
+		t.Fatalf("expected session key in snapshot, got: %q", got)
 	}
 }

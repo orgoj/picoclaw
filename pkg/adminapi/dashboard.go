@@ -82,6 +82,7 @@ const dashboardHTML = `<!doctype html>
 
 const dashboardJS = `
 const $ = (id) => document.getElementById(id);
+let es = null;
 
 async function jfetch(url, opts={}) {
   const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -100,35 +101,58 @@ async function sendMessage() {
     const res = await jfetch("/api/v1/main/message", { method:"POST", body: JSON.stringify(body) });
     $("sendOut").textContent = JSON.stringify(res);
     $("content").value = "";
-    await refreshInbound();
-    await refreshHistory();
   } catch (e) {
     $("sendOut").textContent = "ERROR: "+e.message;
   }
 }
 
-async function refreshInbound() {
+function renderInbound(items) {
   const t = $("inboundTable");
+  let html = "<tr><th>ID</th><th>Session</th><th>Content</th><th>Actions</th></tr>";
+  for (const it of (items || [])) {
+    const id = it.id;
+    const m = it.message || {};
+    html += "<tr>";
+    html += "<td>"+id+"</td>";
+    html += "<td>"+(m.session_key||"")+"</td>";
+    html += "<td><textarea id='e_"+id+"' style='min-height:54px'>"+(m.content||"")+"</textarea></td>";
+    html += "<td>";
+    html += "<button onclick='patchItem(\""+id+"\")'>save</button> ";
+    html += "<button onclick='moveTop(\""+id+"\")'>top</button> ";
+    html += "<button onclick='delItem(\""+id+"\")'>del</button>";
+    html += "</td></tr>";
+  }
+  t.innerHTML = html;
+}
+
+function renderHistory(items) {
+  const box = $("historyBox");
+  box.textContent = (items || []).map((m,i) => "["+i+"] "+m.role+": "+(m.content||"")).join("\\n\\n");
+}
+
+function renderSubagents(items) {
+  const t = $("subagentTable");
+  const detail = $("subagentDetail");
+  let html = "<tr><th>ID</th><th>Status</th><th>Label</th><th>Pending</th><th></th></tr>";
+  for (const it of (items || [])) {
+    html += "<tr>";
+    html += "<td>"+it.id+"</td>";
+    html += "<td>"+it.status+"</td>";
+    html += "<td>"+(it.label||"")+"</td>";
+    html += "<td>"+(it.pending||0)+"</td>";
+    html += "<td><button onclick='loadSubagent(\""+it.id+"\")'>view</button></td>";
+    html += "</tr>";
+  }
+  t.innerHTML = html;
+  if (!items || items.length === 0) detail.textContent = "No subagents.";
+}
+
+async function refreshInbound() {
   try {
     const res = await jfetch("/api/v1/inbound");
-    const items = res.items || [];
-    let html = "<tr><th>ID</th><th>Session</th><th>Content</th><th>Actions</th></tr>";
-    for (const it of items) {
-      const id = it.id;
-      const m = it.message || {};
-      html += "<tr>";
-      html += "<td>"+id+"</td>";
-      html += "<td>"+(m.session_key||"")+"</td>";
-      html += "<td><textarea id='e_"+id+"' style='min-height:54px'>"+(m.content||"")+"</textarea></td>";
-      html += "<td>";
-      html += "<button onclick='patchItem(\""+id+"\")'>save</button> ";
-      html += "<button onclick='moveTop(\""+id+"\")'>top</button> ";
-      html += "<button onclick='delItem(\""+id+"\")'>del</button>";
-      html += "</td></tr>";
-    }
-    t.innerHTML = html;
+    renderInbound(res.items || []);
   } catch (e) {
-    t.innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
+    $("inboundTable").innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
   }
 }
 
@@ -155,33 +179,18 @@ async function refreshHistory() {
   if (!key) { box.textContent = "session_key required"; return; }
   try {
     const res = await jfetch("/api/v1/history?session_key="+encodeURIComponent(key));
-    const items = res.items || [];
-    box.textContent = items.map((m,i) => "["+i+"] "+m.role+": "+(m.content||"")).join("\\n\\n");
+    renderHistory(res.items || []);
   } catch (e) {
     box.textContent = "ERROR: "+e.message;
   }
 }
 
 async function refreshSubagents() {
-  const t = $("subagentTable");
-  const detail = $("subagentDetail");
   try {
     const res = await jfetch("/api/v1/subagents");
-    const items = res.items || [];
-    let html = "<tr><th>ID</th><th>Status</th><th>Label</th><th>Pending</th><th></th></tr>";
-    for (const it of items) {
-      html += "<tr>";
-      html += "<td>"+it.id+"</td>";
-      html += "<td>"+it.status+"</td>";
-      html += "<td>"+(it.label||"")+"</td>";
-      html += "<td>"+(it.pending||0)+"</td>";
-      html += "<td><button onclick='loadSubagent(\""+it.id+"\")'>view</button></td>";
-      html += "</tr>";
-    }
-    t.innerHTML = html;
-    if (items.length === 0) detail.textContent = "No subagents.";
+    renderSubagents(res.items || []);
   } catch (e) {
-    t.innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
+    $("subagentTable").innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
   }
 }
 
@@ -195,10 +204,35 @@ async function loadSubagent(id) {
   }
 }
 
+function connectEvents() {
+  if (es) {
+    es.close();
+    es = null;
+  }
+  const key = $("sessionKey").value.trim();
+  if (!key) return;
+
+  es = new EventSource("/api/v1/events?session_key="+encodeURIComponent(key));
+  es.addEventListener("snapshot", (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      renderInbound(data.inbound || []);
+      renderHistory(data.history || []);
+      renderSubagents(data.subagents || []);
+    } catch (e) {
+      $("sendOut").textContent = "SSE parse error: "+e.message;
+    }
+  });
+  es.onerror = () => {
+    $("sendOut").textContent = "SSE disconnected, retrying...";
+  };
+}
+
 $("sendBtn").addEventListener("click", sendMessage);
 $("refreshInbound").addEventListener("click", refreshInbound);
 $("refreshHistory").addEventListener("click", refreshHistory);
 $("refreshSubagents").addEventListener("click", refreshSubagents);
+$("sessionKey").addEventListener("change", connectEvents);
 
 window.patchItem = patchItem;
 window.moveTop = moveTop;
@@ -208,7 +242,5 @@ window.loadSubagent = loadSubagent;
 refreshInbound();
 refreshHistory();
 refreshSubagents();
-setInterval(refreshInbound, 3000);
-setInterval(refreshHistory, 5000);
-setInterval(refreshSubagents, 5000);
+connectEvents();
 `

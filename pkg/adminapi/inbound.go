@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -55,6 +56,7 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/main/message", api.handleMainMessage)
 	r.HandleFunc("/api/v1/subagents", api.handleSubagents)
 	r.HandleFunc("/api/v1/subagents/", api.handleSubagentItem)
+	r.HandleFunc("/api/v1/events", api.handleEvents)
 	RegisterDashboardRoutes(r)
 }
 
@@ -236,32 +238,7 @@ func (a *inboundAPI) handleSubagents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tasks := a.subagentMgr.ListTasks()
-	type taskView struct {
-		ID        string `json:"id"`
-		Label     string `json:"label"`
-		Name      string `json:"name"`
-		Directory string `json:"directory"`
-		Status    string `json:"status"`
-		Created   int64  `json:"created"`
-		Started   int64  `json:"started"`
-		Ended     int64  `json:"ended"`
-		Pending   int    `json:"pending"`
-	}
-	out := make([]taskView, 0, len(tasks))
-	for _, t := range tasks {
-		out = append(out, taskView{
-			ID:        t.ID,
-			Label:     t.Label,
-			Name:      t.Name,
-			Directory: t.Directory,
-			Status:    t.Status,
-			Created:   t.Created,
-			Started:   t.Started,
-			Ended:     t.Ended,
-			Pending:   len(t.PendingMsgs),
-		})
-	}
+	out := a.listSubagentViews()
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
@@ -299,6 +276,93 @@ func (a *inboundAPI) handleSubagentItem(w http.ResponseWriter, r *http.Request) 
 		"pending":     task.PendingMsgs,
 		"origin_chat": task.OriginChatID,
 	})
+}
+
+func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	if a.hist == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "history provider unavailable"})
+		return
+	}
+	sessionKey := strings.TrimSpace(r.URL.Query().Get("session_key"))
+	if sessionKey == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "session_key query param is required"})
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "streaming unsupported"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	sendSnapshot := func() {
+		payload := map[string]any{
+			"session_key": sessionKey,
+			"inbound":     a.msgBus.ListInbound(),
+			"history":     a.hist.GetSessionHistory(sessionKey),
+			"subagents":   a.listSubagentViews(),
+			"ts":          time.Now().UnixMilli(),
+		}
+		raw, _ := json.Marshal(payload)
+		_, _ = fmt.Fprintf(w, "event: snapshot\n")
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", raw)
+		flusher.Flush()
+	}
+
+	sendSnapshot()
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			sendSnapshot()
+		}
+	}
+}
+
+type taskView struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Name      string `json:"name"`
+	Directory string `json:"directory"`
+	Status    string `json:"status"`
+	Created   int64  `json:"created"`
+	Started   int64  `json:"started"`
+	Ended     int64  `json:"ended"`
+	Pending   int    `json:"pending"`
+}
+
+func (a *inboundAPI) listSubagentViews() []taskView {
+	if a.subagentMgr == nil {
+		return nil
+	}
+	tasks := a.subagentMgr.ListTasks()
+	out := make([]taskView, 0, len(tasks))
+	for _, t := range tasks {
+		out = append(out, taskView{
+			ID:        t.ID,
+			Label:     t.Label,
+			Name:      t.Name,
+			Directory: t.Directory,
+			Status:    t.Status,
+			Created:   t.Created,
+			Started:   t.Started,
+			Ended:     t.Ended,
+			Pending:   len(t.PendingMsgs),
+		})
+	}
+	return out
 }
 
 func writeJSON(w http.ResponseWriter, status int, body map[string]any) {
