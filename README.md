@@ -337,7 +337,7 @@ picoclaw gateway
 |--------|-------------|
 | `/start` | Start the bot |
 | `/help` | Show available commands |
-| `/status` | Show system and subagents status (includes tools, skills, named agents) |
+| `/status` | Show system and subagents status (includes tools, skills, named agents). Named agents reflect what the main agent currently knows in its prompt context. |
 | `/kill <task_id>` | Cancel a running subagent task |
 | `/models` | List configured model/provider |
 | `/channels` | List available channels |

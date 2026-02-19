@@ -147,7 +147,7 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 
 	// Capabilities info (tools, skills, named agents)
 	if c.agentLoop != nil {
-		startupInfo := c.agentLoop.GetStartupInfo()
+		startupInfo := c.agentLoop.GetRuntimeInfo()
 		toolsInfo := startupInfo["tools"].(map[string]interface{})
 		skillsInfo := startupInfo["skills"].(map[string]interface{})
 		agentsInfo := startupInfo["agents"].(map[string]interface{})

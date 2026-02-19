@@ -15,9 +15,9 @@ type AgentInfo struct {
 
 var agentNamePattern = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
-// LoadAvailableAgents scans workspace/agents/*/AGENTS.md for YAML frontmatter
-// and returns a list of named agents with name and description.
-// Agents without valid YAML frontmatter (name + description) are silently skipped.
+// LoadAvailableAgents scans workspace/agents/* and returns discoverable agents.
+// Preferred source is AGENTS.md YAML frontmatter (name + description).
+// If frontmatter is missing/invalid, falls back to directory name so agents still show up in status/UI.
 func LoadAvailableAgents(workspace string) []AgentInfo {
 	agentsDir := filepath.Join(workspace, "agents")
 	dirs, err := os.ReadDir(agentsDir)
@@ -30,16 +30,26 @@ func LoadAvailableAgents(workspace string) []AgentInfo {
 		if !dir.IsDir() {
 			continue
 		}
+		dirName := strings.TrimSpace(dir.Name())
+		if !agentNamePattern.MatchString(dirName) {
+			continue
+		}
+
 		agentsFile := filepath.Join(agentsDir, dir.Name(), "AGENTS.md")
+		description := "No description configured"
 		data, err := os.ReadFile(agentsFile)
-		if err != nil {
-			continue
+		if err == nil {
+			meta := parseAgentFrontmatter(string(data))
+			if meta != nil {
+				agents = append(agents, *meta)
+				continue
+			}
 		}
-		meta := parseAgentFrontmatter(string(data))
-		if meta == nil {
-			continue
-		}
-		agents = append(agents, *meta)
+
+		agents = append(agents, AgentInfo{
+			Name:        dirName,
+			Description: description,
+		})
 	}
 	return agents
 }

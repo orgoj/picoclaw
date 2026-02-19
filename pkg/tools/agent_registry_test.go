@@ -29,7 +29,7 @@ description: Senior Go developer
 I am a coder.
 `), 0644)
 
-	// Create agent without frontmatter (should be skipped)
+	// Create agent without frontmatter (should fallback to directory name)
 	noFMDir := filepath.Join(agentsDir, "plain")
 	os.MkdirAll(noFMDir, 0755)
 	os.WriteFile(filepath.Join(noFMDir, "AGENTS.md"), []byte("No frontmatter here.\n"), 0644)
@@ -45,14 +45,20 @@ description: Bad agent
 
 	agents := LoadAvailableAgents(dir)
 
-	if len(agents) != 1 {
-		t.Errorf("Expected 1 valid agent, got %d: %v", len(agents), agents)
+	if len(agents) != 2 {
+		t.Errorf("Expected 2 agents (1 frontmatter + 1 fallback), got %d: %v", len(agents), agents)
 	}
 	if agents[0].Name != "coder" {
 		t.Errorf("Expected name 'coder', got '%s'", agents[0].Name)
 	}
 	if agents[0].Description != "Senior Go developer" {
 		t.Errorf("Expected description 'Senior Go developer', got '%s'", agents[0].Description)
+	}
+	if agents[1].Name != "plain" {
+		t.Errorf("Expected fallback name 'plain', got '%s'", agents[1].Name)
+	}
+	if agents[1].Description != "No description configured" {
+		t.Errorf("Expected fallback description, got '%s'", agents[1].Description)
 	}
 }
 
@@ -66,8 +72,11 @@ name: nodesc
 `), 0644)
 
 	agents := LoadAvailableAgents(dir)
-	if len(agents) != 0 {
-		t.Errorf("Agent without description should be skipped, got %d", len(agents))
+	if len(agents) != 1 {
+		t.Errorf("Agent without description should fallback to directory name, got %d", len(agents))
+	}
+	if agents[0].Name != "nodesc" {
+		t.Errorf("Expected fallback name 'nodesc', got '%s'", agents[0].Name)
 	}
 }
 

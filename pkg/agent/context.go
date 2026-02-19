@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -19,6 +20,8 @@ type ContextBuilder struct {
 	skillsLoader *skills.SkillsLoader
 	memory       *MemoryStore
 	tools        *tools.ToolRegistry // Direct reference to tool registry
+	agentsMu     sync.RWMutex
+	knownAgents  []tools.AgentInfo
 }
 
 func getGlobalConfigDir() string {
@@ -84,8 +87,43 @@ Your workspace is at: %s
 		now, runtime, workspacePath, workspacePath, workspacePath, workspacePath, toolsSection, workspacePath)
 }
 
-func (cb *ContextBuilder) buildNamedAgentsSummary() string {
+func (cb *ContextBuilder) refreshNamedAgents() []tools.AgentInfo {
 	agents := tools.LoadAvailableAgents(cb.workspace)
+	cb.agentsMu.Lock()
+	cb.knownAgents = append([]tools.AgentInfo(nil), agents...)
+	cb.agentsMu.Unlock()
+	return agents
+}
+
+func (cb *ContextBuilder) getKnownAgents() []tools.AgentInfo {
+	cb.agentsMu.RLock()
+	defer cb.agentsMu.RUnlock()
+	return append([]tools.AgentInfo(nil), cb.knownAgents...)
+}
+
+func (cb *ContextBuilder) GetNamedAgentsInfo(refresh bool) map[string]interface{} {
+	var agents []tools.AgentInfo
+	if refresh {
+		agents = cb.refreshNamedAgents()
+	} else {
+		agents = cb.getKnownAgents()
+		if len(agents) == 0 {
+			agents = cb.refreshNamedAgents()
+		}
+	}
+
+	names := make([]string, 0, len(agents))
+	for _, a := range agents {
+		names = append(names, a.Name)
+	}
+	return map[string]interface{}{
+		"count": len(names),
+		"names": names,
+	}
+}
+
+func (cb *ContextBuilder) buildNamedAgentsSummary() string {
+	agents := cb.refreshNamedAgents()
 	if len(agents) == 0 {
 		return ""
 	}

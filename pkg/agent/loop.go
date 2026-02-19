@@ -1158,6 +1158,16 @@ func (al *AgentLoop) maybeSummarize(sessionKey string) {
 
 // GetStartupInfo returns information about loaded tools and skills for logging.
 func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
+	return al.getInfo(true)
+}
+
+// GetRuntimeInfo returns current runtime info as known by the main agent prompt state.
+// Named agents come from ContextBuilder cache (same source used in system prompt).
+func (al *AgentLoop) GetRuntimeInfo() map[string]interface{} {
+	return al.getInfo(false)
+}
+
+func (al *AgentLoop) getInfo(refreshAgents bool) map[string]interface{} {
 	info := make(map[string]interface{})
 
 	// Tools info
@@ -1170,16 +1180,8 @@ func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
 	// Skills info
 	info["skills"] = al.contextBuilder.GetSkillsInfo()
 
-	// Named agents info
-	agentInfos := tools.LoadAvailableAgents(al.workspace)
-	agentNames := make([]string, 0, len(agentInfos))
-	for _, a := range agentInfos {
-		agentNames = append(agentNames, a.Name)
-	}
-	info["agents"] = map[string]interface{}{
-		"count": len(agentNames),
-		"names": agentNames,
-	}
+	// Named agents info (shared with prompt builder cache).
+	info["agents"] = al.contextBuilder.GetNamedAgentsInfo(refreshAgents)
 
 	return info
 }
