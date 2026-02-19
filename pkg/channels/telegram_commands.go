@@ -77,12 +77,24 @@ func (c *cmd) Start(ctx context.Context, message telego.Message) error {
 }
 
 func (c *cmd) Models(ctx context.Context, message telego.Message) error {
-	provider := c.config.Agents.Defaults.Provider
-	if provider == "" {
-		provider = "configured default"
-	}
-	response := fmt.Sprintf("🦞 <b>Configured Model</b>\n\n- Model: <code>%s</code>\n- Provider: <code>%s</code>",
-		html.EscapeString(c.config.Agents.Defaults.Model), html.EscapeString(provider))
+	mainModel := c.config.Agents.Defaults.Model
+	mainProvider := resolvedProviderName(c.config, mainModel)
+	subagentModel := c.config.Agents.Defaults.Model
+	subagentProvider := resolvedProviderName(c.config, subagentModel)
+
+	response := fmt.Sprintf(
+		"🦞 <b>Configured Models</b>\n\n"+
+			"<b>Main Agent</b>\n"+
+			"- Model: <code>%s</code>\n"+
+			"- Provider: <code>%s</code>\n\n"+
+			"<b>Subagents</b>\n"+
+			"- Model: <code>%s</code> (inherits <code>agents.defaults.model</code>)\n"+
+			"- Provider: <code>%s</code>",
+		html.EscapeString(mainModel),
+		html.EscapeString(mainProvider),
+		html.EscapeString(subagentModel),
+		html.EscapeString(subagentProvider),
+	)
 
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
@@ -377,4 +389,59 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func resolvedProviderName(cfg *config.Config, model string) string {
+	if cfg == nil {
+		return "unknown"
+	}
+
+	if p := strings.TrimSpace(strings.ToLower(cfg.Agents.Defaults.Provider)); p != "" {
+		switch p {
+		case "gpt":
+			return "openai (explicit)"
+		case "glm":
+			return "zhipu (explicit)"
+		case "claude":
+			return "anthropic (explicit)"
+		case "google":
+			return "gemini (explicit)"
+		case "copilot":
+			return "github_copilot (explicit)"
+		case "claudecode":
+			return "claude-cli (explicit)"
+		case "codex-code":
+			return "codex-cli (explicit)"
+		default:
+			return p + " (explicit)"
+		}
+	}
+
+	lowerModel := strings.ToLower(model)
+	switch {
+	case (strings.Contains(lowerModel, "kimi") || strings.Contains(lowerModel, "moonshot") || strings.HasPrefix(model, "moonshot/")) && cfg.Providers.Moonshot.APIKey != "":
+		return "moonshot (auto)"
+	case (strings.HasPrefix(model, "openrouter/") || strings.HasPrefix(model, "anthropic/") || strings.HasPrefix(model, "openai/") || strings.HasPrefix(model, "meta-llama/") || strings.HasPrefix(model, "deepseek/") || strings.HasPrefix(model, "google/")) && cfg.Providers.OpenRouter.APIKey != "":
+		return "openrouter (auto)"
+	case (strings.Contains(lowerModel, "claude") || strings.HasPrefix(model, "anthropic/")) && (cfg.Providers.Anthropic.APIKey != "" || cfg.Providers.Anthropic.AuthMethod != ""):
+		return "anthropic (auto)"
+	case (strings.Contains(lowerModel, "gpt") || strings.HasPrefix(model, "openai/")) && (cfg.Providers.OpenAI.APIKey != "" || cfg.Providers.OpenAI.AuthMethod != ""):
+		return "openai (auto)"
+	case (strings.Contains(lowerModel, "gemini") || strings.HasPrefix(model, "google/")) && cfg.Providers.Gemini.APIKey != "":
+		return "gemini (auto)"
+	case (strings.Contains(lowerModel, "glm") || strings.Contains(lowerModel, "zhipu") || strings.Contains(lowerModel, "zai")) && cfg.Providers.Zhipu.APIKey != "":
+		return "zhipu (auto)"
+	case (strings.Contains(lowerModel, "groq") || strings.HasPrefix(model, "groq/")) && cfg.Providers.Groq.APIKey != "":
+		return "groq (auto)"
+	case (strings.Contains(lowerModel, "nvidia") || strings.HasPrefix(model, "nvidia/")) && cfg.Providers.Nvidia.APIKey != "":
+		return "nvidia (auto)"
+	case (strings.Contains(lowerModel, "ollama") || strings.HasPrefix(model, "ollama/")) && cfg.Providers.Ollama.APIKey != "":
+		return "ollama (auto)"
+	case cfg.Providers.VLLM.APIBase != "":
+		return "vllm (auto)"
+	case cfg.Providers.OpenRouter.APIKey != "":
+		return "openrouter (fallback)"
+	default:
+		return "unresolved (no matching provider/api key)"
+	}
 }
