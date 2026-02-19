@@ -373,6 +373,27 @@ func (m *simpleMockProvider) GetDefaultModel() string {
 	return "mock-model"
 }
 
+type sequenceMockProvider struct {
+	responses []string
+	index     int
+}
+
+func (m *sequenceMockProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, opts map[string]interface{}) (*providers.LLMResponse, error) {
+	resp := ""
+	if m.index < len(m.responses) {
+		resp = m.responses[m.index]
+		m.index++
+	}
+	return &providers.LLMResponse{
+		Content:   resp,
+		ToolCalls: []providers.ToolCall{},
+	}, nil
+}
+
+func (m *sequenceMockProvider) GetDefaultModel() string {
+	return "mock-model"
+}
+
 // mockCustomTool is a simple mock tool for registration testing
 type mockCustomTool struct{}
 
@@ -443,6 +464,46 @@ func (h testHelper) executeAndGetResponse(tb testing.TB, ctx context.Context, ms
 }
 
 const responseTimeout = 3 * time.Second
+
+func TestAgentLoop_EmptyDirectResponseRetriesAndContinues(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 3,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &sequenceMockProvider{
+		responses: []string{"", "Non-empty response"},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	helper := testHelper{al: al}
+
+	ctx := context.Background()
+	msg := bus.InboundMessage{
+		Channel:    "test",
+		SenderID:   "user1",
+		ChatID:     "chat1",
+		Content:    "hello",
+		SessionKey: "test-session-empty-retry",
+	}
+
+	response := helper.executeAndGetResponse(t, ctx, msg)
+	if response != "Non-empty response" {
+		t.Fatalf("Expected retried non-empty response, got: %q", response)
+	}
+}
 
 // TestToolResult_SilentToolDoesNotSendUserMessage verifies silent tools don't trigger outbound
 func TestToolResult_SilentToolDoesNotSendUserMessage(t *testing.T) {

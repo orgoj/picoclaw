@@ -981,6 +981,20 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Check if no tool calls - we're done
 		if len(response.ToolCalls) == 0 {
 			finalContent = response.Content
+			if strings.TrimSpace(finalContent) == "" {
+				logger.WarnCF("agent", "LLM returned empty direct response, requesting retry",
+					map[string]interface{}{
+						"iteration": iteration,
+					})
+				if iteration < al.maxIterations {
+					messages = append(messages, providers.Message{
+						Role: "user",
+						Content: "Your previous response was empty. " +
+							"Return a concise, non-empty response for the user now.",
+					})
+					continue
+				}
+			}
 			logger.InfoCF("agent", "LLM response without tool calls (direct answer)",
 				map[string]interface{}{
 					"iteration":     iteration,
