@@ -81,7 +81,7 @@ func checkWorkspaceBootstrap(workspace string, report *Report) {
 	}
 
 	requiredFiles := []string{
-		"AGENT.md",
+		"AGENTS.md",
 		"IDENTITY.md",
 		"SOUL.md",
 		"USER.md",
@@ -90,7 +90,7 @@ func checkWorkspaceBootstrap(workspace string, report *Report) {
 
 	for _, rel := range requiredFiles {
 		full := filepath.Join(workspace, rel)
-		if fi, err := os.Stat(full); err != nil || fi.IsDir() {
+		if !fileExists(full) {
 			report.Issues = append(report.Issues, Issue{
 				Check:   "bootstrap",
 				Path:    full,
@@ -99,6 +99,11 @@ func checkWorkspaceBootstrap(workspace string, report *Report) {
 			})
 		}
 	}
+}
+
+func fileExists(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && !fi.IsDir()
 }
 
 func checkBadProjectAgentDirs(workspace string, report *Report) {

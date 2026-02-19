@@ -786,7 +786,7 @@ All paths share the same workspace restriction — there's no way to bypass the 
 
 Before `agent` and `gateway` start, PicoClaw runs a preflight check to fail fast on invalid workspace state:
 
-- Verifies required workspace bootstrap files exist (`AGENT.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `memory/MEMORY.md`)
+- Verifies required workspace bootstrap files exist (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `memory/MEMORY.md`)
 - Detects invalid project agent directories (`workspace/projects/*/agents`)
 - Lints `SKILL.md` files for valid YAML frontmatter (`name`, `description`)
 - Blocks unsafe instruction patterns in skills (for example `grep -r` and `find . -name`)

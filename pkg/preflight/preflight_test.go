@@ -20,7 +20,7 @@ func writeFile(t *testing.T, path, content string) {
 func makeBootstrapWorkspace(t *testing.T) string {
 	t.Helper()
 	ws := t.TempDir()
-	writeFile(t, filepath.Join(ws, "AGENT.md"), "# agent")
+	writeFile(t, filepath.Join(ws, "AGENTS.md"), "# agents")
 	writeFile(t, filepath.Join(ws, "IDENTITY.md"), "# identity")
 	writeFile(t, filepath.Join(ws, "SOUL.md"), "# soul")
 	writeFile(t, filepath.Join(ws, "USER.md"), "# user")
