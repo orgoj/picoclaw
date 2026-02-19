@@ -199,6 +199,12 @@ picoclaw onboard
       "max_iterations_subagent": 20,
       "max_tokens_subagent": 4096,
       "llm_timeout": 120,
+      "llm_max_retries": 2,
+      "llm_retry_backoff_seconds": 2,
+      "llm_retry_max_backoff_seconds": 8,
+      "llm_rate_limit_backoff_seconds": 10,
+      "llm_rate_limit_max_backoff_seconds": 30,
+      "llm_retry_max_elapsed_seconds": 60,
       "history_message_threshold": 100
     }
   },
@@ -232,6 +238,12 @@ picoclaw onboard
 | `max_tokens_subagent` | 4096 | Max tokens for subagents |
 | `max_concurrent_subagents` | 2 | Max number of subagents that can run simultaneously |
 | `llm_timeout` | 120 | LLM API timeout in seconds |
+| `llm_max_retries` | 2 | Max retry attempts after initial failed LLM call |
+| `llm_retry_backoff_seconds` | 2 | Base backoff (seconds) for retryable errors, exponential |
+| `llm_retry_max_backoff_seconds` | 8 | Max backoff (seconds) for retryable errors |
+| `llm_rate_limit_backoff_seconds` | 10 | Base backoff (seconds) for rate-limit errors, linear |
+| `llm_rate_limit_max_backoff_seconds` | 30 | Max backoff (seconds) for rate-limit errors |
+| `llm_retry_max_elapsed_seconds` | 60 | Max total retry wait time per LLM call (0 = unlimited) |
 | `history_message_threshold` | 100 | Number of messages before triggering summarization |
 
 **3. Get API Keys**
@@ -963,6 +975,12 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `max_tokens_subagent` | `4096` | Max tokens for subagent responses |
 | `max_concurrent_subagents` | `2` | Max number of subagents that can run simultaneously |
 | `llm_timeout` | `120` | LLM API timeout in seconds |
+| `llm_max_retries` | `2` | Max retry attempts after initial failed LLM call |
+| `llm_retry_backoff_seconds` | `2` | Base backoff (seconds) for retryable errors, exponential |
+| `llm_retry_max_backoff_seconds` | `8` | Max backoff (seconds) for retryable errors |
+| `llm_rate_limit_backoff_seconds` | `10` | Base backoff (seconds) for rate-limit errors, linear |
+| `llm_rate_limit_max_backoff_seconds` | `30` | Max backoff (seconds) for rate-limit errors |
+| `llm_retry_max_elapsed_seconds` | `60` | Max total retry wait time per LLM call (0 = unlimited) |
 | `history_message_threshold` | `100` | Number of messages before triggering summarization |
 
 #### Gateway
@@ -1070,6 +1088,12 @@ picoclaw agent -m "Hello"
       "max_tokens_subagent": 4096,
       "max_concurrent_subagents": 2,
       "llm_timeout": 120,
+      "llm_max_retries": 2,
+      "llm_retry_backoff_seconds": 2,
+      "llm_retry_max_backoff_seconds": 8,
+      "llm_rate_limit_backoff_seconds": 10,
+      "llm_rate_limit_max_backoff_seconds": 30,
+      "llm_retry_max_elapsed_seconds": 60,
       "history_message_threshold": 100
     }
   },

@@ -217,6 +217,12 @@ type AgentDefaults struct {
 	MaxTokensSubagent       int     `json:"max_tokens_subagent"`
 	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_CONCURRENT_SUBAGENTS"`
 	LLMTimeout              int     `json:"llm_timeout"`
+	LLMMaxRetries           int     `json:"llm_max_retries" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_MAX_RETRIES"`
+	LLMRetryBackoffSeconds  int     `json:"llm_retry_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_BACKOFF_SECONDS"`
+	LLMRetryMaxBackoff      int     `json:"llm_retry_max_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_BACKOFF_SECONDS"`
+	LLMRateLimitBackoff     int     `json:"llm_rate_limit_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RATE_LIMIT_BACKOFF_SECONDS"`
+	LLMRateLimitMaxBackoff  int     `json:"llm_rate_limit_max_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RATE_LIMIT_MAX_BACKOFF_SECONDS"`
+	LLMRetryMaxElapsed      int     `json:"llm_retry_max_elapsed_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_ELAPSED_SECONDS"`
 	MemoryThreshold         float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
 	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_HISTORY_MESSAGE_THRESHOLD"`
 }
@@ -401,6 +407,12 @@ func DefaultConfig() *Config {
 				MaxTokensSubagent:       4096,
 				MaxConcurrentSubagents:  2,
 				LLMTimeout:              120,
+				LLMMaxRetries:           2,
+				LLMRetryBackoffSeconds:  2,
+				LLMRetryMaxBackoff:      8,
+				LLMRateLimitBackoff:     10,
+				LLMRateLimitMaxBackoff:  30,
+				LLMRetryMaxElapsed:      60,
 				MemoryThreshold:         0.8,
 				HistoryMessageThreshold: 100,
 			},

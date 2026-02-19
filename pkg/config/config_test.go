@@ -34,6 +34,68 @@ func TestDefaultConfig_MaxConcurrentSubagents_Parsing(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_LLMRetryDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Agents.Defaults.LLMMaxRetries != 2 {
+		t.Errorf("Expected LLMMaxRetries default 2, got %d", cfg.Agents.Defaults.LLMMaxRetries)
+	}
+	if cfg.Agents.Defaults.LLMRetryBackoffSeconds != 2 {
+		t.Errorf("Expected LLMRetryBackoffSeconds default 2, got %d", cfg.Agents.Defaults.LLMRetryBackoffSeconds)
+	}
+	if cfg.Agents.Defaults.LLMRetryMaxBackoff != 8 {
+		t.Errorf("Expected LLMRetryMaxBackoff default 8, got %d", cfg.Agents.Defaults.LLMRetryMaxBackoff)
+	}
+	if cfg.Agents.Defaults.LLMRateLimitBackoff != 10 {
+		t.Errorf("Expected LLMRateLimitBackoff default 10, got %d", cfg.Agents.Defaults.LLMRateLimitBackoff)
+	}
+	if cfg.Agents.Defaults.LLMRateLimitMaxBackoff != 30 {
+		t.Errorf("Expected LLMRateLimitMaxBackoff default 30, got %d", cfg.Agents.Defaults.LLMRateLimitMaxBackoff)
+	}
+	if cfg.Agents.Defaults.LLMRetryMaxElapsed != 60 {
+		t.Errorf("Expected LLMRetryMaxElapsed default 60, got %d", cfg.Agents.Defaults.LLMRetryMaxElapsed)
+	}
+}
+
+func TestDefaultConfig_LLMRetryParsing(t *testing.T) {
+	jsonData := `{
+		"agents": {
+			"defaults": {
+				"llm_max_retries": 4,
+				"llm_retry_backoff_seconds": 3,
+				"llm_retry_max_backoff_seconds": 12,
+				"llm_rate_limit_backoff_seconds": 15,
+				"llm_rate_limit_max_backoff_seconds": 45,
+				"llm_retry_max_elapsed_seconds": 180
+			}
+		}
+	}`
+
+	var cfg Config
+	if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+		t.Fatalf("Failed to unmarshal config: %v", err)
+	}
+
+	if cfg.Agents.Defaults.LLMMaxRetries != 4 {
+		t.Errorf("Expected LLMMaxRetries 4, got %d", cfg.Agents.Defaults.LLMMaxRetries)
+	}
+	if cfg.Agents.Defaults.LLMRetryBackoffSeconds != 3 {
+		t.Errorf("Expected LLMRetryBackoffSeconds 3, got %d", cfg.Agents.Defaults.LLMRetryBackoffSeconds)
+	}
+	if cfg.Agents.Defaults.LLMRetryMaxBackoff != 12 {
+		t.Errorf("Expected LLMRetryMaxBackoff 12, got %d", cfg.Agents.Defaults.LLMRetryMaxBackoff)
+	}
+	if cfg.Agents.Defaults.LLMRateLimitBackoff != 15 {
+		t.Errorf("Expected LLMRateLimitBackoff 15, got %d", cfg.Agents.Defaults.LLMRateLimitBackoff)
+	}
+	if cfg.Agents.Defaults.LLMRateLimitMaxBackoff != 45 {
+		t.Errorf("Expected LLMRateLimitMaxBackoff 45, got %d", cfg.Agents.Defaults.LLMRateLimitMaxBackoff)
+	}
+	if cfg.Agents.Defaults.LLMRetryMaxElapsed != 180 {
+		t.Errorf("Expected LLMRetryMaxElapsed 180, got %d", cfg.Agents.Defaults.LLMRetryMaxElapsed)
+	}
+}
+
 // TestDefaultConfig_HeartbeatEnabled verifies heartbeat is enabled by default
 func TestDefaultConfig_HeartbeatEnabled(t *testing.T) {
 	cfg := DefaultConfig()

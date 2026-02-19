@@ -41,6 +41,12 @@ type AgentLoop struct {
 	maxTokens               int     // Max tokens for LLM responses
 	temperature             float64 // LLM temperature
 	llmTimeout              int     // LLM API timeout in seconds
+	llmMaxRetries           int     // Max retry attempts after the initial failed LLM call
+	llmRetryBackoffSeconds  int     // Base backoff for retryable errors (seconds, exponential)
+	llmRetryMaxBackoff      int     // Max backoff for retryable errors (seconds)
+	llmRateLimitBackoff     int     // Base backoff for 429/rate-limit errors (seconds, linear)
+	llmRateLimitMaxBackoff  int     // Max backoff for 429/rate-limit errors (seconds)
+	llmRetryMaxElapsed      int     // Max total wait time spent retrying a single LLM call (seconds)
 	memoryThreshold         float64 // Threshold for memory summarization (0.0-1.0)
 	historyMessageThreshold int     // Number of messages before triggering summarization
 	sessions                *session.SessionManager
@@ -205,6 +211,12 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		maxTokens:               cfg.Agents.Defaults.MaxTokens,
 		temperature:             cfg.Agents.Defaults.Temperature,
 		llmTimeout:              cfg.Agents.Defaults.LLMTimeout,
+		llmMaxRetries:           maxInt(cfg.Agents.Defaults.LLMMaxRetries, 0),
+		llmRetryBackoffSeconds:  maxInt(cfg.Agents.Defaults.LLMRetryBackoffSeconds, 1),
+		llmRetryMaxBackoff:      maxInt(cfg.Agents.Defaults.LLMRetryMaxBackoff, 1),
+		llmRateLimitBackoff:     maxInt(cfg.Agents.Defaults.LLMRateLimitBackoff, 1),
+		llmRateLimitMaxBackoff:  maxInt(cfg.Agents.Defaults.LLMRateLimitMaxBackoff, 1),
+		llmRetryMaxElapsed:      maxInt(cfg.Agents.Defaults.LLMRetryMaxElapsed, 0),
 		memoryThreshold:         cfg.Agents.Defaults.MemoryThreshold,
 		historyMessageThreshold: cfg.Agents.Defaults.HistoryMessageThreshold,
 		idleEnabled:             cfg.Idle.Enabled,
@@ -878,7 +890,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Call LLM with retry logic for transient errors
 		var response *providers.LLMResponse
 		var err error
-		maxRetries := 2
+		maxRetries := al.llmMaxRetries
+		retryStart := time.Now()
 		for retry := 0; retry <= maxRetries; retry++ {
 			response, err = al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
 				"max_tokens":  al.maxTokens,
@@ -907,8 +920,16 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				strings.Contains(errStr, "too many requests")
 
 			if isRateLimit && retry < maxRetries {
-				// Rate limit: longer linear backoff (10s, 20s, 30s)
-				waitTime := time.Duration(10*(retry+1)) * time.Second
+				// Rate limit: linear backoff, bounded by configured cap.
+				waitSeconds := al.llmRateLimitBackoff * (retry + 1)
+				if waitSeconds > al.llmRateLimitMaxBackoff {
+					waitSeconds = al.llmRateLimitMaxBackoff
+				}
+				waitTime := time.Duration(waitSeconds) * time.Second
+				waitTime, canWait := al.clampRetryWait(waitTime, retryStart)
+				if !canWait {
+					break
+				}
 				logger.WarnCF("agent", "Rate limited, waiting",
 					map[string]interface{}{
 						"iteration":    iteration,
@@ -922,8 +943,16 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			}
 
 			if isRetryable && retry < maxRetries {
-				// Exponential backoff: 2s, 4s, 8s
-				waitTime := time.Duration(2<<(retry)) * time.Second
+				// Retryable errors: exponential backoff, bounded by configured cap.
+				waitSeconds := al.llmRetryBackoffSeconds << retry
+				if waitSeconds > al.llmRetryMaxBackoff {
+					waitSeconds = al.llmRetryMaxBackoff
+				}
+				waitTime := time.Duration(waitSeconds) * time.Second
+				waitTime, canWait := al.clampRetryWait(waitTime, retryStart)
+				if !canWait {
+					break
+				}
 				logger.WarnCF("agent", "LLM call failed, retrying",
 					map[string]interface{}{
 						"iteration":    iteration,
@@ -1055,6 +1084,30 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 	}
 
 	return finalContent, iteration, nil
+}
+
+func (al *AgentLoop) clampRetryWait(wait time.Duration, retryStart time.Time) (time.Duration, bool) {
+	if al.llmRetryMaxElapsed <= 0 {
+		return wait, true
+	}
+
+	maxElapsed := time.Duration(al.llmRetryMaxElapsed) * time.Second
+	elapsed := time.Since(retryStart)
+	remaining := maxElapsed - elapsed
+	if remaining <= 0 {
+		return 0, false
+	}
+	if wait > remaining {
+		wait = remaining
+	}
+	return wait, true
+}
+
+func maxInt(v, min int) int {
+	if v < min {
+		return min
+	}
+	return v
 }
 
 // updateToolContexts updates the context for tools that need channel/chatID info.

@@ -12,6 +12,12 @@
       "max_tokens_subagent": 4096,
       "max_concurrent_subagents": 2,
       "llm_timeout": 120,
+      "llm_max_retries": 2,
+      "llm_retry_backoff_seconds": 2,
+      "llm_retry_max_backoff_seconds": 8,
+      "llm_rate_limit_backoff_seconds": 10,
+      "llm_rate_limit_max_backoff_seconds": 30,
+      "llm_retry_max_elapsed_seconds": 60,
       "history_message_threshold": 100
     }
   },
