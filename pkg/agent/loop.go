@@ -53,6 +53,7 @@ type AgentLoop struct {
 	idleEnabled             bool
 	idleTimeout             time.Duration
 	idleRepeat              bool
+	idleRecentSubagents     int // Number of recent subagents to show in IDLE prompt
 }
 
 // processOptions configures how a message is processed
@@ -214,8 +215,9 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 			}
 			return time.Duration(minutes) * time.Minute
 		}(),
-		idleRepeat:      cfg.Idle.Repeat,
-		sessions:        sessionsManager,
+		idleRepeat:          cfg.Idle.Repeat,
+		idleRecentSubagents: cfg.Idle.RecentSubagents,
+		sessions:            sessionsManager,
 		state:           stateManager,
 		contextBuilder:  contextBuilder,
 		tools:           toolsRegistry,
@@ -474,7 +476,14 @@ func (al *AgentLoop) triggerIdle(ctx context.Context) {
 	})
 
 	now := time.Now().Format("2006-01-02 15:04:05")
+
+	// Build subagent status context
+	subagentStatus := al.buildSubagentStatus()
+
 	prompt := fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s", now, content)
+	if subagentStatus != "" {
+		prompt = fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s\n\n%s", now, subagentStatus, content)
+	}
 
 	response, err := al.runAgentLoop(ctx, processOptions{
 		SessionKey:      "idle",
@@ -499,6 +508,80 @@ func (al *AgentLoop) triggerIdle(ctx context.Context) {
 			Content: response,
 		})
 	}
+}
+
+// buildSubagentStatus creates a formatted string with active and recent subagent status.
+// Returns empty string if no subagent activity.
+func (al *AgentLoop) buildSubagentStatus() string {
+	var parts []string
+
+	// Get active (running) subagents
+	runningTasks := al.subagentManager.GetRunningTasks()
+	if len(runningTasks) > 0 {
+		var activeLines []string
+		for _, task := range runningTasks {
+			name := task.Label
+			if name == "" {
+				name = task.ID
+			}
+			startTime := "unknown"
+			if task.Started > 0 {
+				startTime = time.Unix(task.Started, 0).Format("15:04")
+			}
+			activeLines = append(activeLines, fmt.Sprintf("• %s [running since %s]", name, startTime))
+		}
+		parts = append(parts, fmt.Sprintf("📊 Active Subagents:\n%s", strings.Join(activeLines, "\n")))
+	}
+
+	// Get recent completed subagents
+	recentLimit := al.idleRecentSubagents
+	if recentLimit <= 0 {
+		recentLimit = 5
+	}
+	recentTasks := al.subagentManager.GetRecentTasks(recentLimit)
+
+	// Filter to only completed/failed/cancelled tasks
+	var completedTasks []*tools.SubagentTask
+	for _, task := range recentTasks {
+		if task.Status != "running" && task.Status != "pending" {
+			completedTasks = append(completedTasks, task)
+		}
+	}
+
+	if len(completedTasks) > 0 {
+		var recentLines []string
+		for _, task := range completedTasks {
+			name := task.Label
+			if name == "" {
+				name = task.ID
+			}
+			timeRange := "unknown"
+			if task.Started > 0 {
+				startStr := time.Unix(task.Started, 0).Format("15:04")
+				if task.Ended > 0 {
+					endStr := time.Unix(task.Ended, 0).Format("15:04")
+					timeRange = fmt.Sprintf("%s - %s", startStr, endStr)
+				} else {
+					timeRange = startStr
+				}
+			}
+
+			status := "❓"
+			switch task.Status {
+			case "completed":
+				status = "✅"
+			case "failed":
+				status = "❌"
+			case "cancelled":
+				status = "⏹️"
+			}
+
+			recentLines = append(recentLines, fmt.Sprintf("• %s [%s] %s", name, timeRange, status))
+		}
+		parts = append(parts, fmt.Sprintf("📊 Recent Completed (%d):\n%s", len(completedTasks), strings.Join(recentLines, "\n")))
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 
 func (al *AgentLoop) RegisterTool(tool tools.Tool) {
