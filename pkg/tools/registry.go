@@ -51,6 +51,19 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 
 	tool, ok := r.Get(name)
 	if !ok {
+		// Provide actionable guidance for mutually exclusive delegation setups.
+		if name == "subagent" {
+			if _, hasSpawn := r.Get("spawn"); hasSpawn {
+				return ErrorResult("tool \"subagent\" is disabled by config; use \"spawn\" instead")
+			}
+			return ErrorResult("tool \"subagent\" is disabled by config (delegation tools are disabled)")
+		}
+		if name == "spawn" {
+			if _, hasSubagent := r.Get("subagent"); hasSubagent {
+				return ErrorResult("tool \"spawn\" is disabled by config; use \"subagent\" instead")
+			}
+			return ErrorResult("tool \"spawn\" is disabled by config (delegation tools are disabled)")
+		}
 		logger.ErrorCF("tool", "Tool not found",
 			map[string]interface{}{
 				"tool": name,

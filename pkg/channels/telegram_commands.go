@@ -40,15 +40,19 @@ func NewTelegramCommands(bot *telego.Bot, cfg *config.Config, subagentManager *t
 }
 
 func (c *cmd) Help(ctx context.Context, message telego.Message) error {
-	msg := `🦞 *PicoClaw Commands*
-
-/start - Start the bot
-/help - Show this help message
-/status - Show system and subagents status
-/kill <task_id> - Cancel running subagent task
-/models - List available models
-/channels - List enabled channels
-	`
+	lines := []string{
+		"🦞 *PicoClaw Commands*",
+		"",
+		"/start - Start the bot",
+		"/help - Show this help message",
+		"/status - Show system and subagents status",
+		"/models - List available models",
+		"/channels - List enabled channels",
+	}
+	if c.config != nil && c.config.Tools.Spawn.Enabled {
+		lines = append(lines, "/kill <task_id> - Cancel running subagent task")
+	}
+	msg := strings.Join(lines, "\n")
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      msg,
@@ -140,6 +144,7 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 
 	var sb strings.Builder
 	sb.WriteString("📊 *PicoClaw Status*\n\n")
+	subagentEnabled := c.config != nil && (c.config.Tools.Spawn.Enabled || c.config.Tools.Subagent.Enabled)
 
 	// Version info
 	sb.WriteString(fmt.Sprintf("📦 *Version:* `%s`\n", version.Format()))
@@ -167,68 +172,70 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		sb.WriteString("\n")
 	}
 
-	// Running subagents with enhanced details
-	sb.WriteString("🔄 *Running Subagents:*\n")
-	if len(running) == 0 {
-		sb.WriteString("  None\n")
-	} else {
-		for _, t := range running {
-			// Format time range
-			startTime := formatTimeShort(t.Started)
-			timeRange := fmt.Sprintf("[%s - ...]", startTime)
+	if subagentEnabled {
+		// Running subagents with enhanced details
+		sb.WriteString("🔄 *Running Subagents:*\n")
+		if len(running) == 0 {
+			sb.WriteString("  None\n")
+		} else {
+			for _, t := range running {
+				// Format time range
+				startTime := formatTimeShort(t.Started)
+				timeRange := fmt.Sprintf("[%s - ...]", startTime)
 
-			sb.WriteString(fmt.Sprintf("• `%s` %s\n", t.ID, timeRange))
+				sb.WriteString(fmt.Sprintf("• `%s` %s\n", t.ID, timeRange))
 
-			// Label (if set)
-			if t.Label != "" {
-				sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
-			}
+				// Label (if set)
+				if t.Label != "" {
+					sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
+				}
 
-			// Task preview (first 30 chars) - escape BEFORE truncate to avoid broken markdown
-			taskPreview := truncateStr(escapeMD(t.Task), 30)
-			sb.WriteString(fmt.Sprintf("  Task: %s\n", taskPreview))
+				// Task preview (first 30 chars) - escape BEFORE truncate to avoid broken markdown
+				taskPreview := truncateStr(escapeMD(t.Task), 30)
+				sb.WriteString(fmt.Sprintf("  Task: %s\n", taskPreview))
 
-			// Pending messages count for this task
-			if len(t.PendingMsgs) > 0 {
-				sb.WriteString(fmt.Sprintf("  📬 Pending: %d message(s)\n", len(t.PendingMsgs)))
-			}
-			sb.WriteString("\n")
-		}
-	}
-
-	// Recent completed tasks
-	sb.WriteString(fmt.Sprintf("\n✅ *Recent \\(%d\\):*\n", len(recent)))
-	if len(recent) == 0 {
-		sb.WriteString("  None\n")
-	} else {
-		for _, t := range recent {
-			startTime := formatTimeShort(t.Started)
-			endTime := formatTimeShort(t.Ended)
-
-			// Status icon
-			statusIcon := "✅"
-			if t.Status == "failed" {
-				statusIcon = "❌"
-			} else if t.Status == "cancelled" {
-				statusIcon = "🚫"
-			}
-
-			timeRange := fmt.Sprintf("[%s - %s]", startTime, endTime)
-			sb.WriteString(fmt.Sprintf("• `%s` %s %s\n", t.ID, timeRange, statusIcon))
-
-			if t.Label != "" {
-				sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
+				// Pending messages count for this task
+				if len(t.PendingMsgs) > 0 {
+					sb.WriteString(fmt.Sprintf("  📬 Pending: %d message(s)\n", len(t.PendingMsgs)))
+				}
+				sb.WriteString("\n")
 			}
 		}
-	}
 
-	// Message queue info
-	sb.WriteString(fmt.Sprintf("\n📬 *Message Queue:* %d\n", queueCount))
-	if queueCount > 0 {
-		firstMsg := c.subagentManager.GetFirstQueuedMessage()
-		if firstMsg != "" {
-			// IMPORTANT: escape BEFORE truncate to avoid breaking markdown entities
-			sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", truncateStr(escapeMD(firstMsg), 80)))
+		// Recent completed tasks
+		sb.WriteString(fmt.Sprintf("\n✅ *Recent \\(%d\\):*\n", len(recent)))
+		if len(recent) == 0 {
+			sb.WriteString("  None\n")
+		} else {
+			for _, t := range recent {
+				startTime := formatTimeShort(t.Started)
+				endTime := formatTimeShort(t.Ended)
+
+				// Status icon
+				statusIcon := "✅"
+				if t.Status == "failed" {
+					statusIcon = "❌"
+				} else if t.Status == "cancelled" {
+					statusIcon = "🚫"
+				}
+
+				timeRange := fmt.Sprintf("[%s - %s]", startTime, endTime)
+				sb.WriteString(fmt.Sprintf("• `%s` %s %s\n", t.ID, timeRange, statusIcon))
+
+				if t.Label != "" {
+					sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
+				}
+			}
+		}
+
+		// Message queue info
+		sb.WriteString(fmt.Sprintf("\n📬 *Message Queue:* %d\n", queueCount))
+		if queueCount > 0 {
+			firstMsg := c.subagentManager.GetFirstQueuedMessage()
+			if firstMsg != "" {
+				// IMPORTANT: escape BEFORE truncate to avoid breaking markdown entities
+				sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", truncateStr(escapeMD(firstMsg), 80)))
+			}
 		}
 	}
 
@@ -291,6 +298,17 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 }
 
 func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
+	if c.config == nil || !c.config.Tools.Spawn.Enabled {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Kill is unavailable: spawn tool is disabled in config.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
 	if c.subagentManager == nil {
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
