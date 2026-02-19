@@ -33,6 +33,7 @@ type SubagentTask struct {
 
 type SubagentManager struct {
 	tasks                   map[string]*SubagentTask
+	cancels                 map[string]context.CancelFunc
 	mu                      sync.RWMutex
 	provider                providers.LLMProvider
 	defaultModel            string
@@ -66,6 +67,7 @@ func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, work
 
 	return &SubagentManager{
 		tasks:                   make(map[string]*SubagentTask),
+		cancels:                 make(map[string]context.CancelFunc),
 		provider:                provider,
 		defaultModel:            cfg.Agents.Defaults.Model,
 		bus:                     bus,
@@ -133,8 +135,11 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, name, directo
 	}
 	sm.tasks[taskID] = subagentTask
 
+	taskCtx, cancel := context.WithCancel(ctx)
+	sm.cancels[taskID] = cancel
+
 	// Start task in background with context cancellation support
-	go sm.runTask(ctx, subagentTask, callback)
+	go sm.runTask(taskCtx, subagentTask, callback)
 
 	nameTag := ""
 	if name != "" {
@@ -245,7 +250,9 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		task.Status = "cancelled"
 		task.Result = "Task cancelled before execution"
 		task.Ended = time.Now().UnixMilli()
+		delete(sm.cancels, task.ID)
 		sm.mu.Unlock()
+		sm.publishTaskUpdate(task)
 		return
 	default:
 	}
@@ -280,6 +287,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	var result *ToolResult
 	task.Ended = time.Now().UnixMilli()
 	defer func() {
+		delete(sm.cancels, task.ID)
 		sm.mu.Unlock()
 		// Call callback if provided and result is set
 		if callback != nil && result != nil {
@@ -315,22 +323,8 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		}
 	}
 
-	// Send announce message back to main agent
-	if sm.bus != nil {
-		var announceContent string
-		if task.Name != "" {
-			announceContent = fmt.Sprintf("Task '%s' [agent: %s] completed.\n\nResult:\n%s", task.Label, task.Name, task.Result)
-		} else {
-			announceContent = fmt.Sprintf("Task '%s' completed.\n\nResult:\n%s", task.Label, task.Result)
-		}
-		sm.bus.PublishInbound(bus.InboundMessage{
-			Channel:  "system",
-			SenderID: fmt.Sprintf("subagent:%s", task.ID),
-			// Format: "original_channel:original_chat_id" for routing back
-			ChatID:  fmt.Sprintf("%s:%s", task.OriginChannel, task.OriginChatID),
-			Content: announceContent,
-		})
-	}
+	// Send announce message back to main agent.
+	sm.publishTaskUpdate(task)
 }
 
 func sanitizeAgentName(name string) string {
@@ -491,13 +485,14 @@ func (sm *SubagentManager) SendMessage(taskID, message string) error {
 // Cancel cancels a running subagent task.
 func (sm *SubagentManager) Cancel(taskID string) error {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
 
 	task, ok := sm.tasks[taskID]
 	if !ok {
+		sm.mu.Unlock()
 		return fmt.Errorf("task not found")
 	}
 	if task.Status != "running" {
+		sm.mu.Unlock()
 		return fmt.Errorf("task is not running (status: %s)", task.Status)
 	}
 
@@ -505,7 +500,42 @@ func (sm *SubagentManager) Cancel(taskID string) error {
 	task.Status = "cancelled"
 	task.Result = "Cancelled by user"
 	task.Ended = time.Now().UnixMilli()
+	cancel := sm.cancels[taskID]
+	sm.mu.Unlock()
+
+	// Trigger actual cancellation for the running task context.
+	if cancel != nil {
+		cancel()
+	}
 	return nil
+}
+
+func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
+	if sm.bus == nil || task == nil {
+		return
+	}
+
+	status := task.Status
+	switch status {
+	case "completed", "failed", "cancelled":
+	default:
+		status = "finished"
+	}
+
+	var announceContent string
+	if task.Name != "" {
+		announceContent = fmt.Sprintf("Task '%s' [agent: %s] %s.\n\nResult:\n%s", task.Label, task.Name, status, task.Result)
+	} else {
+		announceContent = fmt.Sprintf("Task '%s' %s.\n\nResult:\n%s", task.Label, status, task.Result)
+	}
+
+	sm.bus.PublishInbound(bus.InboundMessage{
+		Channel:  "system",
+		SenderID: fmt.Sprintf("subagent:%s", task.ID),
+		// Format: "original_channel:original_chat_id" for routing back
+		ChatID:  fmt.Sprintf("%s:%s", task.OriginChannel, task.OriginChatID),
+		Content: announceContent,
+	})
 }
 
 // SubagentTool executes a subagent task synchronously and returns the result.

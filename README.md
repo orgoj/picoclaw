@@ -319,6 +319,17 @@ Talk to your picoclaw through Telegram, Discord, DingTalk, or LINE
 picoclaw gateway
 ```
 
+**Telegram slash commands**
+
+| Command | Description |
+|--------|-------------|
+| `/start` | Start the bot |
+| `/help` | Show available commands |
+| `/status` | Show system and subagents status (includes tools, skills, named agents) |
+| `/kill <task_id>` | Cancel a running subagent task |
+| `/models` | List configured model/provider |
+| `/channels` | List available channels |
+
 </details>
 
 <details>

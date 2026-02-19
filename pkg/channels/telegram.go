@@ -122,6 +122,9 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.commands.Status(ctx, message)
 	}, th.CommandEqual("status"))
+	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
+		return c.commands.Kill(ctx, message)
+	}, th.CommandEqual("kill"))
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.handleMessage(ctx, &message)
@@ -137,7 +140,8 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 		Commands: []telego.BotCommand{
 			{Command: "start", Description: "Start the bot"},
 			{Command: "help", Description: "Show available commands"},
-			{Command: "status", Description: "Show subagents status"},
+			{Command: "status", Description: "Show system and subagents status"},
+			{Command: "kill", Description: "Cancel subagent by task ID"},
 			{Command: "models", Description: "List configured models"},
 			{Command: "channels", Description: "List available channels"},
 		},

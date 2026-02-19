@@ -477,6 +477,7 @@ func agentCmd() {
 			"tools_count":      startupInfo["tools"].(map[string]interface{})["count"],
 			"skills_total":     startupInfo["skills"].(map[string]interface{})["total"],
 			"skills_available": startupInfo["skills"].(map[string]interface{})["available"],
+			"agents_count":     startupInfo["agents"].(map[string]interface{})["count"],
 		})
 
 	// Log config to daily log file
@@ -622,10 +623,12 @@ func gatewayCmd() {
 	startupInfo := agentLoop.GetStartupInfo()
 	toolsInfo := startupInfo["tools"].(map[string]interface{})
 	skillsInfo := startupInfo["skills"].(map[string]interface{})
+	agentsInfo := startupInfo["agents"].(map[string]interface{})
 	fmt.Printf("  • Tools: %d loaded\n", toolsInfo["count"])
 	fmt.Printf("  • Skills: %d/%d available\n",
 		skillsInfo["available"],
 		skillsInfo["total"])
+	fmt.Printf("  • Named Agents: %d defined\n", agentsInfo["count"])
 
 	// Log to file as well
 	logger.InfoCF("agent", "Agent initialized",
@@ -633,6 +636,7 @@ func gatewayCmd() {
 			"tools_count":      toolsInfo["count"],
 			"skills_total":     skillsInfo["total"],
 			"skills_available": skillsInfo["available"],
+			"agents_count":     agentsInfo["count"],
 		})
 
 	// Log config to daily log file

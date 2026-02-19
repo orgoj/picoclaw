@@ -9,6 +9,7 @@ import (
 	"github.com/mymmrac/telego"
 	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/version"
 )
@@ -17,6 +18,7 @@ type TelegramCommander interface {
 	Help(ctx context.Context, message telego.Message) error
 	Start(ctx context.Context, message telego.Message) error
 	Status(ctx context.Context, message telego.Message) error
+	Kill(ctx context.Context, message telego.Message) error
 	Models(ctx context.Context, message telego.Message) error
 	Channels(ctx context.Context, message telego.Message) error
 }
@@ -42,7 +44,8 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 
 /start - Start the bot
 /help - Show this help message
-/status - Show running and stopped subagents
+/status - Show system and subagents status
+/kill <task_id> - Cancel running subagent task
 /models - List available models
 /channels - List enabled channels
 	`
@@ -142,6 +145,28 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 	sb.WriteString(fmt.Sprintf("📦 *Version:* `%s`\n", version.Format()))
 	sb.WriteString(fmt.Sprintf("🔧 *Go:* `%s`\n\n", version.GetGoVersion()))
 
+	// Capabilities info (tools, skills, named agents)
+	if c.agentLoop != nil {
+		startupInfo := c.agentLoop.GetStartupInfo()
+		toolsInfo := startupInfo["tools"].(map[string]interface{})
+		skillsInfo := startupInfo["skills"].(map[string]interface{})
+		agentsInfo := startupInfo["agents"].(map[string]interface{})
+
+		sb.WriteString("🧰 *Capabilities:*\n")
+		sb.WriteString(fmt.Sprintf("  Tools: %d\n", toolsInfo["count"]))
+		sb.WriteString(fmt.Sprintf("  Skills: %d/%d\n", skillsInfo["available"], skillsInfo["total"]))
+		sb.WriteString(fmt.Sprintf("  Named Agents: %d\n", agentsInfo["count"]))
+
+		if names, ok := agentsInfo["names"].([]string); ok {
+			if len(names) == 0 {
+				sb.WriteString("  Agents: None\n")
+			} else {
+				sb.WriteString(fmt.Sprintf("  Agents: %s\n", escapeMD(strings.Join(names, ", "))))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
 	// Running subagents with enhanced details
 	sb.WriteString("🔄 *Running Subagents:*\n")
 	if len(running) == 0 {
@@ -226,15 +251,101 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		sb.WriteString("\n🤖 *Main Agent \\(this session\\):*\n")
 		sb.WriteString(fmt.Sprintf("  Model: `%s`\n", c.config.Agents.Defaults.Model))
 		sb.WriteString(fmt.Sprintf("  Messages: %d\n", stats.MessageCount))
-		sb.WriteString(fmt.Sprintf("  Context: ~%d/%d tokens \\(%d%%\\)%s\n",
+		sb.WriteString(fmt.Sprintf("  Context: \\~%d/%d tokens \\(%d%%\\)%s\n",
 			stats.TokenEstimate, stats.ContextWindow, memPct, summarizingInfo))
 		sb.WriteString(fmt.Sprintf("  Summary: %s\n", summaryInfo))
 	}
 
-	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+	params := &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      sb.String(),
 		ParseMode: telego.ModeMarkdownV2,
+		ReplyParameters: &telego.ReplyParameters{
+			MessageID: message.MessageID,
+		},
+	}
+
+	_, err := c.bot.SendMessage(ctx, params)
+	if err == nil {
+		return nil
+	}
+
+	// MarkdownV2 is strict; fallback to plain text to keep /status usable.
+	logger.ErrorCF("telegram", "Failed to send /status with MarkdownV2, retrying plain text", map[string]interface{}{
+		"error":   err.Error(),
+		"chat_id": message.Chat.ID,
+		"text":    truncateStr(sb.String(), 400),
+	})
+
+	_, plainErr := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID: telego.ChatID{ID: message.Chat.ID},
+		Text:   sb.String(),
+		ReplyParameters: &telego.ReplyParameters{
+			MessageID: message.MessageID,
+		},
+	})
+	if plainErr != nil {
+		return plainErr
+	}
+	return err
+}
+
+func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
+	if c.subagentManager == nil {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Subagent manager is not initialized.",
+		})
+		return err
+	}
+
+	fields := strings.Fields(message.Text)
+	taskID := ""
+	if len(fields) > 1 {
+		taskID = strings.TrimSpace(fields[1])
+	}
+
+	if taskID == "" {
+		running := c.subagentManager.GetRunningTasks()
+		if len(running) == 0 {
+			_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+				ChatID: telego.ChatID{ID: message.Chat.ID},
+				Text:   "Usage: /kill <task_id>\nNo running subagents.",
+				ReplyParameters: &telego.ReplyParameters{
+					MessageID: message.MessageID,
+				},
+			})
+			return err
+		}
+
+		ids := make([]string, 0, len(running))
+		for _, t := range running {
+			ids = append(ids, t.ID)
+		}
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   fmt.Sprintf("Usage: /kill <task_id>\nRunning task IDs: %s", strings.Join(ids, ", ")),
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	if err := c.subagentManager.Cancel(taskID); err != nil {
+		_, sendErr := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   fmt.Sprintf("Failed to cancel task '%s': %v", taskID, err),
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return sendErr
+	}
+
+	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID: telego.ChatID{ID: message.Chat.ID},
+		Text:   fmt.Sprintf("Cancelled subagent task '%s'.", taskID),
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
