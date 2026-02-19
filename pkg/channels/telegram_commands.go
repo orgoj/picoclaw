@@ -159,9 +159,9 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 				sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
 			}
 
-			// Task preview (first 30 chars)
-			taskPreview := truncateStr(t.Task, 30)
-			sb.WriteString(fmt.Sprintf("  Task: %s\n", escapeMD(taskPreview)))
+			// Task preview (first 30 chars) - escape BEFORE truncate to avoid broken markdown
+			taskPreview := truncateStr(escapeMD(t.Task), 30)
+			sb.WriteString(fmt.Sprintf("  Task: %s\n", taskPreview))
 
 			// Pending messages count for this task
 			if len(t.PendingMsgs) > 0 {
