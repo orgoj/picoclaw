@@ -33,6 +33,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/heartbeat"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/migrate"
+	"github.com/sipeed/picoclaw/pkg/preflight"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/skills"
 	"github.com/sipeed/picoclaw/pkg/state"
@@ -452,6 +453,10 @@ func agentCmd() {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+	if err := preflight.Run(cfg.WorkspacePath()); err != nil {
+		fmt.Printf("Startup preflight failed:\n%v\n", err)
+		os.Exit(1)
+	}
 
 	provider, err := providers.CreateProvider(cfg)
 	if err != nil {
@@ -593,6 +598,10 @@ func gatewayCmd() {
 	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+	if err := preflight.Run(cfg.WorkspacePath()); err != nil {
+		fmt.Printf("Startup preflight failed:\n%v\n", err)
 		os.Exit(1)
 	}
 

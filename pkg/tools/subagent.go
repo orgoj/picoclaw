@@ -333,6 +333,48 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	}
 }
 
+func sanitizeAgentName(name string) string {
+	if name == "" {
+		return ""
+	}
+	if strings.ContainsAny(name, "/\\.") {
+		logger.WarnCF("subagent", "Invalid agent name ignored (path traversal attempt)",
+			map[string]interface{}{"name": name})
+		return ""
+	}
+	return name
+}
+
+func (sm *SubagentManager) resolveWriteRoots(name, directory string) []string {
+	roots := make([]string, 0, 3)
+
+	if directory != "" {
+		resolvedDir := directory
+		if !filepath.IsAbs(resolvedDir) {
+			resolvedDir = filepath.Join(sm.workspace, resolvedDir)
+		}
+		if absDir, err := filepath.Abs(resolvedDir); err == nil {
+			roots = append(roots, absDir)
+		}
+	}
+
+	if name != "" {
+		memoryDir := filepath.Join(sm.workspace, "agents", name, "memory")
+		if absMemory, err := filepath.Abs(memoryDir); err == nil {
+			roots = append(roots, absMemory)
+		}
+
+		if name == "picoclaw-self-update" {
+			projectDir := filepath.Join(sm.workspace, "projects", "picoclaw")
+			if absProject, err := filepath.Abs(projectDir); err == nil {
+				roots = append(roots, absProject)
+			}
+		}
+	}
+
+	return roots
+}
+
 func (sm *SubagentManager) GetTask(taskID string) (*SubagentTask, bool) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -530,6 +572,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	label, _ := args["label"].(string)
 	name, _ := args["name"].(string)
 	directory, _ := args["directory"].(string)
+	name = sanitizeAgentName(name)
 
 	if t.manager == nil {
 		return ErrorResult("Subagent manager not configured").WithError(fmt.Errorf("manager is nil"))
@@ -562,7 +605,8 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	tools := sm.tools
 	sm.mu.RUnlock()
 
-	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
+	scopedCtx := WithWriteScope(ctx, sm.resolveWriteRoots(name, directory))
+	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
 		Provider:                sm.provider,
 		Model:                   sm.defaultModel,
 		Tools:                   tools,

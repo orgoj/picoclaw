@@ -134,6 +134,9 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
+	if err := validateWriteScope(ctx, resolvedPath); err != nil {
+		return ErrorResult(err.Error())
+	}
 
 	dir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {

@@ -71,6 +71,9 @@ func (t *EditFileTool) Execute(ctx context.Context, args map[string]interface{})
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
+	if err := validateWriteScope(ctx, resolvedPath); err != nil {
+		return ErrorResult(err.Error())
+	}
 
 	if _, err := os.Stat(resolvedPath); os.IsNotExist(err) {
 		return ErrorResult(fmt.Sprintf("file not found: %s", path))
@@ -148,6 +151,9 @@ func (t *AppendFileTool) Execute(ctx context.Context, args map[string]interface{
 
 	resolvedPath, err := validatePath(path, t.workspace, t.restrict)
 	if err != nil {
+		return ErrorResult(err.Error())
+	}
+	if err := validateWriteScope(ctx, resolvedPath); err != nil {
 		return ErrorResult(err.Error())
 	}
 

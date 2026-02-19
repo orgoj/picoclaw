@@ -782,6 +782,17 @@ The `restrict_to_workspace` setting applies consistently across all execution pa
 
 All paths share the same workspace restriction — there's no way to bypass the security boundary through subagents or scheduled tasks.
 
+#### Startup Preflight (Fail-Fast)
+
+Before `agent` and `gateway` start, PicoClaw runs a preflight check to fail fast on invalid workspace state:
+
+- Verifies required workspace bootstrap files exist (`AGENT.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `memory/MEMORY.md`)
+- Detects invalid project agent directories (`workspace/projects/*/agents`)
+- Lints `SKILL.md` files for valid YAML frontmatter (`name`, `description`)
+- Blocks unsafe instruction patterns in skills (for example `grep -r` and `find . -name`)
+
+If any issue is found, startup is aborted with a clear report.
+
 ### Heartbeat (Periodic Tasks)
 
 PicoClaw can perform periodic tasks automatically. Create a `HEARTBEAT.md` file in your workspace:
@@ -854,6 +865,14 @@ workspace/
 ```
 
 When `name` is set, the agent's identity and memory are automatically loaded into its system prompt, and the agent receives instructions to save learnings back to its memory files using `write_file`/`append_file`.
+
+Named subagents also run with write-scope guards:
+
+- Default named agent scope: `workspace/agents/<name>/memory/**`
+- Optional task directory scope: `directory` passed to `spawn`/`subagent`
+- Special case `picoclaw-self-update`:
+  - `workspace/projects/picoclaw/**`
+  - `workspace/agents/picoclaw-self-update/memory/**`
 
 ```markdown
 ## In HEARTBEAT.md or task prompt
