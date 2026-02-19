@@ -10,6 +10,12 @@ type InboundMessage struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
+type InboundQueueItem struct {
+	ID         string         `json:"id"`
+	Message    InboundMessage `json:"message"`
+	EnqueuedAt int64          `json:"enqueued_at"`
+}
+
 type OutboundMessage struct {
 	Channel string `json:"channel"`
 	ChatID  string `json:"chat_id"`
