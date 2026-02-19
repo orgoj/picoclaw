@@ -113,3 +113,47 @@ func TestHistoryRoute(t *testing.T) {
 		t.Fatalf("history items mismatch: %+v", resp.Items)
 	}
 }
+
+func TestMainMessageRoute_QueuesMessage(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	mux := http.NewServeMux()
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+
+	body, _ := json.Marshal(map[string]any{
+		"session_key": "telegram:1",
+		"channel":     "telegram",
+		"chat_id":     "1",
+		"sender_id":   "tester",
+		"content":     "hello",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/main/message", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST main message status=%d want=200 body=%s", rr.Code, rr.Body.String())
+	}
+
+	items := msgBus.ListInbound()
+	if len(items) != 1 {
+		t.Fatalf("inbound items len=%d want=1", len(items))
+	}
+	if items[0].Message.Content != "hello" {
+		t.Fatalf("queued content=%q want=hello", items[0].Message.Content)
+	}
+}
+
+func TestDashboardRoute(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	mux := http.NewServeMux()
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /dashboard status=%d want=200", rr.Code)
+	}
+	if rr.Body.Len() == 0 {
+		t.Fatal("dashboard response is empty")
+	}
+}

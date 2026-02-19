@@ -751,7 +751,7 @@ func gatewayCmd() {
 			logger.ErrorCF("health", "Health server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
-	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound, /api/v1/history\n", cfg.Gateway.Host, cfg.Gateway.Port)
+	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound, /api/v1/history, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
 
 	go agentLoop.Run(ctx)
 
