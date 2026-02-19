@@ -426,7 +426,7 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 	}
 
 	if c.bus != nil {
-		ok := c.bus.PublishInbound(bus.InboundMessage{
+		id, ok := c.bus.PublishInboundWithID(bus.InboundMessage{
 			Channel:    "telegram",
 			SenderID:   fmt.Sprintf("%d", message.From.ID),
 			ChatID:     fmt.Sprintf("%d", message.Chat.ID),
@@ -440,7 +440,7 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 		if ok {
 			_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 				ChatID: telego.ChatID{ID: message.Chat.ID},
-				Text:   "Urgent message queued (no active run).",
+				Text:   fmt.Sprintf("Urgent message queued (no active run). Queue ID: %s", id),
 				ReplyParameters: &telego.ReplyParameters{
 					MessageID: message.MessageID,
 				},
