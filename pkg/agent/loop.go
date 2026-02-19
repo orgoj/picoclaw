@@ -602,40 +602,7 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 			"directory":   directory,
 		})
 
-	// Update CURRENT_TASK.md if directory exists and file exists
-	if directory != "" {
-		taskFile := filepath.Join(directory, "CURRENT_TASK.md")
-		if data, err := os.ReadFile(taskFile); err == nil {
-			// File exists - append completion section
-			timestamp := time.Now().Format("2006-01-02 15:04")
-			taskLabel := msg.SenderID
-			if idx := strings.Index(string(data), "## Task:"); idx >= 0 {
-				// Extract task name from file
-				endIdx := strings.Index(string(data)[idx:], "\n")
-				if endIdx > 0 {
-					taskLabel = string(data)[idx+8 : idx+endIdx]
-				}
-			}
-			update := fmt.Sprintf("\n\n---\n\n## Subagent Completed [%s]\n\n**Status:** ✅ Done\n\n**Result:**\n%s", timestamp, content)
-			updatedContent := string(data) + update
-			if err := os.WriteFile(taskFile, []byte(updatedContent), 0644); err != nil {
-				logger.WarnCF("agent", "Failed to update CURRENT_TASK.md",
-					map[string]interface{}{
-						"file":  taskFile,
-						"error": err.Error(),
-					})
-			} else {
-				logger.InfoCF("agent", "Updated CURRENT_TASK.md with subagent result",
-					map[string]interface{}{
-						"file":  taskFile,
-						"label": taskLabel,
-					})
-			}
-		}
-	}
-
 	// Agent only logs, does not respond to user
-	// (Subagent should use message tool if user notification is needed)
 	return "", nil
 }
 
