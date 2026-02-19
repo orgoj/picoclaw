@@ -381,10 +381,10 @@ func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
 }
 
 func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
-	if c.bus == nil {
+	if c.bus == nil && c.agentLoop == nil {
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Urgent inject is unavailable: message bus not initialized.",
+			Text:   "Urgent inject is unavailable: neither bus nor agent loop is initialized.",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},
@@ -414,24 +414,10 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 		body,
 	)
 
-	ok := c.bus.PublishInbound(bus.InboundMessage{
-		Channel:    "telegram",
-		SenderID:   fmt.Sprintf("%d", message.From.ID),
-		ChatID:     fmt.Sprintf("%d", message.Chat.ID),
-		Content:    content,
-		SessionKey: sessionKey,
-		Metadata: map[string]string{
-			"urgent": "true",
-			"source": "telegram:/urgent",
-		},
-	})
-	if !ok {
-		logger.WarnCF("telegram", "Urgent message dropped: inbound queue timeout", map[string]interface{}{
-			"chat_id": message.Chat.ID,
-		})
+	if c.agentLoop != nil && c.agentLoop.InjectUrgent(sessionKey, content) {
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Failed to enqueue urgent message: inbound queue timeout.",
+			Text:   "Urgent message injected into active run.",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},
@@ -439,9 +425,36 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 		return err
 	}
 
+	if c.bus != nil {
+		ok := c.bus.PublishInbound(bus.InboundMessage{
+			Channel:    "telegram",
+			SenderID:   fmt.Sprintf("%d", message.From.ID),
+			ChatID:     fmt.Sprintf("%d", message.Chat.ID),
+			Content:    content,
+			SessionKey: sessionKey,
+			Metadata: map[string]string{
+				"urgent": "true",
+				"source": "telegram:/urgent",
+			},
+		})
+		if ok {
+			_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+				ChatID: telego.ChatID{ID: message.Chat.ID},
+				Text:   "Urgent message queued (no active run).",
+				ReplyParameters: &telego.ReplyParameters{
+					MessageID: message.MessageID,
+				},
+			})
+			return err
+		}
+		logger.WarnCF("telegram", "Urgent message dropped: inbound queue timeout", map[string]interface{}{
+			"chat_id": message.Chat.ID,
+		})
+	}
+
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
-		Text:   "Urgent message injected.",
+		Text:   "Failed to enqueue urgent message.",
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},

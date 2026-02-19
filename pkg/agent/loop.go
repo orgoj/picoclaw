@@ -61,6 +61,9 @@ type AgentLoop struct {
 	idleRepeat              bool
 	idleRecentSubagents     int // Number of recent subagents to show in IDLE prompt
 	runCounter              atomic.Uint64
+	urgentMu                sync.Mutex
+	urgentBySession         map[string][]string
+	activeRunsBySession     map[string]int
 }
 
 // processOptions configures how a message is processed
@@ -242,6 +245,8 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		tools:               toolsRegistry,
 		subagentManager:     subagentManager,
 		summarizing:         sync.Map{},
+		urgentBySession:     make(map[string][]string),
+		activeRunsBySession: make(map[string]int),
 	}
 }
 
@@ -786,6 +791,8 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 // It handles context building, LLM calls, tool execution, and response handling.
 func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (string, error) {
 	runID := al.nextRunID(opts.SessionKey)
+	al.markSessionRunStart(opts.SessionKey)
+	defer al.markSessionRunEnd(opts.SessionKey)
 	logger.InfoCF("agent", "Run started", map[string]interface{}{
 		"run_id":      runID,
 		"session_key": opts.SessionKey,
@@ -890,6 +897,21 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 	for iteration < al.maxIterations {
 		iteration++
+
+		if urgent := al.drainUrgentMessages(opts.SessionKey); len(urgent) > 0 {
+			for _, u := range urgent {
+				messages = append(messages, providers.Message{
+					Role:    "user",
+					Content: u,
+				})
+			}
+			logger.WarnCF("agent", "Injected urgent message(s) into active run", map[string]interface{}{
+				"run_id":       runID,
+				"session_key":  opts.SessionKey,
+				"iteration":    iteration,
+				"urgent_count": len(urgent),
+			})
+		}
 
 		logger.DebugCF("agent", "LLM iteration",
 			map[string]interface{}{
@@ -1180,6 +1202,65 @@ func (al *AgentLoop) nextRunID(sessionKey string) string {
 	}
 	base = strings.ReplaceAll(base, ":", "_")
 	return fmt.Sprintf("%s-%06d", base, n)
+}
+
+// InjectUrgent queues urgent content directly into a currently running session.
+// Returns true if injected into an active run, false when session is not active.
+func (al *AgentLoop) InjectUrgent(sessionKey, content string) bool {
+	sessionKey = strings.TrimSpace(sessionKey)
+	content = strings.TrimSpace(content)
+	if sessionKey == "" || content == "" {
+		return false
+	}
+
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+
+	if al.activeRunsBySession[sessionKey] <= 0 {
+		return false
+	}
+	al.urgentBySession[sessionKey] = append(al.urgentBySession[sessionKey], content)
+	return true
+}
+
+func (al *AgentLoop) drainUrgentMessages(sessionKey string) []string {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return nil
+	}
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+	items := al.urgentBySession[sessionKey]
+	if len(items) == 0 {
+		return nil
+	}
+	delete(al.urgentBySession, sessionKey)
+	return items
+}
+
+func (al *AgentLoop) markSessionRunStart(sessionKey string) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return
+	}
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+	al.activeRunsBySession[sessionKey]++
+}
+
+func (al *AgentLoop) markSessionRunEnd(sessionKey string) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return
+	}
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+	n := al.activeRunsBySession[sessionKey]
+	if n <= 1 {
+		delete(al.activeRunsBySession, sessionKey)
+		return
+	}
+	al.activeRunsBySession[sessionKey] = n - 1
 }
 
 func (al *AgentLoop) clampRetryWait(wait time.Duration, retryStart time.Time) (time.Duration, bool) {

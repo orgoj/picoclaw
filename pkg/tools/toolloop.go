@@ -22,6 +22,8 @@ type ToolLoopConfig struct {
 	Model                   string
 	Tools                   *ToolRegistry
 	MaxIterations           int
+	RunID                   string
+	PullInjectedMessages    func() []string
 	LLMOptions              map[string]any
 	ContextLimit            int // Max total chars in message history. 0 = no limit.
 	HistoryMessageThreshold int // Max number of messages before trimming. 0 = no limit.
@@ -42,6 +44,23 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 	for iteration < config.MaxIterations {
 		iteration++
 
+		if config.PullInjectedMessages != nil {
+			injected := config.PullInjectedMessages()
+			if len(injected) > 0 {
+				for _, msg := range injected {
+					messages = append(messages, providers.Message{
+						Role:    "user",
+						Content: msg,
+					})
+				}
+				logger.WarnCF("toolloop", "Injected external message(s) into active loop", map[string]any{
+					"run_id":         config.RunID,
+					"iteration":      iteration,
+					"injected_count": len(injected),
+				})
+			}
+		}
+
 		// Trim by message count if threshold configured
 		if config.HistoryMessageThreshold > 0 {
 			messages = trimMessagesByCount(messages, config.HistoryMessageThreshold)
@@ -54,6 +73,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 
 		logger.DebugCF("toolloop", "LLM iteration",
 			map[string]any{
+				"run_id":    config.RunID,
 				"iteration": iteration,
 				"max":       config.MaxIterations,
 			})
@@ -72,6 +92,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		if err != nil {
 			logger.ErrorCF("toolloop", "LLM call failed",
 				map[string]any{
+					"run_id":    config.RunID,
 					"iteration": iteration,
 					"error":     err.Error(),
 				})
@@ -83,6 +104,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 			finalContent = response.Content
 			logger.InfoCF("toolloop", "LLM response without tool calls (direct answer)",
 				map[string]any{
+					"run_id":        config.RunID,
 					"iteration":     iteration,
 					"content_chars": len(finalContent),
 				})
@@ -96,6 +118,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		}
 		logger.InfoCF("toolloop", "LLM requested tool calls",
 			map[string]any{
+				"run_id":    config.RunID,
 				"tools":     toolNames,
 				"count":     len(response.ToolCalls),
 				"iteration": iteration,
@@ -125,6 +148,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 			argsPreview := utils.Truncate(string(argsJSON), 200)
 			logger.InfoCF("toolloop", fmt.Sprintf("Tool call: %s(%s)", tc.Name, argsPreview),
 				map[string]any{
+					"run_id":    config.RunID,
 					"tool":      tc.Name,
 					"iteration": iteration,
 				})

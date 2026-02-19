@@ -271,10 +271,14 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	sm.mu.RUnlock()
 
 	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
-		Provider:                sm.provider,
-		Model:                   sm.defaultModel,
-		Tools:                   tools,
-		MaxIterations:           maxIter,
+		Provider:      sm.provider,
+		Model:         sm.defaultModel,
+		Tools:         tools,
+		MaxIterations: maxIter,
+		RunID:         task.ID,
+		PullInjectedMessages: func() []string {
+			return sm.drainPendingMessages(task.ID)
+		},
 		ContextLimit:            sm.contextLimit,
 		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
@@ -477,9 +481,27 @@ func (sm *SubagentManager) SendMessage(taskID, message string) error {
 		return fmt.Errorf("task is not running (status: %s)", task.Status)
 	}
 
-	// Queue message for the running task
-	task.PendingMsgs = append(task.PendingMsgs, message)
+	// Inject supervisor correction into active loop on next iteration.
+	task.PendingMsgs = append(task.PendingMsgs, fmt.Sprintf(
+		"<supervisor_message priority=\"high\" source=\"subagent_message\" task_id=\"%s\">\n%s\n</supervisor_message>\nApply this supervisor correction immediately before continuing.",
+		taskID,
+		message,
+	))
 	return nil
+}
+
+func (sm *SubagentManager) drainPendingMessages(taskID string) []string {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	task, ok := sm.tasks[taskID]
+	if !ok || len(task.PendingMsgs) == 0 {
+		return nil
+	}
+
+	items := append([]string(nil), task.PendingMsgs...)
+	task.PendingMsgs = task.PendingMsgs[:0]
+	return items
 }
 
 // Cancel cancels a running subagent task.
@@ -645,6 +667,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		Model:                   sm.defaultModel,
 		Tools:                   tools,
 		MaxIterations:           maxIter,
+		RunID:                   fmt.Sprintf("sync-%s", name),
 		ContextLimit:            sm.contextLimit,
 		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
