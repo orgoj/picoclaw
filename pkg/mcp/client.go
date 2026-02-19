@@ -14,6 +14,14 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, endpoint, apiKey string) (*Client, error) {
+	return NewClientWithTimeout(ctx, endpoint, apiKey, 60)
+}
+
+func NewClientWithTimeout(ctx context.Context, endpoint, apiKey string, timeoutSeconds int) (*Client, error) {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 60
+	}
+
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "picoclaw",
 		Version: "v1.0.0",
@@ -23,7 +31,7 @@ func NewClient(ctx context.Context, endpoint, apiKey string) (*Client, error) {
 	transport := &mcp.StreamableClientTransport{
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: time.Duration(timeoutSeconds) * time.Second,
 			Transport: &authTransport{
 				apiKey:     apiKey,
 				underlying: http.DefaultTransport,

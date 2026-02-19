@@ -99,7 +99,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 
 		// Search client
 		if cfg.Tools.Web.ZAI.Endpoint != "" {
-			client, err := mcp.NewClient(ctx, cfg.Tools.Web.ZAI.Endpoint, cfg.Tools.Web.ZAI.APIKey)
+			client, err := mcp.NewClientWithTimeout(ctx, cfg.Tools.Web.ZAI.Endpoint, cfg.Tools.Web.ZAI.APIKey, cfg.Tools.Web.ZAI.Timeout)
 			if err != nil {
 				logger.WarnCF("agent", "Failed to connect ZAI Search MCP client: %v", map[string]interface{}{"error": err.Error(), "endpoint": cfg.Tools.Web.ZAI.Endpoint})
 			} else {
@@ -110,7 +110,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 
 		// Fetch client (optional, fallback to Search client if not specified)
 		if cfg.Tools.Web.ZAI.EndpointFetch != "" {
-			client, err := mcp.NewClient(ctx, cfg.Tools.Web.ZAI.EndpointFetch, cfg.Tools.Web.ZAI.APIKey)
+			client, err := mcp.NewClientWithTimeout(ctx, cfg.Tools.Web.ZAI.EndpointFetch, cfg.Tools.Web.ZAI.APIKey, cfg.Tools.Web.ZAI.Timeout)
 			if err != nil {
 				logger.WarnCF("agent", "Failed to connect ZAI Fetch MCP client: %v", map[string]interface{}{"error": err.Error(), "endpoint": cfg.Tools.Web.ZAI.EndpointFetch})
 			} else {
@@ -134,7 +134,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	}); searchTool != nil {
 		registry.Register(searchTool)
 	}
-	registry.Register(tools.NewWebFetchTool(50000, zaiFetchClient))
+	registry.Register(tools.NewWebFetchTool(50000, zaiFetchClient, cfg.Tools.Web.ZAI.Timeout))
 
 	// Hardware tools (I2C, SPI) - Linux only, returns error on other platforms
 	registry.Register(tools.NewI2CTool())

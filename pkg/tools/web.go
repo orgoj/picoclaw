@@ -278,15 +278,21 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]interface{}
 type WebFetchTool struct {
 	maxChars  int
 	zaiClient *mcp.Client
+	timeout   time.Duration
 }
 
-func NewWebFetchTool(maxChars int, zaiClient *mcp.Client) *WebFetchTool {
+func NewWebFetchTool(maxChars int, zaiClient *mcp.Client, timeoutSeconds ...int) *WebFetchTool {
 	if maxChars <= 0 {
 		maxChars = 50000
+	}
+	timeout := 60 * time.Second
+	if len(timeoutSeconds) > 0 && timeoutSeconds[0] > 0 {
+		timeout = time.Duration(timeoutSeconds[0]) * time.Second
 	}
 	return &WebFetchTool{
 		maxChars:  maxChars,
 		zaiClient: zaiClient,
+		timeout:   timeout,
 	}
 }
 
@@ -372,7 +378,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{})
 	req.Header.Set("User-Agent", userAgent)
 
 	client := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: t.timeout,
 		Transport: &http.Transport{
 			MaxIdleConns:        10,
 			IdleConnTimeout:     30 * time.Second,
