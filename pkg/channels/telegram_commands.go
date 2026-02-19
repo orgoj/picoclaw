@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func NewTelegramCommands(bot *telego.Bot, cfg *config.Config, subagentManager *t
 
 func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 	lines := []string{
-		"🦞 *PicoClaw Commands*",
+		"🦞 <b>PicoClaw Commands</b>",
 		"",
 		"/start - Start the bot",
 		"/help - Show this help message",
@@ -56,7 +57,7 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      msg,
-		ParseMode: telego.ModeMarkdown,
+		ParseMode: telego.ModeHTML,
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
@@ -80,13 +81,13 @@ func (c *cmd) Models(ctx context.Context, message telego.Message) error {
 	if provider == "" {
 		provider = "configured default"
 	}
-	response := fmt.Sprintf("🦞 *Configured Model*\n\n- Model: `%s` *\n- Provider: `%s`",
-		c.config.Agents.Defaults.Model, provider)
+	response := fmt.Sprintf("🦞 <b>Configured Model</b>\n\n- Model: <code>%s</code>\n- Provider: <code>%s</code>",
+		html.EscapeString(c.config.Agents.Defaults.Model), html.EscapeString(provider))
 
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      response,
-		ParseMode: telego.ModeMarkdown,
+		ParseMode: telego.ModeHTML,
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
@@ -115,12 +116,12 @@ func (c *cmd) Channels(ctx context.Context, message telego.Message) error {
 	addChan("line", c.config.Channels.LINE.Enabled)
 	addChan("onebot", c.config.Channels.OneBot.Enabled)
 
-	response := fmt.Sprintf("🦞 *Available Channels*\n\n%s\n\n\\* = active", strings.Join(channels, "\n"))
+	response := fmt.Sprintf("🦞 <b>Available Channels</b>\n\n%s\n\n* = active", html.EscapeString(strings.Join(channels, "\n")))
 
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      response,
-		ParseMode: telego.ModeMarkdown,
+		ParseMode: telego.ModeHTML,
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
@@ -143,12 +144,12 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 	queueCount := c.subagentManager.GetMessageQueueCount()
 
 	var sb strings.Builder
-	sb.WriteString("📊 *PicoClaw Status*\n\n")
+	sb.WriteString("📊 <b>PicoClaw Status</b>\n\n")
 	subagentEnabled := c.config != nil && (c.config.Tools.Spawn.Enabled || c.config.Tools.Subagent.Enabled)
 
 	// Version info
-	sb.WriteString(fmt.Sprintf("📦 *Version:* `%s`\n", version.Format()))
-	sb.WriteString(fmt.Sprintf("🔧 *Go:* `%s`\n\n", version.GetGoVersion()))
+	sb.WriteString(fmt.Sprintf("📦 <b>Version:</b> <code>%s</code>\n", html.EscapeString(version.Format())))
+	sb.WriteString(fmt.Sprintf("🔧 <b>Go:</b> <code>%s</code>\n\n", html.EscapeString(version.GetGoVersion())))
 
 	// Capabilities info (tools, skills, named agents)
 	if c.agentLoop != nil {
@@ -157,24 +158,16 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		skillsInfo := startupInfo["skills"].(map[string]interface{})
 		agentsInfo := startupInfo["agents"].(map[string]interface{})
 
-		sb.WriteString("🧰 *Capabilities:*\n")
+		sb.WriteString("🧰 <b>Capabilities:</b>\n")
 		sb.WriteString(fmt.Sprintf("  Tools: %d\n", toolsInfo["count"]))
 		sb.WriteString(fmt.Sprintf("  Skills: %d/%d\n", skillsInfo["available"], skillsInfo["total"]))
 		sb.WriteString(fmt.Sprintf("  Named Agents: %d\n", agentsInfo["count"]))
-
-		if names, ok := agentsInfo["names"].([]string); ok {
-			if len(names) == 0 {
-				sb.WriteString("  Agents: None\n")
-			} else {
-				sb.WriteString(fmt.Sprintf("  Agents: %s\n", escapeMD(strings.Join(names, ", "))))
-			}
-		}
 		sb.WriteString("\n")
 	}
 
 	if subagentEnabled {
 		// Running subagents with enhanced details
-		sb.WriteString("🔄 *Running Subagents:*\n")
+		sb.WriteString("🔄 <b>Running Subagents:</b>\n")
 		if len(running) == 0 {
 			sb.WriteString("  None\n")
 		} else {
@@ -183,15 +176,15 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 				startTime := formatTimeShort(t.Started)
 				timeRange := fmt.Sprintf("[%s - ...]", startTime)
 
-				sb.WriteString(fmt.Sprintf("• `%s` %s\n", t.ID, timeRange))
+				sb.WriteString(fmt.Sprintf("• <code>%s</code> %s\n", html.EscapeString(t.ID), html.EscapeString(timeRange)))
 
 				// Label (if set)
 				if t.Label != "" {
-					sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
+					sb.WriteString(fmt.Sprintf("  Label: %s\n", html.EscapeString(t.Label)))
 				}
 
-				// Task preview (first 30 chars) - escape BEFORE truncate to avoid broken markdown
-				taskPreview := truncateStr(escapeMD(t.Task), 30)
+				// Task preview (first 30 chars)
+				taskPreview := html.EscapeString(truncateStr(t.Task, 30))
 				sb.WriteString(fmt.Sprintf("  Task: %s\n", taskPreview))
 
 				// Pending messages count for this task
@@ -203,7 +196,7 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		}
 
 		// Recent completed tasks
-		sb.WriteString(fmt.Sprintf("\n✅ *Recent \\(%d\\):*\n", len(recent)))
+		sb.WriteString(fmt.Sprintf("\n✅ <b>Recent (%d):</b>\n", len(recent)))
 		if len(recent) == 0 {
 			sb.WriteString("  None\n")
 		} else {
@@ -220,21 +213,20 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 				}
 
 				timeRange := fmt.Sprintf("[%s - %s]", startTime, endTime)
-				sb.WriteString(fmt.Sprintf("• `%s` %s %s\n", t.ID, timeRange, statusIcon))
+				sb.WriteString(fmt.Sprintf("• <code>%s</code> %s %s\n", html.EscapeString(t.ID), html.EscapeString(timeRange), statusIcon))
 
 				if t.Label != "" {
-					sb.WriteString(fmt.Sprintf("  Label: %s\n", escapeMD(t.Label)))
+					sb.WriteString(fmt.Sprintf("  Label: %s\n", html.EscapeString(t.Label)))
 				}
 			}
 		}
 
 		// Message queue info
-		sb.WriteString(fmt.Sprintf("\n📬 *Message Queue:* %d\n", queueCount))
+		sb.WriteString(fmt.Sprintf("\n📬 <b>Message Queue:</b> %d\n", queueCount))
 		if queueCount > 0 {
 			firstMsg := c.subagentManager.GetFirstQueuedMessage()
 			if firstMsg != "" {
-				// IMPORTANT: escape BEFORE truncate to avoid breaking markdown entities
-				sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", truncateStr(escapeMD(firstMsg), 80)))
+				sb.WriteString(fmt.Sprintf("  Next: \"%s\"\n", html.EscapeString(truncateStr(firstMsg, 80))))
 			}
 		}
 	}
@@ -253,20 +245,20 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		}
 		summarizingInfo := ""
 		if stats.IsSummarizing {
-			summarizingInfo = " _(summarizing...)_"
+			summarizingInfo = " (summarizing...)"
 		}
-		sb.WriteString("\n🤖 *Main Agent \\(this session\\):*\n")
-		sb.WriteString(fmt.Sprintf("  Model: `%s`\n", c.config.Agents.Defaults.Model))
+		sb.WriteString("\n🤖 <b>Main Agent (this session):</b>\n")
+		sb.WriteString(fmt.Sprintf("  Model: <code>%s</code>\n", html.EscapeString(c.config.Agents.Defaults.Model)))
 		sb.WriteString(fmt.Sprintf("  Messages: %d\n", stats.MessageCount))
-		sb.WriteString(fmt.Sprintf("  Context: \\~%d/%d tokens \\(%d%%\\)%s\n",
-			stats.TokenEstimate, stats.ContextWindow, memPct, summarizingInfo))
+		sb.WriteString(fmt.Sprintf("  Context: ~%d/%d tokens (%d%%)%s\n",
+			stats.TokenEstimate, stats.ContextWindow, memPct, html.EscapeString(summarizingInfo)))
 		sb.WriteString(fmt.Sprintf("  Summary: %s\n", summaryInfo))
 	}
 
 	params := &telego.SendMessageParams{
 		ChatID:    telego.ChatID{ID: message.Chat.ID},
 		Text:      sb.String(),
-		ParseMode: telego.ModeMarkdownV2,
+		ParseMode: telego.ModeHTML,
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
@@ -277,8 +269,8 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 		return nil
 	}
 
-	// MarkdownV2 is strict; fallback to plain text to keep /status usable.
-	logger.ErrorCF("telegram", "Failed to send /status with MarkdownV2, retrying plain text", map[string]interface{}{
+	// HTML parse failed; fallback to plain text to keep /status usable.
+	logger.ErrorCF("telegram", "Failed to send /status with HTML, retrying plain text", map[string]interface{}{
 		"error":   err.Error(),
 		"chat_id": message.Chat.ID,
 		"text":    truncateStr(sb.String(), 400),
@@ -294,7 +286,7 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 	if plainErr != nil {
 		return plainErr
 	}
-	return err
+	return nil
 }
 
 func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
@@ -385,18 +377,4 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
-}
-
-// escapeMD escapes special characters for MarkdownV2
-func escapeMD(text string) string {
-	// MarkdownV2 special characters that need escaping
-	specialChars := "_*[]()~`>#+-=|{}.!"
-	var result strings.Builder
-	for _, c := range text {
-		if strings.ContainsRune(specialChars, c) {
-			result.WriteRune('\\')
-		}
-		result.WriteRune(c)
-	}
-	return result.String()
 }
