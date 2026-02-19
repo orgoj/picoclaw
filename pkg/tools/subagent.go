@@ -187,8 +187,9 @@ After completing the task, provide a clear summary of what was done.`
 		}
 		// Memory save instructions
 		now := time.Now()
-		base += fmt.Sprintf("\n\n## Memory Instructions\nYou are a named agent with persistent memory. At the end of this task, save key learnings to your memory using write_file/append_file:\n- Long-term: agents/%s/memory/MEMORY.md\n- Daily notes: agents/%s/memory/%s/%s.md",
-			name, name, now.Format("200601"), now.Format("20060102"))
+		memoryDir := filepath.Join(sm.workspace, "agents", name, "memory")
+		base += fmt.Sprintf("\n\n## Memory Instructions\nYou are a named agent with persistent memory. At the end of this task, save key learnings to your memory using write_file/append_file:\n- Long-term: %s/MEMORY.md\n- Daily notes: %s/%s/%s.md",
+			memoryDir, memoryDir, now.Format("200601"), now.Format("20060102"))
 	}
 
 	if taskLabel != "" {
