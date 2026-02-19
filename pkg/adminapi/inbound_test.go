@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
 type muxRegistrar struct {
@@ -16,6 +17,12 @@ type muxRegistrar struct {
 
 func (m *muxRegistrar) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
 	m.mux.HandleFunc(pattern, handler)
+}
+
+type fakeHistory struct{}
+
+func (f fakeHistory) GetSessionHistory(sessionKey string) []providers.Message {
+	return []providers.Message{{Role: "user", Content: "hello " + sessionKey}}
 }
 
 func TestInboundRoutes_ListPatchMoveDelete(t *testing.T) {
@@ -30,7 +37,7 @@ func TestInboundRoutes_ListPatchMoveDelete(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus)
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, nil)
 
 	// PATCH second
 	patchBody, _ := json.Marshal(map[string]any{"content": "second-edited"})
@@ -77,5 +84,32 @@ func TestInboundRoutes_ListPatchMoveDelete(t *testing.T) {
 	}
 	if resp.Items[0].ID != id2 || resp.Items[0].Message.Content != "second-edited" {
 		t.Fatalf("remaining item=(%s,%s) want=(%s,second-edited)", resp.Items[0].ID, resp.Items[0].Message.Content, id2)
+	}
+}
+
+func TestHistoryRoute(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	mux := http.NewServeMux()
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history?session_key=telegram:1", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET history status=%d want=200 body=%s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		SessionKey string              `json:"session_key"`
+		Items      []providers.Message `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal history response: %v", err)
+	}
+	if resp.SessionKey != "telegram:1" {
+		t.Fatalf("session_key=%s want=telegram:1", resp.SessionKey)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].Content != "hello telegram:1" {
+		t.Fatalf("history items mismatch: %+v", resp.Items)
 	}
 }

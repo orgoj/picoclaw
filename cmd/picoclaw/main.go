@@ -745,13 +745,13 @@ func gatewayCmd() {
 	}
 
 	healthServer := health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port)
-	adminapi.RegisterInboundRoutes(healthServer, msgBus)
+	adminapi.RegisterInboundRoutes(healthServer, msgBus, agentLoop)
 	go func() {
 		if err := healthServer.Start(); err != nil && err != http.ErrServerClosed {
 			logger.ErrorCF("health", "Health server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
-	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound\n", cfg.Gateway.Host, cfg.Gateway.Port)
+	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound, /api/v1/history\n", cfg.Gateway.Host, cfg.Gateway.Port)
 
 	go agentLoop.Run(ctx)
 

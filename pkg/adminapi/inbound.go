@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
 type routeRegistrar interface {
@@ -14,15 +15,21 @@ type routeRegistrar interface {
 
 type inboundAPI struct {
 	msgBus *bus.MessageBus
+	hist   sessionHistoryProvider
 }
 
-func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus) {
+type sessionHistoryProvider interface {
+	GetSessionHistory(sessionKey string) []providers.Message
+}
+
+func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, history sessionHistoryProvider) {
 	if r == nil || msgBus == nil {
 		return
 	}
-	api := &inboundAPI{msgBus: msgBus}
+	api := &inboundAPI{msgBus: msgBus, hist: history}
 	r.HandleFunc("/api/v1/inbound", api.handleInboundRoot)
 	r.HandleFunc("/api/v1/inbound/", api.handleInboundItem)
+	r.HandleFunc("/api/v1/history", api.handleHistory)
 }
 
 func (a *inboundAPI) handleInboundRoot(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +105,26 @@ func (a *inboundAPI) handleInboundItem(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
 	}
+}
+
+func (a *inboundAPI) handleHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	if a.hist == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "history provider unavailable"})
+		return
+	}
+	sessionKey := strings.TrimSpace(r.URL.Query().Get("session_key"))
+	if sessionKey == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "session_key query param is required"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session_key": sessionKey,
+		"items":       a.hist.GetSessionHistory(sessionKey),
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body map[string]any) {

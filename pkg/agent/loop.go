@@ -647,6 +647,14 @@ func (al *AgentLoop) GetSessionStats(sessionKey string) AgentStats {
 	}
 }
 
+// GetSessionHistory returns a copy of the current session message history.
+func (al *AgentLoop) GetSessionHistory(sessionKey string) []providers.Message {
+	history := al.sessions.GetHistory(sessionKey)
+	out := make([]providers.Message, len(history))
+	copy(out, history)
+	return out
+}
+
 // RecordLastChannel records the last active channel for this workspace.
 // This uses the atomic state save mechanism to prevent data loss on crash.
 func (al *AgentLoop) RecordLastChannel(channel string) error {
