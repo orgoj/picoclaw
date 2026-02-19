@@ -460,7 +460,7 @@ func markdownToTelegramHTML(text string) string {
 		return "<i>" + match[1] + "</i>"
 	})
 
-	text = regexp.MustCompile(`~~(.+?)~~`).ReplaceAllString(text, "<s>$1</s>")
+	text = regexp.MustCompile(`(?s)~~(.+?)~~`).ReplaceAllString(text, "<s>$1</s>")
 
 	text = regexp.MustCompile(`^[-*]\s+`).ReplaceAllString(text, "• ")
 
