@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/chzyer/readline"
+	"github.com/sipeed/picoclaw/pkg/adminapi"
 	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/auth"
 	"github.com/sipeed/picoclaw/pkg/bus"
@@ -744,12 +745,13 @@ func gatewayCmd() {
 	}
 
 	healthServer := health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port)
+	adminapi.RegisterInboundRoutes(healthServer, msgBus)
 	go func() {
 		if err := healthServer.Start(); err != nil && err != http.ErrServerClosed {
 			logger.ErrorCF("health", "Health server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
-	fmt.Printf("✓ Health endpoints available at http://%s:%d/health and /ready\n", cfg.Gateway.Host, cfg.Gateway.Port)
+	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound\n", cfg.Gateway.Host, cfg.Gateway.Port)
 
 	go agentLoop.Run(ctx)
 
