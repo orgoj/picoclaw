@@ -9,6 +9,7 @@ import (
 
 	"github.com/mymmrac/telego"
 	"github.com/sipeed/picoclaw/pkg/agent"
+	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/tools"
@@ -20,20 +21,23 @@ type TelegramCommander interface {
 	Start(ctx context.Context, message telego.Message) error
 	Status(ctx context.Context, message telego.Message) error
 	Kill(ctx context.Context, message telego.Message) error
+	Urgent(ctx context.Context, message telego.Message) error
 	Models(ctx context.Context, message telego.Message) error
 	Channels(ctx context.Context, message telego.Message) error
 }
 
 type cmd struct {
 	bot             *telego.Bot
+	bus             *bus.MessageBus
 	config          *config.Config
 	subagentManager *tools.SubagentManager
 	agentLoop       *agent.AgentLoop
 }
 
-func NewTelegramCommands(bot *telego.Bot, cfg *config.Config, subagentManager *tools.SubagentManager, agentLoop *agent.AgentLoop) TelegramCommander {
+func NewTelegramCommands(bot *telego.Bot, msgBus *bus.MessageBus, cfg *config.Config, subagentManager *tools.SubagentManager, agentLoop *agent.AgentLoop) TelegramCommander {
 	return &cmd{
 		bot:             bot,
+		bus:             msgBus,
 		config:          cfg,
 		subagentManager: subagentManager,
 		agentLoop:       agentLoop,
@@ -49,9 +53,10 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 		"/status - Show system and subagents status",
 		"/models - List available models",
 		"/channels - List enabled channels",
+		"/urgent MESSAGE - Inject urgent instruction to main agent",
 	}
 	if c.config != nil && c.config.Tools.Spawn.Enabled {
-		lines = append(lines, "/kill <task_id> - Cancel running subagent task")
+		lines = append(lines, "/kill TASK_ID - Cancel running subagent task")
 	}
 	msg := strings.Join(lines, "\n")
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
@@ -368,6 +373,75 @@ func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
 		Text:   fmt.Sprintf("Cancelled subagent task '%s'.", taskID),
+		ReplyParameters: &telego.ReplyParameters{
+			MessageID: message.MessageID,
+		},
+	})
+	return err
+}
+
+func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
+	if c.bus == nil {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Urgent inject is unavailable: message bus not initialized.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	raw := strings.TrimSpace(message.Text)
+	body := ""
+	if idx := strings.Index(raw, " "); idx >= 0 && idx+1 < len(raw) {
+		body = strings.TrimSpace(raw[idx+1:])
+	}
+	if body == "" {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Usage: /urgent MESSAGE",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	sessionKey := fmt.Sprintf("telegram:%d", message.Chat.ID)
+	content := fmt.Sprintf(
+		"<urgent_message priority=\"high\" source=\"telegram:/urgent\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.",
+		body,
+	)
+
+	ok := c.bus.PublishInbound(bus.InboundMessage{
+		Channel:    "telegram",
+		SenderID:   fmt.Sprintf("%d", message.From.ID),
+		ChatID:     fmt.Sprintf("%d", message.Chat.ID),
+		Content:    content,
+		SessionKey: sessionKey,
+		Metadata: map[string]string{
+			"urgent": "true",
+			"source": "telegram:/urgent",
+		},
+	})
+	if !ok {
+		logger.WarnCF("telegram", "Urgent message dropped: inbound queue timeout", map[string]interface{}{
+			"chat_id": message.Chat.ID,
+		})
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Failed to enqueue urgent message: inbound queue timeout.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID: telego.ChatID{ID: message.Chat.ID},
+		Text:   "Urgent message injected.",
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},

@@ -73,7 +73,7 @@ func NewTelegramChannel(cfg *config.Config, bus *bus.MessageBus, subagentManager
 
 	return &TelegramChannel{
 		BaseChannel:     base,
-		commands:        NewTelegramCommands(bot, cfg, subagentManager, agentLoop),
+		commands:        NewTelegramCommands(bot, bus, cfg, subagentManager, agentLoop),
 		bot:             bot,
 		config:          cfg,
 		subagentManager: subagentManager,
@@ -104,8 +104,7 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	}
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-		c.commands.Help(ctx, message)
-		return nil
+		return c.commands.Help(ctx, message)
 	}, th.CommandEqual("help"))
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.commands.Start(ctx, message)
@@ -122,6 +121,11 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.commands.Status(ctx, message)
 	}, th.CommandEqual("status"))
+
+	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
+		return c.commands.Urgent(ctx, message)
+	}, th.CommandEqual("urgent"))
+
 	if c.config.Tools.Spawn.Enabled {
 		bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 			return c.commands.Kill(ctx, message)
@@ -143,6 +147,7 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 			{Command: "start", Description: "Start the bot"},
 			{Command: "help", Description: "Show available commands"},
 			{Command: "status", Description: "Show system and subagents status"},
+			{Command: "urgent", Description: "Inject urgent message to main agent"},
 			{Command: "kill", Description: "Cancel subagent by task ID"},
 			{Command: "models", Description: "List configured models"},
 			{Command: "channels", Description: "List available channels"},
@@ -153,6 +158,7 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 			{Command: "start", Description: "Start the bot"},
 			{Command: "help", Description: "Show available commands"},
 			{Command: "status", Description: "Show system and subagents status"},
+			{Command: "urgent", Description: "Inject urgent message to main agent"},
 			{Command: "models", Description: "List configured models"},
 			{Command: "channels", Description: "List available channels"},
 		}
