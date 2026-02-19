@@ -806,23 +806,50 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				break // Success
 			}
 
-			// Check if error is retryable (network/transient errors)
+			// Check if error is retryable (network/transient errors + 5xx server errors)
 			errStr := err.Error()
 			isRetryable := strings.Contains(errStr, "unexpected EOF") ||
 				strings.Contains(errStr, "connection reset") ||
 				strings.Contains(errStr, "timeout") ||
-				strings.Contains(errStr, "temporary failure")
+				strings.Contains(errStr, "temporary failure") ||
+				strings.Contains(errStr, "status=5") ||
+				strings.Contains(errStr, "500") ||
+				strings.Contains(errStr, "502") ||
+				strings.Contains(errStr, "503") ||
+				strings.Contains(errStr, "504")
+
+			// Check for rate limit (429) - needs special handling with longer wait
+			isRateLimit := strings.Contains(errStr, "429") ||
+				strings.Contains(errStr, "rate limit") ||
+				strings.Contains(errStr, "too many requests")
+
+			if isRateLimit && retry < maxRetries {
+				// Rate limit: longer linear backoff (10s, 20s, 30s)
+				waitTime := time.Duration(10*(retry+1)) * time.Second
+				logger.WarnCF("agent", "Rate limited, waiting",
+					map[string]interface{}{
+						"iteration":    iteration,
+						"retry":        retry + 1,
+						"max_retries":  maxRetries,
+						"wait_seconds": waitTime.Seconds(),
+						"error":        errStr,
+					})
+				time.Sleep(waitTime)
+				continue
+			}
 
 			if isRetryable && retry < maxRetries {
+				// Exponential backoff: 2s, 4s, 8s
+				waitTime := time.Duration(2<<(retry)) * time.Second
 				logger.WarnCF("agent", "LLM call failed, retrying",
 					map[string]interface{}{
-						"iteration":   iteration,
-						"retry":       retry + 1,
-						"max_retries": maxRetries,
-						"error":       err.Error(),
+						"iteration":    iteration,
+						"retry":        retry + 1,
+						"max_retries":  maxRetries,
+						"wait_seconds": waitTime.Seconds(),
+						"error":        errStr,
 					})
-				// Brief backoff before retry
-				time.Sleep(time.Duration(retry+1) * time.Second)
+				time.Sleep(waitTime)
 				continue
 			}
 
