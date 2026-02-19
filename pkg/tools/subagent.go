@@ -529,13 +529,17 @@ func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 		announceContent = fmt.Sprintf("Task '%s' %s.\n\nResult:\n%s", task.Label, status, task.Result)
 	}
 
-	sm.bus.PublishInbound(bus.InboundMessage{
+	if ok := sm.bus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",
 		SenderID: fmt.Sprintf("subagent:%s", task.ID),
 		// Format: "original_channel:original_chat_id" for routing back
 		ChatID:  fmt.Sprintf("%s:%s", task.OriginChannel, task.OriginChatID),
 		Content: announceContent,
-	})
+	}); !ok {
+		logger.WarnCF("subagent", "Subagent completion notification dropped: inbound queue timeout", map[string]interface{}{
+			"task_id": task.ID,
+		})
+	}
 }
 
 // SubagentTool executes a subagent task synchronously and returns the result.

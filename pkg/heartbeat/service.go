@@ -307,11 +307,14 @@ func (hs *HeartbeatService) sendResponse(response string) {
 		return
 	}
 
-	msgBus.PublishOutbound(bus.OutboundMessage{
+	if ok := msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel: platform,
 		ChatID:  userID,
 		Content: response,
-	})
+	}); !ok {
+		hs.logWarn("Heartbeat result dropped: outbound queue timeout (channel=%s)", platform)
+		return
+	}
 
 	hs.logInfo("Heartbeat result sent to %s", platform)
 }
@@ -349,6 +352,11 @@ func (hs *HeartbeatService) logInfo(format string, args ...any) {
 // logError logs an error message to the heartbeat log
 func (hs *HeartbeatService) logError(format string, args ...any) {
 	hs.log("ERROR", format, args...)
+}
+
+// logWarn logs a warning message to the heartbeat log
+func (hs *HeartbeatService) logWarn(format string, args ...any) {
+	hs.log("WARN", format, args...)
 }
 
 // log writes a message to the heartbeat log file

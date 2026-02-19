@@ -21,8 +21,15 @@ func NewMessageBus() *MessageBus {
 	}
 }
 
-func (mb *MessageBus) PublishInbound(msg InboundMessage) {
-	mb.inbound <- msg
+func (mb *MessageBus) PublishInbound(msg InboundMessage) bool {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case mb.inbound <- msg:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func (mb *MessageBus) ConsumeInbound(ctx context.Context) (InboundMessage, bool) {
@@ -52,8 +59,15 @@ func (mb *MessageBus) ConsumeInboundWithTimeout(ctx context.Context, timeout tim
 	}
 }
 
-func (mb *MessageBus) PublishOutbound(msg OutboundMessage) {
-	mb.outbound <- msg
+func (mb *MessageBus) PublishOutbound(msg OutboundMessage) bool {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case mb.outbound <- msg:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func (mb *MessageBus) SubscribeOutbound(ctx context.Context) (OutboundMessage, bool) {

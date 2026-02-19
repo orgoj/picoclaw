@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 type Channel interface {
@@ -100,7 +101,12 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		Metadata:   metadata,
 	}
 
-	c.bus.PublishInbound(msg)
+	if ok := c.bus.PublishInbound(msg); !ok {
+		logger.WarnCF("channels", "Inbound message dropped: bus queue timeout", map[string]interface{}{
+			"channel": c.name,
+			"chat_id": chatID,
+		})
+	}
 }
 
 func (c *BaseChannel) setRunning(running bool) {

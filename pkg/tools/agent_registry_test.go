@@ -45,8 +45,8 @@ description: Bad agent
 
 	agents := LoadAvailableAgents(dir)
 
-	if len(agents) != 2 {
-		t.Errorf("Expected 2 agents (1 frontmatter + 1 fallback), got %d: %v", len(agents), agents)
+	if len(agents) != 3 {
+		t.Errorf("Expected 3 agents (1 frontmatter + 2 fallback), got %d: %v", len(agents), agents)
 	}
 	if agents[0].Name != "coder" {
 		t.Errorf("Expected name 'coder', got '%s'", agents[0].Name)
@@ -59,6 +59,9 @@ description: Bad agent
 	}
 	if agents[1].Description != "No description configured" {
 		t.Errorf("Expected fallback description, got '%s'", agents[1].Description)
+	}
+	if agents[2].Name != "reviewer" {
+		t.Errorf("Expected fallback name 'reviewer', got '%s'", agents[2].Name)
 	}
 }
 

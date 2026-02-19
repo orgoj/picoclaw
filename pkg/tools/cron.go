@@ -8,6 +8,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/cron"
+	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
@@ -287,21 +288,29 @@ func (t *CronTool) ExecuteJob(ctx context.Context, job *cron.CronJob) string {
 			output = fmt.Sprintf("Scheduled command '%s' executed:\n%s", job.Payload.Command, result.ForLLM)
 		}
 
-		t.msgBus.PublishOutbound(bus.OutboundMessage{
+		if ok := t.msgBus.PublishOutbound(bus.OutboundMessage{
 			Channel: channel,
 			ChatID:  chatID,
 			Content: output,
-		})
+		}); !ok {
+			logger.WarnCF("cron", "Failed to publish scheduled command output: outbound queue timeout", map[string]interface{}{
+				"job_id": job.ID,
+			})
+		}
 		return "ok"
 	}
 
 	// If deliver=true, send message directly without agent processing
 	if job.Payload.Deliver {
-		t.msgBus.PublishOutbound(bus.OutboundMessage{
+		if ok := t.msgBus.PublishOutbound(bus.OutboundMessage{
 			Channel: channel,
 			ChatID:  chatID,
 			Content: job.Payload.Message,
-		})
+		}); !ok {
+			logger.WarnCF("cron", "Failed to publish scheduled message: outbound queue timeout", map[string]interface{}{
+				"job_id": job.ID,
+			})
+		}
 		return "ok"
 	}
 

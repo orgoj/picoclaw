@@ -127,11 +127,18 @@ func (s *Service) sendNotification(ev *events.DeviceEvent) {
 	}
 
 	msg := ev.FormatMessage()
-	msgBus.PublishOutbound(bus.OutboundMessage{
+	if ok := msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel: platform,
 		ChatID:  userID,
 		Content: msg,
-	})
+	}); !ok {
+		logger.WarnCF("devices", "Device notification dropped: outbound queue timeout", map[string]interface{}{
+			"kind":   ev.Kind,
+			"action": ev.Action,
+			"to":     platform,
+		})
+		return
+	}
 
 	logger.InfoCF("devices", "Device notification sent", map[string]interface{}{
 		"kind":   ev.Kind,

@@ -13,6 +13,7 @@ import (
 type ToolRegistry struct {
 	tools map[string]Tool
 	mu    sync.RWMutex
+	exec  sync.Mutex
 }
 
 func NewToolRegistry() *ToolRegistry {
@@ -56,6 +57,10 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 			})
 		return ErrorResult(fmt.Sprintf("tool %q not found", name)).WithError(fmt.Errorf("tool not found"))
 	}
+
+	// Serialize execution to prevent concurrent context mutation on shared tool instances.
+	r.exec.Lock()
+	defer r.exec.Unlock()
 
 	// If tool implements ContextualTool, set context
 	if contextualTool, ok := tool.(ContextualTool); ok && channel != "" && chatID != "" {
