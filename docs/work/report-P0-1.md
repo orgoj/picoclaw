@@ -1,70 +1,49 @@
-# Report: P0-1 Telegram Error Handling Enhancement
+# P0-1 COMPLETE: API Retry Logic Fix
 
 ## Summary
-Enhanced the `formatErrorMessage` function in `pkg/agent/loop.go` to provide more specific error messages and inject error details into session history.
+Fixed API retry logic in `pkg/agent/loop.go` to handle 5xx errors and rate limits properly.
 
 ## Changes Made
 
-### 1. `pkg/agent/loop.go`
-
-**Function Signature Update:**
+### 1. Extended Retryable Errors
+Added 5xx server errors to the retryable condition:
 ```go
-// Before
-func (al *AgentLoop) formatErrorMessage(err error) string
-
-// After  
-func (al *AgentLoop) formatErrorMessage(err error, sessionKey string) string
+strings.Contains(errStr, "status=5") ||
+strings.Contains(errStr, "500") ||
+strings.Contains(errStr, "502") ||
+strings.Contains(errStr, "503") ||
+strings.Contains(errStr, "504")
 ```
 
-**Error Message Mapping:**
-| Error Type | Pattern Matched | User Message |
-|------------|-----------------|--------------|
-| Timeout | `timeout`, `context deadline exceeded` | ⏱️ API timeout (z.ai) - please try again |
-| Rate Limit | `429`, `rate limit`, `too many requests` | 🚦 API rate limited - waiting... |
-| Server Error | `status=5`, `500`, `502`, `503`, `504` | ⚠️ API error: status=XXX - temporary issue |
-| Connection Refused | `connection refused` | 🔌 Network error: connection refused |
-| Network Unreachable | `network is unreachable` | 🔌 Network error: network unreachable |
-| Connection Interrupted | `unexpected EOF`, `connection reset` | 🔌 Network error: connection interrupted |
-| Generic API Error | `API request failed` | ⚠️ API request failed - please try again |
-| LLM Error | `LLM call failed` | ⚠️ Failed to communicate with AI service |
-| Fallback | Any other error | ⚠️ An error occurred: [error] |
-
-**Session History Injection:**
+### 2. Rate Limit (429) Special Handling
 ```go
-// Inject error details into session history so agent knows what happened
-if sessionKey != "" && errorDetails != "" {
-    al.sessions.AddMessage(sessionKey, "system", errorDetails)
+isRateLimit := strings.Contains(errStr, "429") ||
+    strings.Contains(errStr, "rate limit") ||
+    strings.Contains(errStr, "too many requests")
+
+if isRateLimit && retry < maxRetries {
+    waitTime := time.Duration(10*(retry+1)) * time.Second // 10s, 20s, 30s
+    // ... logging
+    time.Sleep(waitTime)
+    continue
 }
 ```
 
-### 2. `pkg/agent/loop_error_test.go`
-- Updated test cases to match new specific error messages
-- Added test for session key parameter
-- Added new test cases: rate limit (429), server errors (503), network unreachable
+### 3. Exponential Backoff for Other Errors
+Changed from linear (`1s, 2s, 3s`) to exponential (`2s, 4s, 8s`):
+```go
+waitTime := time.Duration(2<<(retry)) * time.Second
+```
 
-## Testing
-All 12 tests pass:
-```
-=== RUN   TestFormatErrorMessage
-    --- PASS: TestFormatErrorMessage/timeout_error
-    --- PASS: TestFormatErrorMessage/unexpected_EOF
-    --- PASS: TestFormatErrorMessage/connection_reset
-    --- PASS: TestFormatErrorMessage/rate_limit_429
-    --- PASS: TestFormatErrorMessage/server_error_500
-    --- PASS: TestFormatErrorMessage/server_error_503
-    --- PASS: TestFormatErrorMessage/connection_refused
-    --- PASS: TestFormatErrorMessage/network_unreachable
-    --- PASS: TestFormatErrorMessage/LLM_call_failed
-    --- PASS: TestFormatErrorMessage/generic_error
-```
+## Test Results
+- ✅ Build: SUCCESS
+- ✅ Tests: All packages pass
+- ✅ Commit: `f67fe85`
+
+## File Modified
+- `pkg/agent/loop.go` (lines 521-577)
 
 ## Commit
 ```
-c363ced fix: improve API error messages with specific details
+fix: improve API retry logic with 5xx support and exponential backoff
 ```
-
-## Verification
-- ✅ Code compiles (`go build ./...`)
-- ✅ All tests pass (`go test ./pkg/agent/...`)
-- ✅ No breaking changes (existing functionality preserved)
-- ✅ Panic recovery still works (unchanged)
