@@ -289,7 +289,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				response, err := al.processMessage(ctx, msg)
 				if err != nil {
 					// Check if it's an API/network error and provide user-friendly message
-					response = al.formatErrorMessage(err)
+					response = al.formatErrorMessage(err, msg.SessionKey)
 				}
 
 				if response != "" {
@@ -318,41 +318,108 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 }
 
 // formatErrorMessage converts technical errors into user-friendly messages
-func (al *AgentLoop) formatErrorMessage(err error) string {
+// and injects error details into session history so the agent can react
+func (al *AgentLoop) formatErrorMessage(err error, sessionKey string) string {
 	errStr := err.Error()
+	var userMessage string
+	var errorDetails string
 
-	// Check for common API/network errors
-	if strings.Contains(errStr, "unexpected EOF") ||
-		strings.Contains(errStr, "connection reset") ||
-		strings.Contains(errStr, "connection refused") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "network is unreachable") {
-		logger.ErrorCF("agent", "Network/API error occurred", map[string]interface{}{
+	// Check for timeout errors
+	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "context deadline exceeded") {
+		userMessage = "⏱️ API timeout (z.ai) - please try again"
+		errorDetails = fmt.Sprintf("API_TIMEOUT: %s", errStr)
+		logger.ErrorCF("agent", "API timeout error", map[string]interface{}{
 			"error": errStr,
 		})
-		return "⚠️ API service is temporarily unavailable. Please try again in a moment."
+	}
+	// Check for rate limit (429)
+	if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "too many requests") {
+		userMessage = "🚦 API rate limited - waiting..."
+		errorDetails = fmt.Sprintf("API_RATE_LIMIT: %s", errStr)
+		logger.ErrorCF("agent", "API rate limited", map[string]interface{}{
+			"error": errStr,
+		})
 	}
 
-	if strings.Contains(errStr, "API request failed") ||
-		strings.Contains(errStr, "status=") {
+	// Check for 5xx server errors
+	if userMessage == "" && (strings.Contains(errStr, "status=5") || strings.Contains(errStr, "500") || strings.Contains(errStr, "502") || strings.Contains(errStr, "503") || strings.Contains(errStr, "504")) {
+		// Extract status code if present
+		statusCode := "500"
+		for _, code := range []string{"500", "502", "503", "504"} {
+			if strings.Contains(errStr, code) {
+				statusCode = code
+				break
+			}
+		}
+		userMessage = fmt.Sprintf("⚠️ API error: status=%s - temporary issue", statusCode)
+		errorDetails = fmt.Sprintf("API_SERVER_ERROR: %s", errStr)
+		logger.ErrorCF("agent", "API server error", map[string]interface{}{
+			"error": errStr,
+		})
+	}
+
+	// Check for network errors
+	if userMessage == "" && (strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "network is unreachable") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "DNS") ||
+		strings.Contains(errStr, "network")) {
+		// Extract specific network error type
+		if strings.Contains(errStr, "connection refused") {
+			userMessage = "🔌 Network error: connection refused"
+		} else if strings.Contains(errStr, "network is unreachable") {
+			userMessage = "🔌 Network error: network unreachable"
+		} else {
+			userMessage = "🔌 Network error: connection failed"
+		}
+		errorDetails = fmt.Sprintf("NETWORK_ERROR: %s", errStr)
+		logger.ErrorCF("agent", "Network error occurred", map[string]interface{}{
+			"error": errStr,
+		})
+	}
+
+	// Check for connection reset/EOF (could be network or API)
+	if userMessage == "" && (strings.Contains(errStr, "unexpected EOF") || strings.Contains(errStr, "connection reset")) {
+		userMessage = "🔌 Network error: connection interrupted"
+		errorDetails = fmt.Sprintf("CONNECTION_ERROR: %s", errStr)
+		logger.ErrorCF("agent", "Connection error", map[string]interface{}{
+			"error": errStr,
+		})
+	}
+
+	// Check for generic API request failures
+	if userMessage == "" && strings.Contains(errStr, "API request failed") {
+		userMessage = "⚠️ API request failed - please try again"
+		errorDetails = fmt.Sprintf("API_REQUEST_FAILED: %s", errStr)
 		logger.ErrorCF("agent", "API request failed", map[string]interface{}{
 			"error": errStr,
 		})
-		return "⚠️ The AI service encountered an error. Please try again."
 	}
 
-	if strings.Contains(errStr, "LLM call failed") {
+	// Check for LLM call failures
+	if userMessage == "" && strings.Contains(errStr, "LLM call failed") {
+		userMessage = "⚠️ Failed to communicate with AI service - please try again"
+		errorDetails = fmt.Sprintf("LLM_CALL_FAILED: %s", errStr)
 		logger.ErrorCF("agent", "LLM call failed", map[string]interface{}{
 			"error": errStr,
 		})
-		return "⚠️ Failed to communicate with the AI service. Please try again."
 	}
 
-	// Generic error - still log but give user-friendly message
-	logger.ErrorCF("agent", "Error processing message", map[string]interface{}{
-		"error": errStr,
-	})
-	return fmt.Sprintf("⚠️ An error occurred: %s", errStr)
+	// Fallback: Generic error message
+	if userMessage == "" {
+		userMessage = fmt.Sprintf("⚠️ An error occurred: %s", errStr)
+		errorDetails = fmt.Sprintf("GENERIC_ERROR: %s", errStr)
+		logger.ErrorCF("agent", "Error processing message", map[string]interface{}{
+			"error": errStr,
+		})
+	}
+
+	// Inject error details into session history so agent knows what happened
+	if sessionKey != "" && errorDetails != "" {
+		al.sessions.AddMessage(sessionKey, "system", errorDetails)
+	}
+
+	return userMessage
 }
 
 func (al *AgentLoop) Stop() {

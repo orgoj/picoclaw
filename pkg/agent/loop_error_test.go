@@ -36,29 +36,49 @@ func TestFormatErrorMessage(t *testing.T) {
 		contains string
 	}{
 		{
+			name:     "timeout error",
+			err:      errors.New("context deadline exceeded: timeout"),
+			contains: "API timeout",
+		},
+		{
 			name:     "unexpected EOF",
 			err:      errors.New("Post \"https://api.z.ai/api/coding/paas/v4/chat/completions\": unexpected EOF"),
-			contains: "API service is temporarily unavailable",
+			contains: "connection interrupted",
 		},
 		{
 			name:     "connection reset",
 			err:      errors.New("connection reset by peer"),
-			contains: "API service is temporarily unavailable",
+			contains: "connection interrupted",
 		},
 		{
-			name:     "timeout error",
-			err:      errors.New("context deadline exceeded: timeout"),
-			contains: "API service is temporarily unavailable",
+			name:     "rate limit 429",
+			err:      errors.New("API request failed: status=429 - rate limited"),
+			contains: "rate limited",
 		},
 		{
-			name:     "API request failed",
+			name:     "server error 500",
 			err:      errors.New("API request failed: status=500"),
-			contains: "AI service encountered an error",
+			contains: "status=500",
+		},
+		{
+			name:     "server error 503",
+			err:      errors.New("API request failed: status=503"),
+			contains: "status=503",
+		},
+		{
+			name:     "connection refused",
+			err:      errors.New("connection refused"),
+			contains: "connection refused",
+		},
+		{
+			name:     "network unreachable",
+			err:      errors.New("network is unreachable"),
+			contains: "network unreachable",
 		},
 		{
 			name:     "LLM call failed",
 			err:      errors.New("LLM call failed: provider error"),
-			contains: "Failed to communicate with the AI service",
+			contains: "Failed to communicate with AI service",
 		},
 		{
 			name:     "generic error",
@@ -69,7 +89,7 @@ func TestFormatErrorMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := agentLoop.formatErrorMessage(tt.err)
+			result := agentLoop.formatErrorMessage(tt.err, "test-session")
 			if !containsString(result, tt.contains) {
 				t.Errorf("formatErrorMessage() = %q, want to contain %q", result, tt.contains)
 			}
