@@ -4,7 +4,11 @@
 - **Repo:** https://github.com/sipeed/picoclaw
 - **Branch:** `bot` (NE main!)
 - **Jazyk:** Go
-- **Deploy:** User spouští ručně (NE PM2!)
+
+## Deployment (CRITICAL!!!)
+- **JÁ:** commit + push na `bot`
+- **USER:** restart, install, deploy (NIKDY NE dělat já!)
+- Po code review APPROVED → commit → **ČEKÁM NA USER RESTART**
 
 ## API Config
 - **Model:** GLM-5
@@ -26,11 +30,13 @@
 - P1-1: /status enhancement (`7acf286`)
 - P1-2: IDLE subagent status (`9f575ef`)
 - FIX: Telegram strikethrough (`b238401`)
+- FIX: escape před truncate (`128ea8f`)
 
 ## Lekce
 - **Telegram HTML** = `<s>text</s>`, NE `~~text~~` (markdown)
 - Regex pro multiline = `(?s)` flag (DOTALL)
-- Vždy testy na edge cases (multiline, empty, special chars)
+- **Escape PŘED truncate** - ne naopak!
+- Vždy testy na edge cases
 
 ---
 
