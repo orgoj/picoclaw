@@ -54,13 +54,20 @@ type Config struct {
 	Heartbeat HeartbeatConfig `json:"heartbeat"`
 	Idle      IdleConfig      `json:"idle"`
 	Devices   DevicesConfig   `json:"devices"`
+	Ingress   IngressConfig   `json:"ingress"`
 	Logging   LoggingConfig   `json:"logging"`
 	mu        sync.RWMutex
 }
 
 type LoggingConfig struct {
-	Enabled  bool   `json:"enabled" env:"PICOCLAW_LOGGING_ENABLED"`
-	FilePath string `json:"file_path" env:"PICOCLAW_LOGGING_FILE_PATH"`
+	Enabled bool   `json:"enabled" env:"PICOCLAW_LOGGING_ENABLED"`
+	Dir     string `json:"dir" env:"PICOCLAW_LOGGING_DIR"`
+}
+
+type IngressConfig struct {
+	MergeWindowSeconds int    `json:"merge_window_seconds" env:"PICOCLAW_INGRESS_MERGE_WINDOW_SECONDS"`
+	GapNoticeSeconds   int    `json:"gap_notice_seconds" env:"PICOCLAW_INGRESS_GAP_NOTICE_SECONDS"`
+	ConcatPrefix       string `json:"concat_prefix" env:"PICOCLAW_INGRESS_CONCAT_PREFIX"`
 }
 
 // AgentsConfig holds all agent configurations.
@@ -578,9 +585,14 @@ func DefaultConfig() *Config {
 			Enabled:    false,
 			MonitorUSB: true,
 		},
+		Ingress: IngressConfig{
+			MergeWindowSeconds: 3,
+			GapNoticeSeconds:   600,
+			ConcatPrefix:       "+",
+		},
 		Logging: LoggingConfig{
-			Enabled:  false,
-			FilePath: "~/.picoclaw/logs/agent.log",
+			Enabled: false,
+			Dir:     "~/.picoclaw/workspace/logs",
 		},
 	}
 }
@@ -628,6 +640,16 @@ func (c *Config) WorkspacePath() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return expandHome(c.Agents.Defaults.Workspace)
+}
+
+func (c *Config) LoggingDirPath() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	dir := strings.TrimSpace(c.Logging.Dir)
+	if dir == "" {
+		dir = "~/.picoclaw/workspace/logs"
+	}
+	return expandHome(dir)
 }
 
 func (c *Config) GetAPIKey() string {

@@ -1,5 +1,26 @@
 # TODO for picoclaw agents system
 
+## FIX
+
+- [ ] Nedošla mi message na kanály při stisku CTRL C. 
+2026/02/20 09:21:08 [2026-02-20T08:21:08Z] [INFO] tool: Tool execution started {tool=subagent_status, args=map[]}
+^C
+Shutting down...
+[Fri Feb 20 09:31:02 CET 2026] ERROR Execution error editMessageText: request call: context canceled
+[Fri Feb 20 09:31:02 CET 2026] ERROR Execution error sendMessage: request call: context canceled
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] devices: Device event service stopped
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [ERROR] telegram: HTML parse failed, falling back to plain text {error=telego: sendMessage: internal execution: request call: context canceled}
+[Fri Feb 20 09:31:02 CET 2026] ERROR Execution error sendMessage: request call: context canceled
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [ERROR] channels: Error sending message to channel {error=telego: sendMessage: internal execution: request call: context canceled, channel=telegram}
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: Outbound dispatcher stopped
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: Stopping all channels
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: Stopping channel {channel=telegram}
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] telegram: Stopping Telegram bot...
+2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: All channels stopped
+✓ Gateway stopped
+2026/02/20 09:31:11 [2026-02-20T08:31:11Z] [INFO] agent: ZAI Search MCP client connected {endpoint=https://api.z.ai/api/mcp/web_search_prime/mcp}
+To se sakra naučí, jak má být formatovaná message pro telegramu, ale to už je zase chybávalo s posílání message na telegramu. Telegram. To máš mi zapsané v AGENTS.md. 
+
 ## Povedomi o case a message
 
 cil je aby bot chapal casove souvisloti a mohl se podle toho chovat
@@ -10,11 +31,12 @@ cil je aby bot chapal casove souvisloti a mohl se podle toho chovat
   - pocitat kolik bylo bessage idle v rade za sbou
   - pridavat pocitadlo a cas zacatklu a aktualini cas jako nejaka metadata to idle message (aby na ne podle promptu mohl reagovat)
   - nuloat pocitadlo pri message z chanel od usera
-- [ ] k message od usera pridavat casova  metadata (kdy message prisla do fronty)
-  - konfigurovatelna hodnota pro minimalni casovy rozestup od predchozi message (default 10minut)
-  - pokudd je prekrocena prida pak pri injekci message botovy do proptu metadata s upozornemim jaky cas byl od posledni message)
-- [ ] pomohlo by pridava metadata s informaci o poctu message ve fronte pri injekci zpravy ? asi configurovatelne a zkusime to
-- [ ] konfigurovatelne, jestli zpravy z queu dostava pri injekci po jedne a nebo najedno
+- [x] k message od usera pridavat casova  metadata (kdy message prisla do fronty)
+  - [x] konfigurovatelna hodnota pro minimalni casovy rozestup od predchozi message (default 10minut)
+  - [x] pokudd je prekrocena prida pak pri injekci message botovy do proptu metadata s upozornemim jaky cas byl od posledni message)
+- [x] pomohlo by pridava metadata s informaci o poctu message ve fronte pri injekci zpravy ? asi configurovatelne a zkusime to
+- [x] konfigurovatelne, jestli zpravy z queu dostava pri injekci po jedne a nebo najedno
+  - implementovano jako ingress merge okno + prefix `+` (concat)
   - to by mozna chtelo i mit moznost to nejak ovlivnit pri psani zpravy (mozna kdyz bude zacinat + ?)
   - takove zpravy by se concatenovaly automaticky bez ohledu na nastaveni
 

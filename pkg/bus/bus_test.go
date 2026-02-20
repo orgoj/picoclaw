@@ -106,3 +106,70 @@ func TestPublishInboundCritical_DropsOldestWhenFull(t *testing.T) {
 		t.Fatalf("expected critical message at tail, got %q", items[1].Message.Content)
 	}
 }
+
+func TestInsertInboundFirst(t *testing.T) {
+	mb := NewMessageBus()
+	mb.ConfigureIngress(0, 10*time.Minute, "+")
+
+	if _, ok := mb.PublishInboundWithID(InboundMessage{Content: "one", SessionKey: "s"}); !ok {
+		t.Fatal("publish one failed")
+	}
+	if _, ok := mb.PublishInboundWithID(InboundMessage{Content: "two", SessionKey: "s"}); !ok {
+		t.Fatal("publish two failed")
+	}
+	firstID, ok := mb.InsertInboundFirst(InboundMessage{Content: "first", SessionKey: "s"})
+	if !ok {
+		t.Fatal("insert first failed")
+	}
+
+	items := mb.ListInbound()
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(items))
+	}
+	if items[0].ID != firstID || items[0].Message.Content != "first" {
+		t.Fatalf("head item mismatch: got id=%s content=%q", items[0].ID, items[0].Message.Content)
+	}
+	if got := items[0].Message.Metadata["queue_insert_mode"]; got != "head" {
+		t.Fatalf("expected queue_insert_mode=head, got %q", got)
+	}
+}
+
+func TestMergeInboundWithPrefix(t *testing.T) {
+	mb := NewMessageBus()
+	mb.ConfigureIngress(3*time.Second, 10*time.Minute, "+")
+
+	id1, ok := mb.PublishInboundWithID(InboundMessage{
+		Channel:    "telegram",
+		SenderID:   "u1",
+		ChatID:     "c1",
+		SessionKey: "telegram:c1",
+		Content:    "hello",
+	})
+	if !ok {
+		t.Fatal("publish first failed")
+	}
+	id2, ok := mb.PublishInboundWithID(InboundMessage{
+		Channel:    "telegram",
+		SenderID:   "u1",
+		ChatID:     "c1",
+		SessionKey: "telegram:c1",
+		Content:    "+ and one more",
+	})
+	if !ok {
+		t.Fatal("publish second failed")
+	}
+	if id1 != id2 {
+		t.Fatalf("expected merged id to stay %s, got %s", id1, id2)
+	}
+
+	items := mb.ListInbound()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 merged item, got %d", len(items))
+	}
+	if items[0].Message.Content != "hello\nand one more" {
+		t.Fatalf("unexpected merged content: %q", items[0].Message.Content)
+	}
+	if items[0].Message.Metadata["merged"] != "true" {
+		t.Fatalf("expected merged metadata")
+	}
+}

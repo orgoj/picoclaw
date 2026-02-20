@@ -16,7 +16,7 @@ func TestExecuteHeartbeat_Async(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 30, true)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 30, true)
 	hs.stopChan = make(chan struct{}) // Enable for testing
 
 	asyncCalled := false
@@ -54,7 +54,7 @@ func TestExecuteHeartbeat_Error(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 30, true)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 30, true)
 	hs.stopChan = make(chan struct{}) // Enable for testing
 
 	hs.SetHandler(func(prompt, channel, chatID string) *tools.ToolResult {
@@ -73,7 +73,7 @@ func TestExecuteHeartbeat_Error(t *testing.T) {
 	hs.executeHeartbeat()
 
 	// Check log file for error message
-	logFile := filepath.Join(tmpDir, "heartbeat.log")
+	logFile := filepath.Join(tmpDir, "logs", "heartbeat.log")
 	data, err := os.ReadFile(logFile)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
@@ -92,7 +92,7 @@ func TestExecuteHeartbeat_Silent(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 30, true)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 30, true)
 	hs.stopChan = make(chan struct{}) // Enable for testing
 
 	hs.SetHandler(func(prompt, channel, chatID string) *tools.ToolResult {
@@ -111,7 +111,7 @@ func TestExecuteHeartbeat_Silent(t *testing.T) {
 	hs.executeHeartbeat()
 
 	// Check log file for completion message
-	logFile := filepath.Join(tmpDir, "heartbeat.log")
+	logFile := filepath.Join(tmpDir, "logs", "heartbeat.log")
 	data, err := os.ReadFile(logFile)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
@@ -130,7 +130,7 @@ func TestHeartbeatService_StartStop(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 1, true)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 1, true)
 
 	err = hs.Start()
 	if err != nil {
@@ -149,7 +149,7 @@ func TestHeartbeatService_Disabled(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 1, false)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 1, false)
 
 	if hs.enabled != false {
 		t.Error("Expected service to be disabled")
@@ -166,7 +166,7 @@ func TestExecuteHeartbeat_NilResult(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 30, true)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 30, true)
 	hs.stopChan = make(chan struct{}) // Enable for testing
 
 	hs.SetHandler(func(prompt, channel, chatID string) *tools.ToolResult {
@@ -180,7 +180,7 @@ func TestExecuteHeartbeat_NilResult(t *testing.T) {
 	hs.executeHeartbeat()
 }
 
-// TestLogPath verifies heartbeat log is written to workspace directory
+// TestLogPath verifies heartbeat log is written to the configured logs directory.
 func TestLogPath(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "heartbeat-test-*")
 	if err != nil {
@@ -188,13 +188,14 @@ func TestLogPath(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 30, true)
+	logDir := filepath.Join(tmpDir, "logs")
+	hs := NewHeartbeatService(tmpDir, logDir, 30, true)
 
 	// Write a log entry
 	hs.log("INFO", "Test log entry")
 
-	// Verify log file exists at workspace root
-	expectedLogPath := filepath.Join(tmpDir, "heartbeat.log")
+	// Verify log file exists in configured logs directory.
+	expectedLogPath := filepath.Join(logDir, "heartbeat.log")
 	if _, err := os.Stat(expectedLogPath); os.IsNotExist(err) {
 		t.Errorf("Expected log file at %s, but it doesn't exist", expectedLogPath)
 	}
@@ -208,7 +209,7 @@ func TestHeartbeatFilePath(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	hs := NewHeartbeatService(tmpDir, 30, true)
+	hs := NewHeartbeatService(tmpDir, filepath.Join(tmpDir, "logs"), 30, true)
 
 	// Trigger default template creation
 	hs.buildPrompt()

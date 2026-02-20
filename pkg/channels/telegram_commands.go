@@ -9,6 +9,7 @@ import (
 
 	"github.com/mymmrac/telego"
 	"github.com/sipeed/picoclaw/pkg/agent"
+	"github.com/sipeed/picoclaw/pkg/audit"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -21,6 +22,8 @@ type TelegramCommander interface {
 	Start(ctx context.Context, message telego.Message) error
 	Status(ctx context.Context, message telego.Message) error
 	Kill(ctx context.Context, message telego.Message) error
+	Inject(ctx context.Context, message telego.Message) error
+	First(ctx context.Context, message telego.Message) error
 	Urgent(ctx context.Context, message telego.Message) error
 	Models(ctx context.Context, message telego.Message) error
 	Channels(ctx context.Context, message telego.Message) error
@@ -53,7 +56,8 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 		"/status - Show system and subagents status",
 		"/models - List available models",
 		"/channels - List enabled channels",
-		"/urgent MESSAGE - Inject urgent instruction to main agent",
+		"/inject MESSAGE - Immediate priority inject (bypass queue)",
+		"/first MESSAGE - Put message at the start of inbound queue",
 	}
 	if c.config != nil && c.config.Tools.Spawn.Enabled {
 		lines = append(lines, "/kill TASK_ID - Cancel running subagent task")
@@ -386,11 +390,11 @@ func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
 	return err
 }
 
-func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
+func (c *cmd) Inject(ctx context.Context, message telego.Message) error {
 	if c.bus == nil && c.agentLoop == nil {
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Urgent inject is unavailable: neither bus nor agent loop is initialized.",
+			Text:   "Inject is unavailable: neither bus nor agent loop is initialized.",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},
@@ -398,15 +402,11 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 		return err
 	}
 
-	raw := strings.TrimSpace(message.Text)
-	body := ""
-	if idx := strings.Index(raw, " "); idx >= 0 && idx+1 < len(raw) {
-		body = strings.TrimSpace(raw[idx+1:])
-	}
+	body := commandBody(message.Text)
 	if body == "" {
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Usage: /urgent MESSAGE",
+			Text:   "Usage: /inject MESSAGE",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},
@@ -416,19 +416,76 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 
 	sessionKey := fmt.Sprintf("telegram:%d", message.Chat.ID)
 	content := fmt.Sprintf(
-		"<urgent_message priority=\"high\" source=\"telegram:/urgent\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.",
+		"<urgent_message priority=\"high\" source=\"telegram:/inject\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.",
 		body,
 	)
 
 	if c.agentLoop != nil && c.agentLoop.InjectUrgent(sessionKey, content) {
+		audit.Record("telegram_inject_active_run", map[string]interface{}{
+			"session_key": sessionKey,
+			"chat_id":     message.Chat.ID,
+		})
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Urgent message injected into active run.",
+			Text:   "Injected into active run.",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},
 		})
 		return err
+	}
+
+	if c.agentLoop != nil {
+		chatID := fmt.Sprintf("%d", message.Chat.ID)
+		senderID := fmt.Sprintf("%d", message.From.ID)
+
+		_, ackErr := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Inject accepted. Processing now (queue bypass).",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		if ackErr != nil {
+			return ackErr
+		}
+
+		go func(chatID, senderID, sessionKey, content string, telegramChatID int64) {
+			audit.Record("telegram_inject_immediate_start", map[string]interface{}{
+				"session_key": sessionKey,
+				"chat_id":     telegramChatID,
+			})
+			resp, err := c.agentLoop.ProcessImmediate(context.Background(), "telegram", chatID, senderID, sessionKey, content)
+			if err != nil {
+				logger.ErrorCF("telegram", "Immediate inject processing failed", map[string]interface{}{
+					"chat_id":     telegramChatID,
+					"session_key": sessionKey,
+					"error":       err.Error(),
+				})
+				resp = "Inject processing failed. Please retry."
+			} else if strings.TrimSpace(resp) == "" {
+				resp = "Inject processed."
+			}
+			audit.Record("telegram_inject_immediate_done", map[string]interface{}{
+				"session_key":  sessionKey,
+				"chat_id":      telegramChatID,
+				"response_len": len(resp),
+				"error":        errString(err),
+			})
+
+			if _, sendErr := c.bot.SendMessage(context.Background(), &telego.SendMessageParams{
+				ChatID: telego.ChatID{ID: telegramChatID},
+				Text:   resp,
+			}); sendErr != nil {
+				logger.ErrorCF("telegram", "Failed to send immediate inject response", map[string]interface{}{
+					"chat_id":     telegramChatID,
+					"session_key": sessionKey,
+					"error":       sendErr.Error(),
+				})
+			}
+		}(chatID, senderID, sessionKey, content, message.Chat.ID)
+
+		return nil
 	}
 
 	if c.bus != nil {
@@ -440,32 +497,118 @@ func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
 			SessionKey: sessionKey,
 			Metadata: map[string]string{
 				"urgent": "true",
-				"source": "telegram:/urgent",
+				"source": "telegram:/inject",
 			},
 		})
 		if ok {
+			audit.Record("telegram_inject_queued_fallback", map[string]interface{}{
+				"session_key": sessionKey,
+				"chat_id":     message.Chat.ID,
+				"queue_id":    id,
+			})
 			_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 				ChatID: telego.ChatID{ID: message.Chat.ID},
-				Text:   fmt.Sprintf("Urgent message queued (no active run). Queue ID: %s", id),
+				Text:   fmt.Sprintf("Inject queued (fallback). Queue ID: %s", id),
 				ReplyParameters: &telego.ReplyParameters{
 					MessageID: message.MessageID,
 				},
 			})
 			return err
 		}
-		logger.WarnCF("telegram", "Urgent message dropped: inbound queue timeout", map[string]interface{}{
+		logger.WarnCF("telegram", "Inject message dropped: inbound queue timeout", map[string]interface{}{
 			"chat_id": message.Chat.ID,
 		})
 	}
 
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
-		Text:   "Failed to enqueue urgent message.",
+		Text:   "Failed to process inject message.",
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
 	})
 	return err
+}
+
+func (c *cmd) First(ctx context.Context, message telego.Message) error {
+	if c.bus == nil {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Queue is unavailable.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	body := commandBody(message.Text)
+	if body == "" {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Usage: /first MESSAGE",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	sessionKey := fmt.Sprintf("telegram:%d", message.Chat.ID)
+	id, ok := c.bus.InsertInboundFirst(bus.InboundMessage{
+		Channel:    "telegram",
+		SenderID:   fmt.Sprintf("%d", message.From.ID),
+		ChatID:     fmt.Sprintf("%d", message.Chat.ID),
+		Content:    body,
+		SessionKey: sessionKey,
+		Metadata: map[string]string{
+			"source": "telegram:/first",
+		},
+	})
+	if !ok {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "Failed to move message to queue head.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+	audit.Record("telegram_first_queued_head", map[string]interface{}{
+		"session_key": sessionKey,
+		"chat_id":     message.Chat.ID,
+		"queue_id":    id,
+	})
+
+	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID: telego.ChatID{ID: message.Chat.ID},
+		Text:   fmt.Sprintf("Queued at head. Queue ID: %s", id),
+		ReplyParameters: &telego.ReplyParameters{
+			MessageID: message.MessageID,
+		},
+	})
+	return err
+}
+
+// Urgent is kept as backward-compatible alias for /inject.
+func (c *cmd) Urgent(ctx context.Context, message telego.Message) error {
+	return c.Inject(ctx, message)
+}
+
+func commandBody(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if idx := strings.Index(raw, " "); idx >= 0 && idx+1 < len(raw) {
+		return strings.TrimSpace(raw[idx+1:])
+	}
+	return ""
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // formatTimeShort formats Unix millisecond timestamp to HH:MM:SS

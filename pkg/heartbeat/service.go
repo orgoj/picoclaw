@@ -34,6 +34,7 @@ type HeartbeatHandler func(prompt, channel, chatID string) *tools.ToolResult
 // HeartbeatService manages periodic heartbeat checks
 type HeartbeatService struct {
 	workspace string
+	logDir    string
 	bus       *bus.MessageBus
 	state     *state.Manager
 	handler   HeartbeatHandler
@@ -44,7 +45,7 @@ type HeartbeatService struct {
 }
 
 // NewHeartbeatService creates a new heartbeat service
-func NewHeartbeatService(workspace string, intervalMinutes int, enabled bool) *HeartbeatService {
+func NewHeartbeatService(workspace, logDir string, intervalMinutes int, enabled bool) *HeartbeatService {
 	// Apply minimum interval
 	if intervalMinutes < minIntervalMinutes && intervalMinutes != 0 {
 		intervalMinutes = minIntervalMinutes
@@ -56,6 +57,7 @@ func NewHeartbeatService(workspace string, intervalMinutes int, enabled bool) *H
 
 	return &HeartbeatService{
 		workspace: workspace,
+		logDir:    logDir,
 		interval:  time.Duration(intervalMinutes) * time.Minute,
 		enabled:   enabled,
 		state:     state.NewManager(workspace),
@@ -361,7 +363,14 @@ func (hs *HeartbeatService) logWarn(format string, args ...any) {
 
 // log writes a message to the heartbeat log file
 func (hs *HeartbeatService) log(level, format string, args ...any) {
-	logFile := filepath.Join(hs.workspace, "heartbeat.log")
+	logDir := hs.logDir
+	if strings.TrimSpace(logDir) == "" {
+		logDir = filepath.Join(hs.workspace, "logs")
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return
+	}
+	logFile := filepath.Join(logDir, "heartbeat.log")
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return

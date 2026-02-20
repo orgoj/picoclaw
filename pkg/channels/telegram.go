@@ -123,6 +123,14 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	}, th.CommandEqual("status"))
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
+		return c.commands.Inject(ctx, message)
+	}, th.CommandEqual("inject"))
+
+	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
+		return c.commands.First(ctx, message)
+	}, th.CommandEqual("first"))
+
+	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.commands.Urgent(ctx, message)
 	}, th.CommandEqual("urgent"))
 
@@ -147,7 +155,8 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 			{Command: "start", Description: "Start the bot"},
 			{Command: "help", Description: "Show available commands"},
 			{Command: "status", Description: "Show system and subagents status"},
-			{Command: "urgent", Description: "Inject urgent message to main agent"},
+			{Command: "inject", Description: "Inject message now (queue bypass)"},
+			{Command: "first", Description: "Queue message at the head"},
 			{Command: "kill", Description: "Cancel subagent by task ID"},
 			{Command: "models", Description: "List configured models"},
 			{Command: "channels", Description: "List available channels"},
@@ -158,7 +167,8 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 			{Command: "start", Description: "Start the bot"},
 			{Command: "help", Description: "Show available commands"},
 			{Command: "status", Description: "Show system and subagents status"},
-			{Command: "urgent", Description: "Inject urgent message to main agent"},
+			{Command: "inject", Description: "Inject message now (queue bypass)"},
+			{Command: "first", Description: "Queue message at the head"},
 			{Command: "models", Description: "List configured models"},
 			{Command: "channels", Description: "List available channels"},
 		}

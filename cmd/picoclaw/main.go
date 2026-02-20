@@ -25,6 +25,7 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/sipeed/picoclaw/pkg/adminapi"
 	"github.com/sipeed/picoclaw/pkg/agent"
+	"github.com/sipeed/picoclaw/pkg/audit"
 	"github.com/sipeed/picoclaw/pkg/auth"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/channels"
@@ -49,7 +50,7 @@ import (
 var embeddedFiles embed.FS
 
 var (
-	version   = "dev"
+	version   = "v0.1.3-dev"
 	gitCommit string
 	buildTime string
 	goVersion string
@@ -385,15 +386,8 @@ func setupLogging(cfg *config.Config) {
 		return
 	}
 
-	logPath := cfg.Logging.FilePath
-	if strings.HasPrefix(logPath, "~") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Printf("Warning: could not determine home directory for logging: %v\n", err)
-			return
-		}
-		logPath = filepath.Join(home, logPath[1:])
-	}
+	logDir := cfg.LoggingDirPath()
+	logPath := filepath.Join(logDir, "agent.log")
 
 	// Rotate existing log file before opening new one
 	if _, err := os.Stat(logPath); err == nil {
@@ -408,13 +402,16 @@ func setupLogging(cfg *config.Config) {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
-		fmt.Printf("Warning: could not create log directory %s: %v\n", filepath.Dir(logPath), err)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Printf("Warning: could not create log directory %s: %v\n", logDir, err)
 		return
 	}
 
 	if err := logger.EnableFileLogging(logPath); err != nil {
 		fmt.Printf("Warning: could not enable file logging at %s: %v\n", logPath, err)
+	}
+	if err := audit.Enable(logDir); err != nil {
+		fmt.Printf("Warning: could not enable audit logging at %s: %v\n", logDir, err)
 	}
 
 	// Log version info immediately after enabling file logging
@@ -424,6 +421,7 @@ func setupLogging(cfg *config.Config) {
 		"build_time": buildTime,
 		"os":         runtime.GOOS,
 		"arch":       runtime.GOARCH,
+		"log_dir":    logDir,
 	})
 }
 
@@ -467,6 +465,11 @@ func agentCmd() {
 	}
 
 	msgBus := bus.NewMessageBus()
+	msgBus.ConfigureIngress(
+		time.Duration(cfg.Ingress.MergeWindowSeconds)*time.Second,
+		time.Duration(cfg.Ingress.GapNoticeSeconds)*time.Second,
+		cfg.Ingress.ConcatPrefix,
+	)
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
 
 	// Enable file logging if configured
@@ -664,6 +667,7 @@ func gatewayCmd() {
 
 	heartbeatService := heartbeat.NewHeartbeatService(
 		cfg.WorkspacePath(),
+		cfg.LoggingDirPath(),
 		cfg.Heartbeat.Interval,
 		cfg.Heartbeat.Enabled,
 	)

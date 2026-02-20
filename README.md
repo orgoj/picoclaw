@@ -64,7 +64,7 @@ Snapshot date: 2026-02-20
 Major additions in this fork branch:
 
 - Agent orchestration: named sub-agents with persistent identity/memory, configurable sub-agent limits/timeouts, richer startup context injection, and non-silent sub-agent completion guarantees.
-- Telegram operations: `/status`, `/models`, `/help`, `/urgent` improvements, HTML-safe status formatting, queue ID feedback, and channel-aware shutdown notices.
+- Telegram operations: `/status`, `/models`, `/help`, `/inject`, `/first` and `/urgent` alias improvements, HTML-safe status formatting, queue ID feedback, and channel-aware shutdown notices.
 - Runtime control plane: bounded editable inbound queue, urgent/supervisor message injection into active loops, health/admin APIs for queue and session history.
 - Web observability: minimal dashboard plus SSE snapshot stream (`EventSource`) for live status.
 - Reliability and safety hardening: loop empty-response retry, bounded bus/retry waits, AGENTS bootstrap checks with warning-only preflight mode, and stricter memory path write guards.
@@ -1121,7 +1121,15 @@ When no message is received for `timeout_minutes`, the agent reads `IDLE.md` fro
 | Option | Default | Description |
 |--------|---------|-------------|
 | `enabled` | `false` | Enable file logging |
-| `file_path` | `~/.picoclaw/logs/agent.log` | Log file path |
+| `dir` | `~/.picoclaw/workspace/logs` | Directory for runtime logs (`agent.log`, `heartbeat.log`, `audit.jsonl`) |
+
+#### Ingress
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `merge_window_seconds` | `3` | Auto-merge queued messages from the same session/sender within this window |
+| `gap_notice_seconds` | `600` | Mark long silence gaps in message metadata/context |
+| `concat_prefix` | `+` | Force-merge marker for quick follow-up messages |
 
 #### Devices
 
@@ -1336,9 +1344,14 @@ picoclaw agent -m "Hello"
     "enabled": false,
     "monitor_usb": true
   },
+  "ingress": {
+    "merge_window_seconds": 3,
+    "gap_notice_seconds": 600,
+    "concat_prefix": "+"
+  },
   "logging": {
     "enabled": false,
-    "file_path": "~/.picoclaw/logs/agent.log"
+    "dir": "~/.picoclaw/workspace/logs"
   }
 }
 ```

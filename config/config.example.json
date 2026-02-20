@@ -179,6 +179,11 @@
     "enabled": false,
     "monitor_usb": true
   },
+  "ingress": {
+    "merge_window_seconds": 3,
+    "gap_notice_seconds": 600,
+    "concat_prefix": "+"
+  },
   "gateway": {
     "host": "0.0.0.0",
     "port": 18790,
@@ -194,6 +199,6 @@
   },
   "logging": {
     "enabled": false,
-    "file_path": "~/.picoclaw/logs/agent.log"
+    "dir": "~/.picoclaw/workspace/logs"
   }
 }

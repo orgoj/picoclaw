@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sipeed/picoclaw/pkg/audit"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -683,6 +684,43 @@ func (al *AgentLoop) ProcessDirectWithChannel(ctx context.Context, content, sess
 	return al.processMessage(ctx, msg)
 }
 
+// ProcessImmediate bypasses inbound queue consumption and processes a message now.
+// This is intended for operator-level urgent commands that must not wait in queue.
+func (al *AgentLoop) ProcessImmediate(ctx context.Context, channel, chatID, senderID, sessionKey, content string) (string, error) {
+	channel = strings.TrimSpace(channel)
+	chatID = strings.TrimSpace(chatID)
+	senderID = strings.TrimSpace(senderID)
+	sessionKey = strings.TrimSpace(sessionKey)
+	content = strings.TrimSpace(content)
+
+	if channel == "" {
+		channel = "cli"
+	}
+	if chatID == "" {
+		chatID = "direct"
+	}
+	if senderID == "" {
+		senderID = "urgent"
+	}
+	if sessionKey == "" {
+		sessionKey = fmt.Sprintf("%s:%s", channel, chatID)
+	}
+
+	msg := bus.InboundMessage{
+		Channel:    channel,
+		SenderID:   senderID,
+		ChatID:     chatID,
+		Content:    content,
+		SessionKey: sessionKey,
+		Metadata: map[string]string{
+			"source": "direct-immediate",
+			"urgent": "true",
+		},
+	}
+
+	return al.processMessage(ctx, msg)
+}
+
 // ProcessHeartbeat processes a heartbeat request without session history.
 // Each heartbeat is independent and doesn't accumulate context.
 func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, chatID string) (string, error) {
@@ -713,10 +751,21 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 			"sender_id":   msg.SenderID,
 			"session_key": msg.SessionKey,
 		})
+	audit.Record("agent_process_message", map[string]interface{}{
+		"channel":     msg.Channel,
+		"chat_id":     msg.ChatID,
+		"sender_id":   msg.SenderID,
+		"session_key": msg.SessionKey,
+	})
 
 	// Route system messages to processSystemMessage
 	if msg.Channel == "system" {
 		return al.processSystemMessage(ctx, msg)
+	}
+
+	userMessage := msg.Content
+	if extra := buildTimingContextNote(msg.Metadata); extra != "" {
+		userMessage = extra + "\n\n" + userMessage
 	}
 
 	// Process as user message
@@ -724,11 +773,40 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		SessionKey:      msg.SessionKey,
 		Channel:         msg.Channel,
 		ChatID:          msg.ChatID,
-		UserMessage:     msg.Content,
+		UserMessage:     userMessage,
 		DefaultResponse: "I've completed processing but have no response to give.",
 		EnableSummary:   true,
 		SendResponse:    false,
 	})
+}
+
+func buildTimingContextNote(meta map[string]string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, 4)
+	if delta := strings.TrimSpace(meta["delta_since_prev_ms"]); delta != "" {
+		parts = append(parts, "delta_since_prev_ms="+delta)
+	}
+	if queueLen := strings.TrimSpace(meta["queue_len_at_enqueue"]); queueLen != "" {
+		parts = append(parts, "queue_len_at_enqueue="+queueLen)
+	}
+	if recv := strings.TrimSpace(meta["received_at"]); recv != "" {
+		parts = append(parts, "received_at="+recv)
+	}
+	if enq := strings.TrimSpace(meta["enqueued_at"]); enq != "" {
+		parts = append(parts, "enqueued_at="+enq)
+	}
+	if len(parts) == 0 && !strings.EqualFold(strings.TrimSpace(meta["gap_notice"]), "true") {
+		return ""
+	}
+
+	prefix := "<timing_context>"
+	if strings.EqualFold(strings.TrimSpace(meta["gap_notice"]), "true") {
+		prefix = "<timing_context gap_notice=\"true\">"
+	}
+	return prefix + "\n" + strings.Join(parts, "\n") + "\n</timing_context>"
 }
 
 func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
@@ -799,6 +877,12 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 // It handles context building, LLM calls, tool execution, and response handling.
 func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (string, error) {
 	runID := al.nextRunID(opts.SessionKey)
+	audit.Record("agent_run_start", map[string]interface{}{
+		"run_id":      runID,
+		"session_key": opts.SessionKey,
+		"channel":     opts.Channel,
+		"chat_id":     opts.ChatID,
+	})
 	al.markSessionRunStart(opts.SessionKey)
 	defer al.markSessionRunEnd(opts.SessionKey)
 	logger.InfoCF("agent", "Run started", map[string]interface{}{
@@ -843,6 +927,11 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	// 3. Run LLM iteration loop
 	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(ctx, messages, opts, runID)
 	if err != nil {
+		audit.Record("agent_run_error", map[string]interface{}{
+			"run_id":      runID,
+			"session_key": opts.SessionKey,
+			"error":       err.Error(),
+		})
 		return "", err
 	}
 
@@ -890,8 +979,20 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		})
 
 	if sentUserViaTool {
+		audit.Record("agent_run_done", map[string]interface{}{
+			"run_id":        runID,
+			"session_key":   opts.SessionKey,
+			"iterations":    iteration,
+			"sent_via_tool": true,
+		})
 		return "", nil
 	}
+	audit.Record("agent_run_done", map[string]interface{}{
+		"run_id":       runID,
+		"session_key":  opts.SessionKey,
+		"iterations":   iteration,
+		"response_len": len(finalContent),
+	})
 
 	return finalContent, nil
 }
