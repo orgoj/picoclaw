@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.22 - 2026-02-20
+
+### Changed
+- Subagent runtime config branch is now strict and standalone: runtime no longer uses `agents.defaults.max_tokens_subagent` fallback.
+- Subagent context sizing now derives from `agents.subagents.max_tokens` (or named override via `agents.<name>.max_tokens`).
+- Added per-named-agent concurrency override: `agents.<name>.max_concurrent_subagents` on top of global `agents.defaults.max_concurrent_subagents`.
+
+### Docs
+- Updated `config/config.example.json` and README to remove deprecated `*_subagent` runtime keys and document per-named-agent concurrency control.
+
+## v0.1.21 - 2026-02-20
+
+### Changed
+- Subagent iteration limit resolution is now deterministic: `agents.subagents.max_iterations` is the baseline, with optional `agents.<name>.max_iterations` override.
+- Removed runtime use of `agents.defaults.max_iterations_subagent` for subagent loop limits.
+- Subagent model selection is now configurable via `agents.subagents.model` with optional per-named-agent override `agents.<name>.model`.
+
+### Docs
+- Updated `config/config.example.json` and README config references to reflect current subagent schema and model/iteration controls.
+
 ## v0.1.20 - 2026-02-20
 
 ### Fixed

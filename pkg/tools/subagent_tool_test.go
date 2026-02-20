@@ -61,8 +61,9 @@ func (m *EmptyResponseProvider) GetContextWindow() int {
 func testConfig() *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Agents.Defaults.Model = "test-model"
-	cfg.Agents.Defaults.MaxIterationsSubagent = 5
-	cfg.Agents.Defaults.MaxTokensSubagent = 1024
+	cfg.Agents.Subagents.Model = "test-model"
+	cfg.Agents.Subagents.MaxIterations = 5
+	cfg.Agents.Subagents.MaxTokens = 1024
 	cfg.Agents.Defaults.LLMTimeout = 30
 	return cfg
 }

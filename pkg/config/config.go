@@ -84,19 +84,23 @@ type AgentsConfig struct {
 // SubagentsConfig holds default configuration for anonymous subagents.
 // These settings apply when no named agent is specified.
 type SubagentsConfig struct {
+	Model                   string  `json:"model" env:"PICOCLAW_AGENTS_SUBAGENTS_MODEL"`
 	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOKENS"`
 	MaxIterations           int     `json:"max_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_ITERATIONS"`
 	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_SUBAGENTS_TEMPERATURE"`
 	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_SUBAGENTS_HISTORY_MESSAGE_THRESHOLD"`
+	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_CONCURRENT_SUBAGENTS"`
 }
 
 // NamedAgentConfig holds configuration for a named agent.
-// All fields are optional and will be merged with defaults.
+// All fields are optional and will be merged with subagents baseline.
 type NamedAgentConfig struct {
+	Model                   string  `json:"model"`
 	MaxTokens               int     `json:"max_tokens"`
 	MaxIterations           int     `json:"max_iterations"`
 	Temperature             float64 `json:"temperature"`
 	HistoryMessageThreshold int     `json:"history_message_threshold"`
+	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for AgentsConfig.
@@ -154,6 +158,7 @@ func (a *AgentsConfig) UnmarshalJSON(data []byte) error {
 
 // ResolvedAgentConfig is the final merged configuration for an agent.
 type ResolvedAgentConfig struct {
+	Model                   string
 	MaxTokens               int
 	MaxIterations           int
 	Temperature             float64
@@ -161,40 +166,32 @@ type ResolvedAgentConfig struct {
 }
 
 // ResolveAgentConfig returns the merged configuration for a given agent name.
-// Priority: named_agent > subagents > defaults
+// Priority: named_agent > subagents
 //
-// If name is empty "", returns subagents config merged with defaults.
-// If name exists in NamedAgents, returns that named config merged with defaults.
-// If name doesn't exist, returns defaults (for subagent compatibility).
+// If name is empty "", returns subagents config.
+// If name exists in NamedAgents, returns that named config merged with subagents.
+// If name doesn't exist, returns subagents config.
 func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
-	// Start with defaults
+	// Start with subagents baseline for deterministic subagent behavior.
 	result := ResolvedAgentConfig{
-		MaxTokens:               a.Defaults.MaxTokensSubagent,
-		MaxIterations:           a.Defaults.MaxIterationsSubagent,
-		Temperature:             a.Defaults.Temperature,
-		HistoryMessageThreshold: a.Defaults.HistoryMessageThreshold,
+		Model:                   a.Subagents.Model,
+		MaxTokens:               a.Subagents.MaxTokens,
+		MaxIterations:           a.Subagents.MaxIterations,
+		Temperature:             a.Subagents.Temperature,
+		HistoryMessageThreshold: a.Subagents.HistoryMessageThreshold,
 	}
 
-	// If name is empty, this is an anonymous subagent - apply subagents config
+	// If name is empty, this is an anonymous subagent.
 	if name == "" {
-		if a.Subagents.MaxTokens > 0 {
-			result.MaxTokens = a.Subagents.MaxTokens
-		}
-		if a.Subagents.MaxIterations > 0 {
-			result.MaxIterations = a.Subagents.MaxIterations
-		}
-		if a.Subagents.Temperature > 0 {
-			result.Temperature = a.Subagents.Temperature
-		}
-		if a.Subagents.HistoryMessageThreshold > 0 {
-			result.HistoryMessageThreshold = a.Subagents.HistoryMessageThreshold
-		}
 		return result
 	}
 
 	// Check if this named agent exists
 	if named, ok := a.NamedAgents[name]; ok {
-		// Named agent config overrides defaults
+		// Named agent config overrides subagents baseline.
+		if strings.TrimSpace(named.Model) != "" {
+			result.Model = named.Model
+		}
 		if named.MaxTokens > 0 {
 			result.MaxTokens = named.MaxTokens
 		}
@@ -212,6 +209,22 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 	return result
 }
 
+// ResolveMaxConcurrentSubagents returns max concurrent subagents limit.
+// Priority: named_agent > subagents > defaults.
+func (a *AgentsConfig) ResolveMaxConcurrentSubagents(name string) int {
+	limit := a.Defaults.MaxConcurrentSubagents
+	if a.Subagents.MaxConcurrentSubagents > 0 {
+		limit = a.Subagents.MaxConcurrentSubagents
+	}
+	if name == "" {
+		return limit
+	}
+	if named, ok := a.NamedAgents[name]; ok && named.MaxConcurrentSubagents > 0 {
+		return named.MaxConcurrentSubagents
+	}
+	return limit
+}
+
 type AgentDefaults struct {
 	Workspace               string   `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
 	RestrictToWorkspace     bool     `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
@@ -222,8 +235,6 @@ type AgentDefaults struct {
 	ContextWindow           int      `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
 	Temperature             float64  `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
 	MaxToolIterations       int      `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
-	MaxIterationsSubagent   int      `json:"max_iterations_subagent"`
-	MaxTokensSubagent       int      `json:"max_tokens_subagent"`
 	MaxConcurrentSubagents  int      `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_CONCURRENT_SUBAGENTS"`
 	LLMTimeout              int      `json:"llm_timeout"`
 	LLMMaxRetries           int      `json:"llm_max_retries" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_MAX_RETRIES"`
@@ -437,8 +448,6 @@ func DefaultConfig() *Config {
 				ContextWindow:           131072, // 128K tokens default context window
 				Temperature:             0.7,
 				MaxToolIterations:       20,
-				MaxIterationsSubagent:   20,
-				MaxTokensSubagent:       4096,
 				MaxConcurrentSubagents:  2,
 				LLMTimeout:              120,
 				LLMMaxRetries:           2,
@@ -451,10 +460,12 @@ func DefaultConfig() *Config {
 				HistoryMessageThreshold: 100,
 			},
 			Subagents: SubagentsConfig{
+				Model:                   "glm-4.7",
 				MaxTokens:               4096,
 				MaxIterations:           20,
 				Temperature:             0.7,
 				HistoryMessageThreshold: 100,
+				MaxConcurrentSubagents:  2,
 			},
 		},
 		Channels: ChannelsConfig{
@@ -811,8 +822,8 @@ func (c *Config) FormatConfigForLog() string {
 
 	// Subagent config
 	sb.WriteString("\n### Subagent Config\n")
-	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Defaults.MaxTokensSubagent))
-	sb.WriteString(fmt.Sprintf("- max_iterations: %d\n", c.Agents.Defaults.MaxIterationsSubagent))
+	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Subagents.MaxTokens))
+	sb.WriteString(fmt.Sprintf("- max_iterations: %d\n", c.Agents.Subagents.MaxIterations))
 
 	return sb.String()
 }

@@ -27,3 +27,10 @@
 - [ ] legacy config migrace bez `agents.defaults.provider` (jen kdyz budeme chtit zpetnou kompatibilitu)
   - upstream referencni commit: `58b5e21`
   - zatim low priority, pokud necilime na stare konfigurace
+
+## Config parity (high priority)
+
+- [ ] sjednotit datovou strukturu `agents.defaults` a `agents.subagents` (plus `agents.<name>` override) do plne parity
+  - subagent runtime ma mit stejne konfigurovatelne limity jako main agent (timeout/retries/backoff/context apod.)
+  - zavest jeden resolver/runtime profil pro main i subagent beh
+  - `config/config.example.json` drzet 1:1 se skutecnym runtime chovanim po dodelani parity

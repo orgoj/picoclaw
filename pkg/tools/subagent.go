@@ -35,55 +35,38 @@ type SubagentTask struct {
 }
 
 type SubagentManager struct {
-	tasks                   map[string]*SubagentTask
-	cancels                 map[string]context.CancelFunc
-	mu                      sync.RWMutex
-	provider                providers.LLMProvider
-	defaultModel            string
-	bus                     *bus.MessageBus
-	workspace               string
-	tools                   *ToolRegistry
-	cfg                     *config.Config
-	maxIterations           int
-	maxTokens               int
-	contextLimit            int // Max total chars in subagent message history (0 = no limit)
-	historyMessageThreshold int // Max number of messages before trimming (0 = no limit)
-	maxConcurrentSubagents  int // Max number of concurrently running subagents
-	nextID                  int
+	tasks                  map[string]*SubagentTask
+	cancels                map[string]context.CancelFunc
+	mu                     sync.RWMutex
+	provider               providers.LLMProvider
+	bus                    *bus.MessageBus
+	workspace              string
+	tools                  *ToolRegistry
+	cfg                    *config.Config
+	maxConcurrentSubagents int // Max number of concurrently running subagents
+	nextID                 int
 }
 
 func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, workspace string, bus *bus.MessageBus) *SubagentManager {
-	// Derive context limit from max output tokens.
-	// Rough estimate: 4 chars/token × 20× input/output ratio.
-	// E.g. MaxTokensSubagent=4096 → ~81K chars ≈ 20K tokens context.
-	contextLimit := cfg.Agents.Defaults.MaxTokensSubagent * 20
-	if contextLimit <= 0 {
-		contextLimit = 4096 * 20 // fallback default
-	}
-
-	// Get default subagent config (for anonymous subagents)
-	defaultCfg := cfg.Agents.ResolveAgentConfig("")
-	msgThreshold := defaultCfg.HistoryMessageThreshold
-	if msgThreshold <= 0 {
-		msgThreshold = 100
-	}
-
 	return &SubagentManager{
-		tasks:                   make(map[string]*SubagentTask),
-		cancels:                 make(map[string]context.CancelFunc),
-		provider:                provider,
-		defaultModel:            cfg.Agents.Defaults.Model,
-		bus:                     bus,
-		workspace:               workspace,
-		tools:                   NewToolRegistry(),
-		cfg:                     cfg,
-		maxIterations:           defaultCfg.MaxIterations,
-		maxTokens:               defaultCfg.MaxTokens,
-		contextLimit:            contextLimit,
-		historyMessageThreshold: msgThreshold,
-		maxConcurrentSubagents:  cfg.Agents.Defaults.MaxConcurrentSubagents,
-		nextID:                  1,
+		tasks:                  make(map[string]*SubagentTask),
+		cancels:                make(map[string]context.CancelFunc),
+		provider:               provider,
+		bus:                    bus,
+		workspace:              workspace,
+		tools:                  NewToolRegistry(),
+		cfg:                    cfg,
+		maxConcurrentSubagents: cfg.Agents.Defaults.MaxConcurrentSubagents,
+		nextID:                 1,
 	}
+}
+
+func subagentContextLimit(maxTokens int) int {
+	if maxTokens <= 0 {
+		return 0
+	}
+	// Rough estimate: 4 chars/token × 20× input/output ratio.
+	return maxTokens * 20
 }
 
 // SetTools sets the tool registry for subagent execution.
@@ -112,6 +95,16 @@ func (sm *SubagentManager) countRunningTasks() int {
 	return count
 }
 
+func (sm *SubagentManager) countRunningTasksByName(name string) int {
+	count := 0
+	for _, task := range sm.tasks {
+		if task.Status == "running" && task.Name == name {
+			count++
+		}
+	}
+	return count
+}
+
 func (sm *SubagentManager) Spawn(ctx context.Context, task, label, name, directory, originChannel, originChatID string, callback AsyncCallback) (string, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -120,6 +113,13 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, name, directo
 	runningCount := sm.countRunningTasks()
 	if runningCount >= sm.maxConcurrentSubagents {
 		return "", fmt.Errorf("maximum concurrent subagents limit reached (%d/%d running). Please wait for existing subagents to complete", runningCount, sm.maxConcurrentSubagents)
+	}
+	if name != "" {
+		namedLimit := sm.cfg.Agents.ResolveMaxConcurrentSubagents(name)
+		runningNamedCount := sm.countRunningTasksByName(name)
+		if namedLimit > 0 && runningNamedCount >= namedLimit {
+			return "", fmt.Errorf("maximum concurrent subagents limit reached for named agent '%s' (%d/%d running)", name, runningNamedCount, namedLimit)
+		}
 	}
 
 	taskID := fmt.Sprintf("subagent-%d", sm.nextID)
@@ -280,12 +280,14 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	}
 
 	// Resolve config based on agent name
-	// Priority: named_agent > subagents > defaults
+	// Priority: named_agent > subagents
 	resolvedCfg := sm.cfg.Agents.ResolveAgentConfig(task.Name)
+	model := resolvedCfg.Model
 	maxIter := resolvedCfg.MaxIterations
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
+	contextLimit := subagentContextLimit(maxTok)
 
 	// Run tool loop with access to tools
 	sm.mu.RLock()
@@ -297,14 +299,14 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 
 	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
 		Provider:      sm.provider,
-		Model:         sm.defaultModel,
+		Model:         model,
 		Tools:         tools,
 		MaxIterations: maxIter,
 		RunID:         task.ID,
 		PullInjectedMessages: func() []string {
 			return sm.drainPendingMessages(task.ID)
 		},
-		ContextLimit:            sm.contextLimit,
+		ContextLimit:            contextLimit,
 		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
@@ -710,13 +712,15 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	}
 
 	// Resolve config based on agent name
-	// Priority: named_agent > subagents > defaults
+	// Priority: named_agent > subagents
 	sm := t.manager
 	resolvedCfg := sm.cfg.Agents.ResolveAgentConfig(name)
+	model := resolvedCfg.Model
 	maxIter := resolvedCfg.MaxIterations
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
+	contextLimit := subagentContextLimit(maxTok)
 
 	sm.mu.RLock()
 	tools := sm.tools
@@ -726,11 +730,11 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	scopedCtx = WithWorkingDirectory(scopedCtx, sm.workspace, directory)
 	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
 		Provider:                sm.provider,
-		Model:                   sm.defaultModel,
+		Model:                   model,
 		Tools:                   tools,
 		MaxIterations:           maxIter,
 		RunID:                   fmt.Sprintf("sync-%s", name),
-		ContextLimit:            sm.contextLimit,
+		ContextLimit:            contextLimit,
 		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,

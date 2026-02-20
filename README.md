@@ -256,8 +256,6 @@ picoclaw onboard
       "max_tokens": 8192,
       "temperature": 0.7,
       "max_tool_iterations": 20,
-      "max_iterations_subagent": 20,
-      "max_tokens_subagent": 4096,
       "llm_timeout": 120,
       "llm_max_retries": 2,
       "llm_retry_backoff_seconds": 2,
@@ -266,6 +264,10 @@ picoclaw onboard
       "llm_rate_limit_max_backoff_seconds": 30,
       "llm_retry_max_elapsed_seconds": 60,
       "history_message_threshold": 100
+    },
+    "subagents": {
+      "model": "glm-4.7",
+      "max_iterations": 20
     }
   },
   "providers": {
@@ -299,10 +301,13 @@ picoclaw onboard
 | Option | Default | Description |
 |--------|---------|-------------|
 | `max_tool_iterations` | `20` | Max tool calls per main agent loop |
-| `max_iterations_subagent` | 20 | Max tool calls per subagent |
+| `agents.subagents.max_iterations` | 20 | Max tool calls per subagent (global subagent limit) |
+| `agents.subagents.model` | `glm-4.7` | Model used by subagents by default |
+| `agents.subagents.max_tokens` | 4096 | Max tokens for subagents (global subagent limit) |
 | `max_tokens` | 8192 | Max tokens for main agent |
-| `max_tokens_subagent` | 4096 | Max tokens for subagents |
 | `max_concurrent_subagents` | 2 | Max number of subagents that can run simultaneously |
+| `agents.subagents.max_concurrent_subagents` | 2 | Global subagent concurrency limit |
+| `agents.<name>.max_concurrent_subagents` | inherits `agents.subagents.max_concurrent_subagents` | Per-named-agent concurrency limit override |
 | `llm_timeout` | 120 | LLM API timeout in seconds |
 | `llm_max_retries` | 2 | Max retry attempts after initial failed LLM call |
 | `llm_retry_backoff_seconds` | 2 | Base backoff (seconds) for retryable errors, exponential |
@@ -1151,8 +1156,6 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `max_tokens` | `8192` | Max tokens for main agent responses |
 | `temperature` | `0.7` | LLM temperature (0.0-2.0) |
 | `max_tool_iterations` | `20` | Max tool calls per main agent loop |
-| `max_iterations_subagent` | `20` | Max tool calls per subagent |
-| `max_tokens_subagent` | `4096` | Max tokens for subagent responses |
 | `max_concurrent_subagents` | `2` | Max number of subagents that can run simultaneously |
 | `llm_timeout` | `120` | LLM API timeout in seconds |
 | `llm_max_retries` | `2` | Max retry attempts after initial failed LLM call |
@@ -1171,6 +1174,19 @@ Retry semantics (exact):
 - Rate-limit (429) wait uses linear backoff:
   `wait = min(llm_rate_limit_backoff_seconds * (retry_index + 1), llm_rate_limit_max_backoff_seconds)`.
 - `llm_retry_max_elapsed_seconds` limits only cumulative retry sleep/wait time for one LLM call (not the request execution time itself). `0` means no limit.
+
+#### Subagent Runtime Limits
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `agents.subagents.model` | `glm-4.7` | Global default model for subagents |
+| `agents.subagents.max_tokens` | `4096` | Global token limit for subagent responses |
+| `agents.subagents.max_iterations` | `20` | Global hard limit for subagent loop iterations |
+| `agents.subagents.max_concurrent_subagents` | `2` | Global subagent concurrency limit |
+| `agents.<name>.model` | inherits `agents.subagents.model` | Per-named-agent model override |
+| `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` | Per-named-agent token override |
+| `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` | Per-named-agent iteration override |
+| `agents.<name>.max_concurrent_subagents` | inherits `agents.subagents.max_concurrent_subagents` | Per-named-agent concurrency override |
 
 #### Gateway
 
@@ -1307,8 +1323,6 @@ picoclaw agent -m "Hello"
       "max_tokens": 8192,
       "temperature": 0.7,
       "max_tool_iterations": 20,
-      "max_iterations_subagent": 20,
-      "max_tokens_subagent": 4096,
       "max_concurrent_subagents": 2,
       "llm_timeout": 120,
       "llm_max_retries": 2,
@@ -1318,6 +1332,14 @@ picoclaw agent -m "Hello"
       "llm_rate_limit_max_backoff_seconds": 30,
       "llm_retry_max_elapsed_seconds": 60,
       "history_message_threshold": 100
+    },
+    "subagents": {
+      "model": "glm-4.7",
+      "max_tokens": 4096,
+      "max_iterations": 20
+    },
+    "example_named_agent": {
+      "max_concurrent_subagents": 1
     }
   },
   "providers": {

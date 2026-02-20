@@ -7,10 +7,9 @@
       "provider": "",
       "model": "glm-4.7",
       "max_tokens": 8192,
+      "context_window": 131072,
       "temperature": 0.7,
       "max_tool_iterations": 20,
-      "max_iterations_subagent": 20,
-      "max_tokens_subagent": 4096,
       "max_concurrent_subagents": 2,
       "llm_timeout": 120,
       "llm_max_retries": 2,
@@ -19,25 +18,42 @@
       "llm_rate_limit_backoff_seconds": 10,
       "llm_rate_limit_max_backoff_seconds": 30,
       "llm_retry_max_elapsed_seconds": 60,
+      "memory_threshold": 0.8,
+      "history_message_threshold": 100
+    },
+    "subagents": {
+      "model": "glm-4.7",
+      "max_tokens": 4096,
+      "max_iterations": 20,
+      "max_concurrent_subagents": 2,
+      "temperature": 0.7,
+      "history_message_threshold": 100
+    },
+    "example_named_agent": {
+      "model": "glm-4.7",
+      "max_tokens": 4096,
+      "max_iterations": 20,
+      "max_concurrent_subagents": 1,
+      "temperature": 0.7,
       "history_message_threshold": 100
     }
   },
   "channels": {
     "telegram": {
       "enabled": false,
-      "token": "YOUR_TELEGRAM_BOT_TOKEN",
+      "token": "",
       "proxy": "",
-      "allow_from": ["YOUR_USER_ID"]
+      "allow_from": []
     },
     "discord": {
       "enabled": false,
-      "token": "YOUR_DISCORD_BOT_TOKEN",
+      "token": "",
       "allow_from": []
     },
     "slack": {
       "enabled": false,
-      "bot_token": "xoxb-YOUR-BOT-TOKEN",
-      "app_token": "xapp-YOUR-APP-TOKEN",
+      "bot_token": "",
+      "app_token": "",
       "allow_from": []
     },
     "maixcam": {
@@ -67,14 +83,14 @@
     },
     "dingtalk": {
       "enabled": false,
-      "client_id": "YOUR_CLIENT_ID",
-      "client_secret": "YOUR_CLIENT_SECRET",
+      "client_id": "",
+      "client_secret": "",
       "allow_from": []
     },
     "line": {
       "enabled": false,
-      "channel_secret": "YOUR_LINE_CHANNEL_SECRET",
-      "channel_access_token": "YOUR_LINE_CHANNEL_ACCESS_TOKEN",
+      "channel_secret": "",
+      "channel_access_token": "",
       "webhook_host": "0.0.0.0",
       "webhook_port": 18791,
       "webhook_path": "/webhook/line",
@@ -92,52 +108,94 @@
   "providers": {
     "anthropic": {
       "api_key": "",
-      "api_base": ""
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "openai": {
       "api_key": "",
-      "api_base": ""
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "openrouter": {
-      "api_key": "sk-or-v1-xxx",
-      "api_base": ""
+      "api_key": "",
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "groq": {
-      "api_key": "gsk_xxx",
-      "api_base": ""
+      "api_key": "",
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "zhipu": {
-      "api_key": "YOUR_ZHIPU_API_KEY",
-      "api_base": ""
+      "api_key": "",
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "gemini": {
       "api_key": "",
-      "api_base": ""
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "deepseek": {
       "api_key": "",
-      "api_base": ""
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "vllm": {
       "api_key": "",
-      "api_base": ""
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "nvidia": {
-      "api_key": "nvapi-xxx",
+      "api_key": "",
       "api_base": "",
-      "proxy": "http://127.0.0.1:7890"
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "moonshot": {
-      "api_key": "sk-xxx",
-      "api_base": ""
+      "api_key": "",
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "ollama": {
       "api_key": "",
-      "api_base": "http://localhost:11434/v1"
+      "api_base": "http://localhost:11434/v1",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     },
     "shengsuanyun": {
       "api_key": "",
-      "api_base": ""
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
+    },
+    "github_copilot": {
+      "api_key": "",
+      "api_base": "",
+      "proxy": "",
+      "auth_method": "",
+      "connect_mode": ""
     }
   },
   "tools": {
@@ -150,15 +208,15 @@
     "web": {
       "zai": {
         "enabled": false,
-        "api_key": "YOUR_ZAI_API_KEY",
+        "api_key": "",
         "endpoint": "https://api.z.ai/api/mcp/web_search_prime/mcp",
         "endpoint_fetch": "https://api.z.ai/api/mcp/web_reader/mcp",
-        "max_results": 10,
+        "max_results": 5,
         "timeout": 60
       },
       "brave": {
         "enabled": false,
-        "api_key": "YOUR_BRAVE_API_KEY",
+        "api_key": "",
         "max_results": 5
       },
       "duckduckgo": {
@@ -174,7 +232,8 @@
   "idle": {
     "enabled": false,
     "timeout_minutes": 5,
-    "repeat": true
+    "repeat": true,
+    "recent_subagents": 5
   },
   "devices": {
     "enabled": false,

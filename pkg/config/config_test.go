@@ -361,13 +361,16 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 			"history_message_threshold": 100
 		},
 		"subagents": {
+			"model": "subagent-model",
 			"max_tokens": 2048,
 			"max_iterations": 10,
 			"history_message_threshold": 50
 		},
 		"analyst": {
+			"model": "analyst-model",
 			"max_tokens": 8192,
-			"history_message_threshold": 200
+			"history_message_threshold": 200,
+			"max_concurrent_subagents": 1
 		},
 		"researcher": {
 			"max_tokens": 16384,
@@ -389,6 +392,9 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 	if agents.Subagents.MaxTokens != 2048 {
 		t.Errorf("Expected subagents.max_tokens 2048, got %d", agents.Subagents.MaxTokens)
 	}
+	if agents.Subagents.Model != "subagent-model" {
+		t.Errorf("Expected subagents.model 'subagent-model', got %q", agents.Subagents.Model)
+	}
 
 	// Verify named agents exist
 	if len(agents.NamedAgents) != 2 {
@@ -403,8 +409,14 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 	if analyst.MaxTokens != 8192 {
 		t.Errorf("Expected analyst.max_tokens 8192, got %d", analyst.MaxTokens)
 	}
+	if analyst.Model != "analyst-model" {
+		t.Errorf("Expected analyst.model 'analyst-model', got %q", analyst.Model)
+	}
 	if analyst.HistoryMessageThreshold != 200 {
 		t.Errorf("Expected analyst.history_message_threshold 200, got %d", analyst.HistoryMessageThreshold)
+	}
+	if analyst.MaxConcurrentSubagents != 1 {
+		t.Errorf("Expected analyst.max_concurrent_subagents 1, got %d", analyst.MaxConcurrentSubagents)
 	}
 
 	// Verify researcher config
@@ -427,17 +439,19 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	// Add a named agent
 	cfg.Agents.NamedAgents = map[string]NamedAgentConfig{
 		"analyst": {
+			Model:                   "named-model",
 			MaxTokens:               8192,
 			HistoryMessageThreshold: 50,
 		},
 	}
 	cfg.Agents.Subagents = SubagentsConfig{
+		Model:                   "subagent-model",
 		MaxTokens:               2048,
 		MaxIterations:           10,
 		HistoryMessageThreshold: 30,
 	}
 
-	// Test 1: Named agent exists - should use named config merged with defaults
+	// Test 1: Named agent exists - should use named config merged with subagents
 	resolved := cfg.Agents.ResolveAgentConfig("analyst")
 	if resolved.MaxTokens != 8192 {
 		t.Errorf("Expected analyst max_tokens 8192, got %d", resolved.MaxTokens)
@@ -445,15 +459,21 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	if resolved.HistoryMessageThreshold != 50 {
 		t.Errorf("Expected analyst history_threshold 50, got %d", resolved.HistoryMessageThreshold)
 	}
-	// Should inherit from defaults when not specified
-	if resolved.MaxIterations != cfg.Agents.Defaults.MaxIterationsSubagent {
-		t.Errorf("Expected analyst max_iterations from defaults, got %d", resolved.MaxIterations)
+	if resolved.Model != "named-model" {
+		t.Errorf("Expected analyst model 'named-model', got %q", resolved.Model)
+	}
+	// Should inherit from subagents when not specified
+	if resolved.MaxIterations != cfg.Agents.Subagents.MaxIterations {
+		t.Errorf("Expected analyst max_iterations from subagents, got %d", resolved.MaxIterations)
 	}
 
 	// Test 2: Empty name - should use subagents config
 	resolved = cfg.Agents.ResolveAgentConfig("")
 	if resolved.MaxTokens != 2048 {
 		t.Errorf("Expected subagent max_tokens 2048, got %d", resolved.MaxTokens)
+	}
+	if resolved.Model != "subagent-model" {
+		t.Errorf("Expected subagent model 'subagent-model', got %q", resolved.Model)
 	}
 	if resolved.MaxIterations != 10 {
 		t.Errorf("Expected subagent max_iterations 10, got %d", resolved.MaxIterations)
@@ -462,10 +482,10 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 		t.Errorf("Expected subagent history_threshold 30, got %d", resolved.HistoryMessageThreshold)
 	}
 
-	// Test 3: Unknown name - should use defaults (for backward compatibility)
+	// Test 3: Unknown name - should use subagents baseline
 	resolved = cfg.Agents.ResolveAgentConfig("unknown")
-	if resolved.MaxTokens != cfg.Agents.Defaults.MaxTokensSubagent {
-		t.Errorf("Expected unknown agent to use default max_tokens, got %d", resolved.MaxTokens)
+	if resolved.MaxTokens != cfg.Agents.Subagents.MaxTokens {
+		t.Errorf("Expected unknown agent to use subagents max_tokens, got %d", resolved.MaxTokens)
 	}
 }
 
@@ -473,12 +493,12 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	cfg := &AgentsConfig{
 		Defaults: AgentDefaults{
-			MaxTokensSubagent:       1000,
-			MaxIterationsSubagent:   5,
+			Model:                   "defaults-model",
 			Temperature:             0.9,
 			HistoryMessageThreshold: 10,
 		},
 		Subagents: SubagentsConfig{
+			Model:                   "subagents-model",
 			MaxTokens:               2000,
 			MaxIterations:           15,
 			Temperature:             0.5,
@@ -486,9 +506,10 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 		},
 		NamedAgents: map[string]NamedAgentConfig{
 			"custom": {
+				Model:                   "named-model",
 				MaxTokens:               3000,
 				HistoryMessageThreshold: 30,
-				// MaxIterations and Temperature not set - should inherit from defaults
+				// MaxIterations and Temperature not set - should inherit from subagents
 			},
 		},
 	}
@@ -498,24 +519,53 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	if anon.MaxTokens != 2000 {
 		t.Errorf("Anonymous: expected max_tokens 2000 (from subagents), got %d", anon.MaxTokens)
 	}
+	if anon.Model != "subagents-model" {
+		t.Errorf("Anonymous: expected model 'subagents-model' (from subagents), got %q", anon.Model)
+	}
 	if anon.Temperature != 0.5 {
 		t.Errorf("Anonymous: expected temperature 0.5 (from subagents), got %f", anon.Temperature)
 	}
 
-	// Named agent: named > defaults (NOT subagents!)
+	// Named agent: named > subagents
 	named := cfg.ResolveAgentConfig("custom")
 	if named.MaxTokens != 3000 {
 		t.Errorf("Named: expected max_tokens 3000 (from named), got %d", named.MaxTokens)
 	}
+	if named.Model != "named-model" {
+		t.Errorf("Named: expected model 'named-model' (from named), got %q", named.Model)
+	}
 	if named.HistoryMessageThreshold != 30 {
 		t.Errorf("Named: expected history_threshold 30 (from named), got %d", named.HistoryMessageThreshold)
 	}
-	// These should come from defaults, NOT subagents
-	if named.MaxIterations != 5 {
-		t.Errorf("Named: expected max_iterations 5 (from defaults), got %d", named.MaxIterations)
+	// These should come from subagents when named values are not set
+	if named.MaxIterations != 15 {
+		t.Errorf("Named: expected max_iterations 15 (from subagents), got %d", named.MaxIterations)
 	}
-	if named.Temperature != 0.9 {
-		t.Errorf("Named: expected temperature 0.9 (from defaults), got %f", named.Temperature)
+	if named.Temperature != 0.5 {
+		t.Errorf("Named: expected temperature 0.5 (from subagents), got %f", named.Temperature)
+	}
+}
+
+func TestAgentsConfig_ResolveMaxConcurrentSubagents(t *testing.T) {
+	cfg := &AgentsConfig{
+		Defaults: AgentDefaults{
+			MaxConcurrentSubagents: 2,
+		},
+		NamedAgents: map[string]NamedAgentConfig{
+			"serial-worker": {
+				MaxConcurrentSubagents: 1,
+			},
+		},
+	}
+
+	if got := cfg.ResolveMaxConcurrentSubagents(""); got != 2 {
+		t.Fatalf("anonymous limit: expected 2, got %d", got)
+	}
+	if got := cfg.ResolveMaxConcurrentSubagents("serial-worker"); got != 1 {
+		t.Fatalf("named limit: expected 1, got %d", got)
+	}
+	if got := cfg.ResolveMaxConcurrentSubagents("unknown"); got != 2 {
+		t.Fatalf("unknown named fallback: expected 2, got %d", got)
 	}
 }
 

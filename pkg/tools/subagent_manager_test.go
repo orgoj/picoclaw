@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 )
 
 func TestCancel_PublishesTerminalUpdateImmediately(t *testing.T) {
@@ -103,5 +104,30 @@ func TestRunTask_NoDeadlockOnTerminalPublish(t *testing.T) {
 	}
 	if msg.Metadata["subagent_id"] != "subagent-deadlock-check" {
 		t.Fatalf("expected metadata subagent_id=subagent-deadlock-check, got %q", msg.Metadata["subagent_id"])
+	}
+}
+
+func TestSpawn_RespectsNamedConcurrencyLimit(t *testing.T) {
+	cfg := testConfig()
+	cfg.Agents.Defaults.MaxConcurrentSubagents = 5
+	cfg.Agents.NamedAgents = map[string]config.NamedAgentConfig{
+		"serial-worker": {
+			MaxConcurrentSubagents: 1,
+		},
+	}
+
+	manager := NewSubagentManager(&MockLLMProvider{}, cfg, t.TempDir(), nil)
+
+	manager.mu.Lock()
+	manager.tasks["subagent-existing"] = &SubagentTask{
+		ID:     "subagent-existing",
+		Name:   "serial-worker",
+		Status: "running",
+	}
+	manager.mu.Unlock()
+
+	_, err := manager.Spawn(context.Background(), "task", "label", "serial-worker", "", "telegram", "chat-1", nil)
+	if err == nil {
+		t.Fatal("expected named concurrency limit error, got nil")
 	}
 }

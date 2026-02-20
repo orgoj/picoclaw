@@ -47,8 +47,9 @@ func writeScopeTestConfig(workspace string) *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Agents.Defaults.Workspace = workspace
 	cfg.Agents.Defaults.Model = "test-model"
-	cfg.Agents.Defaults.MaxIterationsSubagent = 3
-	cfg.Agents.Defaults.MaxTokensSubagent = 1024
+	cfg.Agents.Subagents.Model = "test-model"
+	cfg.Agents.Subagents.MaxIterations = 3
+	cfg.Agents.Subagents.MaxTokens = 1024
 	cfg.Agents.Defaults.LLMTimeout = 30
 	cfg.Agents.Defaults.RestrictToWorkspace = true
 	return cfg
