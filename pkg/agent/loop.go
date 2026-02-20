@@ -9,6 +9,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -69,6 +70,8 @@ type AgentLoop struct {
 	urgentMu                sync.Mutex
 	urgentBySession         map[string][]string
 	activeRunsBySession     map[string]int
+	runCancelBySession      map[string]context.CancelFunc
+	preemptedBySession      map[string]bool
 }
 
 type idleMetrics struct {
@@ -261,6 +264,8 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		summarizing:         sync.Map{},
 		urgentBySession:     make(map[string][]string),
 		activeRunsBySession: make(map[string]int),
+		runCancelBySession:  make(map[string]context.CancelFunc),
+		preemptedBySession:  make(map[string]bool),
 	}
 }
 
@@ -956,6 +961,9 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	})
 	al.markSessionRunStart(opts.SessionKey)
 	defer al.markSessionRunEnd(opts.SessionKey)
+	runCtx, runCancel := context.WithCancel(ctx)
+	al.markSessionRunCancel(opts.SessionKey, runCancel)
+	defer al.markSessionRunCancelDone(opts.SessionKey)
 	logger.InfoCF("agent", "Run started", map[string]interface{}{
 		"run_id":      runID,
 		"session_key": opts.SessionKey,
@@ -996,8 +1004,19 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	// 3. Run LLM iteration loop
-	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(ctx, messages, opts, runID)
+	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(runCtx, messages, opts, runID)
 	if err != nil {
+		if errors.Is(err, context.Canceled) && al.consumeInjectPreempt(opts.SessionKey) {
+			logger.WarnCF("agent", "Active run preempted by urgent inject", map[string]interface{}{
+				"run_id":      runID,
+				"session_key": opts.SessionKey,
+			})
+			audit.Record("agent_run_preempted_inject", map[string]interface{}{
+				"run_id":      runID,
+				"session_key": opts.SessionKey,
+			})
+			return "", nil
+		}
 		audit.Record("agent_run_error", map[string]interface{}{
 			"run_id":      runID,
 			"session_key": opts.SessionKey,
@@ -1116,16 +1135,6 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"max_tokens":        al.maxTokens,
 				"temperature":       al.temperature,
 				"system_prompt_len": len(messages[0].Content),
-			})
-
-		// Log full messages (detailed)
-		logger.DebugCF("agent", "Full LLM request",
-			map[string]interface{}{
-				"run_id":        runID,
-				"session_key":   opts.SessionKey,
-				"iteration":     iteration,
-				"messages_json": formatMessagesForLog(messages),
-				"tools_json":    formatToolsForLog(providerToolDefs),
 			})
 
 		// Call LLM with retry logic for transient errors
@@ -1400,6 +1409,10 @@ func (al *AgentLoop) InjectUrgent(sessionKey, content string) bool {
 		return false
 	}
 	al.urgentBySession[sessionKey] = append(al.urgentBySession[sessionKey], content)
+	if cancel := al.runCancelBySession[sessionKey]; cancel != nil {
+		al.preemptedBySession[sessionKey] = true
+		cancel()
+	}
 	return true
 }
 
@@ -1441,6 +1454,40 @@ func (al *AgentLoop) markSessionRunEnd(sessionKey string) {
 		return
 	}
 	al.activeRunsBySession[sessionKey] = n - 1
+}
+
+func (al *AgentLoop) markSessionRunCancel(sessionKey string, cancel context.CancelFunc) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || cancel == nil {
+		return
+	}
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+	al.runCancelBySession[sessionKey] = cancel
+}
+
+func (al *AgentLoop) markSessionRunCancelDone(sessionKey string) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return
+	}
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+	delete(al.runCancelBySession, sessionKey)
+}
+
+func (al *AgentLoop) consumeInjectPreempt(sessionKey string) bool {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return false
+	}
+	al.urgentMu.Lock()
+	defer al.urgentMu.Unlock()
+	if !al.preemptedBySession[sessionKey] {
+		return false
+	}
+	delete(al.preemptedBySession, sessionKey)
+	return true
 }
 
 func (al *AgentLoop) clampRetryWait(wait time.Duration, retryStart time.Time) (time.Duration, bool) {

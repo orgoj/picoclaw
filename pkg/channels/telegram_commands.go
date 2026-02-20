@@ -441,7 +441,7 @@ func (c *cmd) Inject(ctx context.Context, message telego.Message) error {
 		})
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Injected into active run.",
+			Text:   "Injected into active run (preempting current cycle).",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},

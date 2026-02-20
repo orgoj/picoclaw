@@ -668,7 +668,7 @@ func (m *Manager) handleInjectControl(msg bus.InboundMessage, body string) bool 
 			"channel":     msg.Channel,
 			"chat_id":     msg.ChatID,
 		})
-		m.sendControlReply(msg, "Injected into active run.")
+		m.sendControlReply(msg, "Injected into active run (preempting current cycle).")
 		return true
 	}
 

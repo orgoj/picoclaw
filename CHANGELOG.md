@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.15 - 2026-02-20
+
+### Changed
+- Urgent inject behavior for active sessions now preempts the current run cycle (context cancel) instead of waiting for a later iteration.
+- Added explicit audit metadata for preemption path: `agent_run_preempted_inject`.
+- Updated inject confirmation wording on channel controls and Telegram `/inject` to indicate preemption of active cycle.
+- Reduced debug log verbosity by removing full request payload dumps (`messages_json`, `tools_json`) and system-prompt preview spam from normal debug flow.
+
 ## v0.1.14 - 2026-02-20
 
 ### Added

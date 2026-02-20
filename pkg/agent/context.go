@@ -234,16 +234,6 @@ func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary str
 			"section_count": strings.Count(systemPrompt, "\n\n---\n\n") + 1,
 		})
 
-	// Log preview of system prompt (avoid logging huge content)
-	preview := systemPrompt
-	if len(preview) > 500 {
-		preview = preview[:500] + "... (truncated)"
-	}
-	logger.DebugCF("agent", "System prompt preview",
-		map[string]interface{}{
-			"preview": preview,
-		})
-
 	if summary != "" {
 		systemPrompt += "\n\n## Summary of Previous Conversation\n\n" + summary
 	}

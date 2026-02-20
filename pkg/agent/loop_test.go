@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -464,6 +465,23 @@ func (m *simpleMockProvider) GetDefaultModel() string {
 	return "mock-model"
 }
 
+type blockingMockProvider struct {
+	entered chan struct{}
+}
+
+func (m *blockingMockProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, opts map[string]interface{}) (*providers.LLMResponse, error) {
+	select {
+	case m.entered <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (m *blockingMockProvider) GetDefaultModel() string {
+	return "mock-model"
+}
+
 type sequenceMockProvider struct {
 	responses []string
 	index     int
@@ -593,6 +611,80 @@ func TestAgentLoop_EmptyDirectResponseRetriesAndContinues(t *testing.T) {
 	response := helper.executeAndGetResponse(t, ctx, msg)
 	if response != "Non-empty response" {
 		t.Fatalf("Expected retried non-empty response, got: %q", response)
+	}
+}
+
+func TestInjectUrgent_PreemptsActiveRunAndKeepsUrgentMessage(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &blockingMockProvider{entered: make(chan struct{}, 1)}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	msg := bus.InboundMessage{
+		Channel:    "telegram",
+		SenderID:   "u1",
+		ChatID:     "1",
+		SessionKey: "telegram:1",
+		Content:    "initial message",
+	}
+
+	done := make(chan struct {
+		resp string
+		err  error
+	}, 1)
+	go func() {
+		resp, err := al.processMessage(context.Background(), msg)
+		done <- struct {
+			resp string
+			err  error
+		}{resp: resp, err: err}
+	}()
+
+	select {
+	case <-provider.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for active run")
+	}
+
+	injected := al.InjectUrgent("telegram:1", "wake up")
+	if !injected {
+		t.Fatal("expected inject to target active run")
+	}
+
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("expected preempted run to finish without error, got %v", result.err)
+		}
+		if result.resp != "" {
+			t.Fatalf("expected empty response for preempted run, got %q", result.resp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for preempted run to exit")
+	}
+
+	urgent := al.drainUrgentMessages("telegram:1")
+	if len(urgent) != 1 {
+		t.Fatalf("expected one queued urgent message, got %d", len(urgent))
+	}
+	if !strings.Contains(urgent[0], "wake up") {
+		t.Fatalf("queued urgent message mismatch: %q", urgent[0])
 	}
 }
 
