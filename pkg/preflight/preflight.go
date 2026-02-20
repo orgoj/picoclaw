@@ -44,11 +44,30 @@ func (r *Report) Error() string {
 }
 
 func Run(workspace string) error {
+	warnings, err := RunWithWarnings(workspace)
+	if len(warnings) > 0 {
+		fmt.Fprintf(os.Stderr, "Startup preflight warnings (%d):\n", len(warnings))
+		for i, issue := range warnings {
+			fmt.Fprintf(os.Stderr, "%d) [%s] %s\n", i+1, issue.Check, issue.Message)
+			if issue.Path != "" {
+				fmt.Fprintf(os.Stderr, "   path: %s\n", issue.Path)
+			}
+			if issue.Hint != "" {
+				fmt.Fprintf(os.Stderr, "   hint: %s\n", issue.Hint)
+			}
+		}
+	}
+	return err
+}
+
+// RunWithWarnings runs preflight checks and returns non-fatal warnings separately.
+// Fatal issues are returned as error to block startup.
+func RunWithWarnings(workspace string) ([]Issue, error) {
 	report := &Report{}
 
 	absWorkspace, err := filepath.Abs(workspace)
 	if err != nil {
-		return fmt.Errorf("failed to resolve workspace path: %w", err)
+		return nil, fmt.Errorf("failed to resolve workspace path: %w", err)
 	}
 
 	checkWorkspaceBootstrap(absWorkspace, report)
@@ -65,23 +84,10 @@ func Run(workspace string) error {
 		}
 	}
 
-	if len(warnIssues) > 0 {
-		fmt.Fprintf(os.Stderr, "Startup preflight warnings (%d):\n", len(warnIssues))
-		for i, issue := range warnIssues {
-			fmt.Fprintf(os.Stderr, "%d) [%s] %s\n", i+1, issue.Check, issue.Message)
-			if issue.Path != "" {
-				fmt.Fprintf(os.Stderr, "   path: %s\n", issue.Path)
-			}
-			if issue.Hint != "" {
-				fmt.Fprintf(os.Stderr, "   hint: %s\n", issue.Hint)
-			}
-		}
-	}
-
 	if len(fatalIssues) > 0 {
-		return &Report{Issues: fatalIssues}
+		return warnIssues, &Report{Issues: fatalIssues}
 	}
-	return nil
+	return warnIssues, nil
 }
 
 func isNonFatalIssue(issue Issue) bool {

@@ -357,8 +357,15 @@ type ProviderConfig struct {
 }
 
 type GatewayConfig struct {
-	Host string `json:"host" env:"PICOCLAW_GATEWAY_HOST"`
-	Port int    `json:"port" env:"PICOCLAW_GATEWAY_PORT"`
+	Host          string                     `json:"host" env:"PICOCLAW_GATEWAY_HOST"`
+	Port          int                        `json:"port" env:"PICOCLAW_GATEWAY_PORT"`
+	StartupPrompt GatewayStartupPromptConfig `json:"startup_prompt"`
+}
+
+type GatewayStartupPromptConfig struct {
+	Enabled                  bool   `json:"enabled" env:"PICOCLAW_GATEWAY_STARTUP_PROMPT_ENABLED"`
+	Template                 string `json:"template" env:"PICOCLAW_GATEWAY_STARTUP_PROMPT_TEMPLATE"`
+	IncludePreflightWarnings bool   `json:"include_preflight_warnings" env:"PICOCLAW_GATEWAY_STARTUP_PROMPT_INCLUDE_PREFLIGHT_WARNINGS"`
 }
 
 type BraveConfig struct {
@@ -514,6 +521,11 @@ func DefaultConfig() *Config {
 		Gateway: GatewayConfig{
 			Host: "0.0.0.0",
 			Port: 18790,
+			StartupPrompt: GatewayStartupPromptConfig{
+				Enabled:                  true,
+				Template:                 "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Continue in this same thread and preserve continuity. If user requested, send a short restart confirmation.",
+				IncludePreflightWarnings: true,
+			},
 		},
 		Tools: ToolsConfig{
 			Web: WebToolsConfig{

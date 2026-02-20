@@ -602,7 +602,20 @@ func gatewayCmd() {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
-	if err := preflight.Run(cfg.WorkspacePath()); err != nil {
+	preflightWarnings, err := preflight.RunWithWarnings(cfg.WorkspacePath())
+	if len(preflightWarnings) > 0 {
+		fmt.Fprintf(os.Stderr, "Startup preflight warnings (%d):\n", len(preflightWarnings))
+		for i, issue := range preflightWarnings {
+			fmt.Fprintf(os.Stderr, "%d) [%s] %s\n", i+1, issue.Check, issue.Message)
+			if issue.Path != "" {
+				fmt.Fprintf(os.Stderr, "   path: %s\n", issue.Path)
+			}
+			if issue.Hint != "" {
+				fmt.Fprintf(os.Stderr, "   hint: %s\n", issue.Hint)
+			}
+		}
+	}
+	if err != nil {
 		fmt.Printf("Startup preflight failed:\n%v\n", err)
 		os.Exit(1)
 	}
@@ -753,6 +766,17 @@ func gatewayCmd() {
 	}()
 	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound, /api/v1/history, /api/v1/events, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
 
+	startupMsgs := buildStartupMessages(cfg, stateManager, preflightWarnings)
+	for _, startupMsg := range startupMsgs {
+		if ok := msgBus.PublishInbound(startupMsg); !ok {
+			logger.WarnCF("preflight", "Failed to queue startup message for agent: inbound queue timeout", map[string]interface{}{
+				"sender_id": startupMsg.SenderID,
+				"channel":   startupMsg.Channel,
+				"chat_id":   startupMsg.ChatID,
+			})
+		}
+	}
+
 	go agentLoop.Run(ctx)
 
 	sigChan := make(chan os.Signal, 1)
@@ -768,6 +792,83 @@ func gatewayCmd() {
 	agentLoop.Stop()
 	channelManager.StopAll(ctx)
 	fmt.Println("✓ Gateway stopped")
+}
+
+func buildPreflightWarningPrompt(issues []preflight.Issue) string {
+	var sb strings.Builder
+	sb.WriteString("Startup preflight found non-fatal warnings in skill instructions. Fix them in-place, keep behavior equivalent, and avoid blocked patterns.\n\n")
+	sb.WriteString("Rules:\n")
+	sb.WriteString("- Use `rg` instead of `grep -r`\n")
+	sb.WriteString("- Use `rg --files` instead of `find . -name`\n")
+	sb.WriteString("- Keep changes minimal and safe\n")
+	sb.WriteString("- After edits, summarize touched files briefly\n\n")
+	sb.WriteString("Warnings:\n")
+	for i, issue := range issues {
+		sb.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, issue.Check, issue.Message))
+		if issue.Path != "" {
+			sb.WriteString(fmt.Sprintf("   path: %s\n", issue.Path))
+		}
+		if issue.Hint != "" {
+			sb.WriteString(fmt.Sprintf("   hint: %s\n", issue.Hint))
+		}
+	}
+	return sb.String()
+}
+
+func buildStartupMessages(cfg *config.Config, stateManager *state.Manager, warnings []preflight.Issue) []bus.InboundMessage {
+	channel, chatID, sessionKey := resolveStartupTarget(stateManager)
+	if channel == "" || chatID == "" || sessionKey == "" {
+		return nil
+	}
+
+	msgs := make([]bus.InboundMessage, 0, 2)
+	if cfg.Gateway.StartupPrompt.Enabled {
+		msgs = append(msgs, bus.InboundMessage{
+			Channel:    channel,
+			SenderID:   "system-startup",
+			ChatID:     chatID,
+			SessionKey: sessionKey,
+			Content:    renderStartupPromptTemplate(cfg.Gateway.StartupPrompt.Template, channel, chatID),
+		})
+	}
+
+	if len(warnings) > 0 && cfg.Gateway.StartupPrompt.IncludePreflightWarnings {
+		msgs = append(msgs, bus.InboundMessage{
+			Channel:    channel,
+			SenderID:   "system-preflight",
+			ChatID:     chatID,
+			SessionKey: sessionKey,
+			Content:    buildPreflightWarningPrompt(warnings),
+		})
+	}
+	return msgs
+}
+
+func resolveStartupTarget(stateManager *state.Manager) (channel, chatID, sessionKey string) {
+	if stateManager == nil {
+		return "", "", ""
+	}
+	last := stateManager.GetLastChannel()
+	if last == "" {
+		return "", "", ""
+	}
+	parts := strings.SplitN(last, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", ""
+	}
+	return parts[0], parts[1], last
+}
+
+func renderStartupPromptTemplate(template, channel, chatID string) string {
+	if strings.TrimSpace(template) == "" {
+		template = "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Continue in this same thread and preserve continuity."
+	}
+	replacer := strings.NewReplacer(
+		"{{timestamp}}", time.Now().Format(time.RFC3339),
+		"{{channel}}", channel,
+		"{{chat_id}}", chatID,
+	)
+	return replacer.Replace(template)
 }
 
 func statusCmd() {

@@ -181,7 +181,12 @@
   },
   "gateway": {
     "host": "0.0.0.0",
-    "port": 18790
+    "port": 18790,
+    "startup_prompt": {
+      "enabled": true,
+      "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Continue in this same thread and preserve continuity. If user requested, send a short restart confirmation.",
+      "include_preflight_warnings": true
+    }
   },
   "logging": {
     "enabled": false,

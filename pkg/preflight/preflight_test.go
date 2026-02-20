@@ -73,3 +73,22 @@ Use grep -r and find . -name.`
 		t.Fatalf("expected warning-only behavior, got error: %v", err)
 	}
 }
+
+func TestRunWithWarnings_ReturnsSkillWarnings(t *testing.T) {
+	ws := makeBootstrapWorkspace(t)
+	skill := `---
+name: warn-skill
+description: desc
+---
+
+Use grep -r and find . -name.`
+	writeFile(t, filepath.Join(ws, "skills", "warn", "SKILL.md"), skill)
+
+	warnings, err := RunWithWarnings(ws)
+	if err != nil {
+		t.Fatalf("expected no fatal error, got: %v", err)
+	}
+	if len(warnings) == 0 {
+		t.Fatal("expected warnings for blocked skill instructions")
+	}
+}
