@@ -1186,6 +1186,12 @@ The idle prompt includes runtime idle context metadata:
 |--------|---------|-------------|
 | `enabled` | `false` | Enable file logging |
 | `dir` | `~/.picoclaw/workspace/logs` | Directory for runtime logs (`agent.log`, `heartbeat.log`, `audit.jsonl`) |
+| `level` | `info` | Console/file log level: `debug`, `info`, `warn`, `error` |
+
+Run `picoclaw gateway --debug` (or `-d`) for detailed runtime diagnostics.
+
+- Queue internals (`enqueue/dequeue/merge/delete/wait`) are emitted as `DEBUG` logs from component `bus`.
+- Subagent-related runtime lines are prefixed in console as `[SUBAGENT:<id>]`.
 
 #### Ingress
 
@@ -1423,7 +1429,8 @@ picoclaw agent -m "Hello"
   },
   "logging": {
     "enabled": false,
-    "dir": "~/.picoclaw/workspace/logs"
+    "dir": "~/.picoclaw/workspace/logs",
+    "level": "info"
   }
 }
 ```

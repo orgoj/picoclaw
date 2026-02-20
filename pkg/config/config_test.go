@@ -195,6 +195,28 @@ func TestDefaultConfig_Gateway(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_LoggingLevel(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Logging.Level != "info" {
+		t.Errorf("Expected logging.level default 'info', got %q", cfg.Logging.Level)
+	}
+}
+
+func TestDefaultConfig_LoggingLevelParsing(t *testing.T) {
+	jsonData := `{
+		"logging": {
+			"level": "debug"
+		}
+	}`
+	var cfg Config
+	if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+		t.Fatalf("Failed to unmarshal config: %v", err)
+	}
+	if cfg.Logging.Level != "debug" {
+		t.Errorf("Expected logging.level 'debug', got %q", cfg.Logging.Level)
+	}
+}
+
 // TestDefaultConfig_Providers verifies provider structure
 func TestDefaultConfig_Providers(t *testing.T) {
 	cfg := DefaultConfig()

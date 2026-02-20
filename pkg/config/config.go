@@ -62,6 +62,7 @@ type Config struct {
 type LoggingConfig struct {
 	Enabled bool   `json:"enabled" env:"PICOCLAW_LOGGING_ENABLED"`
 	Dir     string `json:"dir" env:"PICOCLAW_LOGGING_DIR"`
+	Level   string `json:"level" env:"PICOCLAW_LOGGING_LEVEL"`
 }
 
 type IngressConfig struct {
@@ -595,6 +596,7 @@ func DefaultConfig() *Config {
 		Logging: LoggingConfig{
 			Enabled: false,
 			Dir:     "~/.picoclaw/workspace/logs",
+			Level:   "info",
 		},
 	}
 }

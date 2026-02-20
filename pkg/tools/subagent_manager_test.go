@@ -35,6 +35,9 @@ func TestCancel_PublishesTerminalUpdateImmediately(t *testing.T) {
 	if msg.SenderID != "subagent:subagent-1" {
 		t.Fatalf("unexpected sender id: %s", msg.SenderID)
 	}
+	if msg.Metadata["subagent_id"] != "subagent-1" {
+		t.Fatalf("expected metadata subagent_id=subagent-1, got %q", msg.Metadata["subagent_id"])
+	}
 }
 
 func TestPublishTaskUpdate_OnlyOncePerTask(t *testing.T) {
@@ -97,5 +100,8 @@ func TestRunTask_NoDeadlockOnTerminalPublish(t *testing.T) {
 	}
 	if msg.SenderID != "subagent:subagent-deadlock-check" {
 		t.Fatalf("unexpected sender id: %s", msg.SenderID)
+	}
+	if msg.Metadata["subagent_id"] != "subagent-deadlock-check" {
+		t.Fatalf("expected metadata subagent_id=subagent-deadlock-check, got %q", msg.Metadata["subagent_id"])
 	}
 }

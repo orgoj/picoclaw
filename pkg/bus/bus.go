@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/audit"
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 type MessageBus struct {
@@ -79,6 +80,15 @@ func (mb *MessageBus) PublishInboundCritical(msg InboundMessage) bool {
 		"channel":     msg.Channel,
 		"chat_id":     msg.ChatID,
 		"sender_id":   msg.SenderID,
+	})
+	logger.DebugCF("bus", "Inbound queue enqueue critical", map[string]interface{}{
+		"id":             id,
+		"queue_len":      len(mb.inboundQueue),
+		"queue_capacity": mb.inboundCap,
+		"session_key":    msg.SessionKey,
+		"channel":        msg.Channel,
+		"chat_id":        msg.ChatID,
+		"sender_id":      msg.SenderID,
 	})
 	mb.notifyInboundReady()
 	return true
@@ -208,11 +218,21 @@ func (mb *MessageBus) PublishOutbound(msg OutboundMessage) bool {
 			"channel": msg.Channel,
 			"chat_id": msg.ChatID,
 		})
+		logger.DebugCF("bus", "Outbound enqueue", map[string]interface{}{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+			"pending": len(mb.outbound),
+		})
 		return true
 	case <-timer.C:
 		audit.Record("outbound_drop_timeout", map[string]interface{}{
 			"channel": msg.Channel,
 			"chat_id": msg.ChatID,
+		})
+		logger.WarnCF("bus", "Outbound enqueue timeout", map[string]interface{}{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+			"pending": len(mb.outbound),
 		})
 		return false
 	}
@@ -289,6 +309,10 @@ func (mb *MessageBus) DeleteInbound(id string) bool {
 			audit.Record("inbound_delete", map[string]interface{}{
 				"id": id,
 			})
+			logger.DebugCF("bus", "Inbound queue delete", map[string]interface{}{
+				"id":        id,
+				"queue_len": len(mb.inboundQueue),
+			})
 			return true
 		}
 	}
@@ -326,6 +350,11 @@ func (mb *MessageBus) MoveInbound(id string, newIndex int) bool {
 		"id":        id,
 		"new_index": newIndex,
 	})
+	logger.DebugCF("bus", "Inbound queue move", map[string]interface{}{
+		"id":        id,
+		"new_index": newIndex,
+		"queue_len": len(mb.inboundQueue),
+	})
 	return true
 }
 
@@ -334,15 +363,31 @@ func (mb *MessageBus) tryEnqueueInbound(msg InboundMessage) (string, bool, bool)
 	defer mb.inboundMu.Unlock()
 
 	if mb.closed {
+		logger.DebugCF("bus", "Inbound enqueue rejected: bus closed", map[string]interface{}{
+			"session_key": msg.SessionKey,
+			"channel":     msg.Channel,
+			"chat_id":     msg.ChatID,
+			"sender_id":   msg.SenderID,
+		})
 		return "", false, false
 	}
 	if len(mb.inboundQueue) >= mb.inboundCap {
+		logger.DebugCF("bus", "Inbound enqueue waiting: queue full", map[string]interface{}{
+			"queue_len":      len(mb.inboundQueue),
+			"queue_capacity": mb.inboundCap,
+			"session_key":    msg.SessionKey,
+		})
 		return "", false, true
 	}
 
 	mb.enrichInboundMetadata(&msg, len(mb.inboundQueue))
 	if mergedID, merged := mb.tryMergeIntoTail(msg); merged {
 		mb.notifyInboundReady()
+		logger.DebugCF("bus", "Inbound merged into tail", map[string]interface{}{
+			"id":          mergedID,
+			"queue_len":   len(mb.inboundQueue),
+			"session_key": msg.SessionKey,
+		})
 		return mergedID, true, false
 	}
 
@@ -363,6 +408,15 @@ func (mb *MessageBus) tryEnqueueInbound(msg InboundMessage) (string, bool, bool)
 		"chat_id":     msg.ChatID,
 		"sender_id":   msg.SenderID,
 	})
+	logger.DebugCF("bus", "Inbound enqueue tail", map[string]interface{}{
+		"id":             id,
+		"queue_len":      len(mb.inboundQueue),
+		"queue_capacity": mb.inboundCap,
+		"session_key":    msg.SessionKey,
+		"channel":        msg.Channel,
+		"chat_id":        msg.ChatID,
+		"sender_id":      msg.SenderID,
+	})
 	mb.notifyInboundReady()
 	return id, true, false
 }
@@ -372,9 +426,20 @@ func (mb *MessageBus) tryEnqueueInboundAtHead(msg InboundMessage) (string, bool,
 	defer mb.inboundMu.Unlock()
 
 	if mb.closed {
+		logger.DebugCF("bus", "Inbound head enqueue rejected: bus closed", map[string]interface{}{
+			"session_key": msg.SessionKey,
+			"channel":     msg.Channel,
+			"chat_id":     msg.ChatID,
+			"sender_id":   msg.SenderID,
+		})
 		return "", false, false
 	}
 	if len(mb.inboundQueue) >= mb.inboundCap {
+		logger.DebugCF("bus", "Inbound head enqueue waiting: queue full", map[string]interface{}{
+			"queue_len":      len(mb.inboundQueue),
+			"queue_capacity": mb.inboundCap,
+			"session_key":    msg.SessionKey,
+		})
 		return "", false, true
 	}
 
@@ -399,6 +464,15 @@ func (mb *MessageBus) tryEnqueueInboundAtHead(msg InboundMessage) (string, bool,
 		"chat_id":     msg.ChatID,
 		"sender_id":   msg.SenderID,
 	})
+	logger.DebugCF("bus", "Inbound enqueue head", map[string]interface{}{
+		"id":             id,
+		"queue_len":      len(mb.inboundQueue),
+		"queue_capacity": mb.inboundCap,
+		"session_key":    msg.SessionKey,
+		"channel":        msg.Channel,
+		"chat_id":        msg.ChatID,
+		"sender_id":      msg.SenderID,
+	})
 	mb.notifyInboundReady()
 	return id, true, false
 }
@@ -413,6 +487,14 @@ func (mb *MessageBus) tryDequeueInbound() (InboundMessage, bool, bool) {
 		mb.notifyInboundSpace()
 		audit.Record("inbound_dequeue", map[string]interface{}{
 			"id":          item.ID,
+			"session_key": item.Message.SessionKey,
+			"channel":     item.Message.Channel,
+			"chat_id":     item.Message.ChatID,
+			"sender_id":   item.Message.SenderID,
+		})
+		logger.DebugCF("bus", "Inbound dequeue", map[string]interface{}{
+			"id":          item.ID,
+			"queue_len":   len(mb.inboundQueue),
 			"session_key": item.Message.SessionKey,
 			"channel":     item.Message.Channel,
 			"chat_id":     item.Message.ChatID,

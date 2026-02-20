@@ -200,6 +200,7 @@
   },
   "logging": {
     "enabled": false,
-    "dir": "~/.picoclaw/workspace/logs"
+    "dir": "~/.picoclaw/workspace/logs",
+    "level": "info"
   }
 }

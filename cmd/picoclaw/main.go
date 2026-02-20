@@ -425,16 +425,37 @@ func setupLogging(cfg *config.Config) {
 	})
 }
 
+func applyConfiguredLogLevel(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+
+	level := strings.ToLower(strings.TrimSpace(cfg.Logging.Level))
+	switch level {
+	case "", "info":
+		logger.SetLevel(logger.INFO)
+	case "debug":
+		logger.SetLevel(logger.DEBUG)
+	case "warn", "warning":
+		logger.SetLevel(logger.WARN)
+	case "error":
+		logger.SetLevel(logger.ERROR)
+	default:
+		fmt.Printf("Warning: unknown logging.level=%q (supported: debug|info|warn|error), using info\n", cfg.Logging.Level)
+		logger.SetLevel(logger.INFO)
+	}
+}
+
 func agentCmd() {
 	message := ""
 	sessionKey := "cli:default"
+	debugFlag := false
 
 	args := os.Args[2:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--debug", "-d":
-			logger.SetLevel(logger.DEBUG)
-			fmt.Println("🔍 Debug mode enabled")
+			debugFlag = true
 		case "-m", "--message":
 			if i+1 < len(args) {
 				message = args[i+1]
@@ -470,6 +491,11 @@ func agentCmd() {
 		time.Duration(cfg.Ingress.GapNoticeSeconds)*time.Second,
 		cfg.Ingress.ConcatPrefix,
 	)
+	applyConfiguredLogLevel(cfg)
+	if debugFlag {
+		logger.SetLevel(logger.DEBUG)
+		fmt.Println("🔍 Debug mode enabled")
+	}
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
 
 	// Enable file logging if configured
@@ -593,10 +619,10 @@ func simpleInteractiveMode(agentLoop *agent.AgentLoop, sessionKey string) {
 func gatewayCmd() {
 	// Check for --debug flag
 	args := os.Args[2:]
+	debugFlag := false
 	for _, arg := range args {
 		if arg == "--debug" || arg == "-d" {
-			logger.SetLevel(logger.DEBUG)
-			fmt.Println("🔍 Debug mode enabled")
+			debugFlag = true
 			break
 		}
 	}
@@ -631,6 +657,11 @@ func gatewayCmd() {
 	}
 
 	msgBus := bus.NewMessageBus()
+	applyConfiguredLogLevel(cfg)
+	if debugFlag {
+		logger.SetLevel(logger.DEBUG)
+		fmt.Println("🔍 Debug mode enabled")
+	}
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
 
 	// Enable file logging if configured

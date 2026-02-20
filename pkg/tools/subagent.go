@@ -592,9 +592,9 @@ func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 
 	var announceContent string
 	if taskName != "" {
-		announceContent = fmt.Sprintf("Task '%s' [agent: %s] %s.\n\nResult:\n%s", taskLabel, taskName, status, taskResult)
+		announceContent = fmt.Sprintf("Subagent ID: %s\nTask '%s' [agent: %s] %s.\n\nResult:\n%s", taskID, taskLabel, taskName, status, taskResult)
 	} else {
-		announceContent = fmt.Sprintf("Task '%s' %s.\n\nResult:\n%s", taskLabel, status, taskResult)
+		announceContent = fmt.Sprintf("Subagent ID: %s\nTask '%s' %s.\n\nResult:\n%s", taskID, taskLabel, status, taskResult)
 	}
 
 	inbound := bus.InboundMessage{
@@ -603,6 +603,11 @@ func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 		// Format: "original_channel:original_chat_id" for routing back
 		ChatID:  fmt.Sprintf("%s:%s", originChannel, originChatID),
 		Content: announceContent,
+		Metadata: map[string]string{
+			"source":      "subagent:terminal",
+			"subagent_id": taskID,
+			"status":      status,
+		},
 	}
 
 	if ok := sm.bus.PublishInbound(inbound); !ok {

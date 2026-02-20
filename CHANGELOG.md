@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.12 - 2026-02-20
+
+### Added
+- Configurable runtime log level via `logging.level` (`debug|info|warn|error`).
+
+### Changed
+- CLI `--debug`/`-d` remains supported and now explicitly overrides `logging.level`.
+- Updated docs/examples to include `logging.level`.
+
+## v0.1.11 - 2026-02-20
+
+### Added
+- Debug-level queue observability in `bus` component for inbound/outbound operations (`enqueue/dequeue/merge/delete/wait`).
+- Console flow marker for subagent logs: `[SUBAGENT:<id>]`.
+- Subagent terminal/system messages now include explicit `subagent_id` metadata and `Subagent ID` header in content.
+
 ## v0.1.10 - 2026-02-20
 
 ### Fixed

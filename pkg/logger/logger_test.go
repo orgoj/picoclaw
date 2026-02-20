@@ -137,3 +137,46 @@ func TestLoggerHelperFunctions(t *testing.T) {
 	DebugC("test", "Debug with component")
 	WarnF("Warning with fields", map[string]interface{}{"key": "value"})
 }
+
+func TestExtractSubagentID(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]interface{}
+		wantID string
+		wantOK bool
+	}{
+		{
+			name:   "from run_id",
+			fields: map[string]interface{}{"run_id": "subagent-7"},
+			wantID: "subagent-7",
+			wantOK: true,
+		},
+		{
+			name:   "from task_id",
+			fields: map[string]interface{}{"task_id": "subagent-9"},
+			wantID: "subagent-9",
+			wantOK: true,
+		},
+		{
+			name:   "from sender_id",
+			fields: map[string]interface{}{"sender_id": "subagent:subagent-11"},
+			wantID: "subagent-11",
+			wantOK: true,
+		},
+		{
+			name:   "no subagent id",
+			fields: map[string]interface{}{"run_id": "telegram_1"},
+			wantID: "",
+			wantOK: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotID, gotOK := extractSubagentID(tc.fields)
+			if gotOK != tc.wantOK || gotID != tc.wantID {
+				t.Fatalf("extractSubagentID() = (%q,%v), want (%q,%v)", gotID, gotOK, tc.wantID, tc.wantOK)
+			}
+		})
+	}
+}

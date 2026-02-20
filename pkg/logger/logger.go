@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -127,10 +128,12 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 	if len(fields) > 0 {
 		fieldStr = " " + formatFields(fields)
 	}
+	flowPrefix := deriveFlowPrefix(fields)
 
-	logLine := fmt.Sprintf("[%s] [%s]%s %s%s",
+	logLine := fmt.Sprintf("[%s] [%s]%s%s %s%s",
 		entry.Timestamp,
 		logLevelNames[level],
+		flowPrefix,
 		formatComponent(component),
 		message,
 		fieldStr,
@@ -151,11 +154,42 @@ func formatComponent(component string) string {
 }
 
 func formatFields(fields map[string]interface{}) string {
-	var parts []string
-	for k, v := range fields {
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		v := fields[k]
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(parts, ", "))
+}
+
+func deriveFlowPrefix(fields map[string]interface{}) string {
+	if len(fields) == 0 {
+		return ""
+	}
+
+	if taskID, ok := extractSubagentID(fields); ok {
+		return fmt.Sprintf(" [SUBAGENT:%s]", taskID)
+	}
+	return ""
+}
+
+func extractSubagentID(fields map[string]interface{}) (string, bool) {
+	if raw, ok := fields["run_id"].(string); ok && strings.HasPrefix(raw, "subagent-") {
+		return raw, true
+	}
+	if raw, ok := fields["task_id"].(string); ok && strings.HasPrefix(raw, "subagent-") {
+		return raw, true
+	}
+	if raw, ok := fields["sender_id"].(string); ok && strings.HasPrefix(raw, "subagent:") {
+		return strings.TrimPrefix(raw, "subagent:"), true
+	}
+	return "", false
 }
 
 func Debug(message string) {
