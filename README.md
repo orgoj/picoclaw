@@ -64,7 +64,7 @@ Snapshot date: 2026-02-20
 Major additions in this fork branch:
 
 - Agent orchestration: named sub-agents with persistent identity/memory, configurable sub-agent limits/timeouts, richer startup context injection, and non-silent sub-agent completion guarantees.
-- Telegram operations: `/status`, `/models`, `/help`, `/inject`, `/first` and `/urgent` alias improvements, HTML-safe status formatting, queue ID feedback, and channel-aware shutdown notices.
+- Cross-channel operations: configurable-prefix controls (`<prefix>inject`, `<prefix>first`, `<prefix>kill`) with queue bypass/head enqueue semantics, plus Telegram status/help/model formatting and channel-aware shutdown notices.
 - Runtime control plane: bounded editable inbound queue, urgent/supervisor message injection into active loops, health/admin APIs for queue and session history.
 - Web observability: minimal dashboard plus SSE snapshot stream (`EventSource`) for live status.
 - Reliability and safety hardening: loop empty-response retry, bounded bus/retry waits, AGENTS bootstrap checks with warning-only preflight mode, and stricter memory path write guards.
@@ -380,9 +380,19 @@ picoclaw gateway
 | `/start` | Start the bot |
 | `/help` | Show available commands |
 | `/status` | Show system and subagents status (includes tools, skills, named agents). Named agents reflect what the main agent currently knows in its prompt context. |
-| `/kill <task_id>` | Cancel a running subagent task |
 | `/models` | List configured model/provider |
 | `/channels` | List available channels |
+
+**Universal control prefix (all channels)**
+
+`<prefix>` = first character of `ingress.concat_prefix` (default `+`)
+
+| Control | Description |
+|--------|-------------|
+| `<prefix>inject MESSAGE` | Immediate priority inject (active-run inject, otherwise queue bypass immediate processing) |
+| `<prefix>first MESSAGE` | Enqueue message at inbound queue head |
+| `<prefix>kill TASK_ID` | Cancel running subagent task |
+| `<prefix>+` | Append literal `+` to previous queued message in the same session (escape, no control command) |
 
 </details>
 

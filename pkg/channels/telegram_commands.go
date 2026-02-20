@@ -48,6 +48,13 @@ func NewTelegramCommands(bot *telego.Bot, msgBus *bus.MessageBus, cfg *config.Co
 }
 
 func (c *cmd) Help(ctx context.Context, message telego.Message) error {
+	prefix := "+"
+	if c.config != nil {
+		p := strings.TrimSpace(c.config.Ingress.ConcatPrefix)
+		if p != "" {
+			prefix = string([]rune(p)[0])
+		}
+	}
 	lines := []string{
 		"🦞 <b>PicoClaw Commands</b>",
 		"",
@@ -56,11 +63,12 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 		"/status - Show system and subagents status",
 		"/models - List available models",
 		"/channels - List enabled channels",
-		"/inject MESSAGE - Immediate priority inject (bypass queue)",
-		"/first MESSAGE - Put message at the start of inbound queue",
+		"",
+		fmt.Sprintf("%sinject MESSAGE - Immediate priority inject (all channels)", prefix),
+		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head (all channels)", prefix),
 	}
 	if c.config != nil && c.config.Tools.Spawn.Enabled {
-		lines = append(lines, "/kill TASK_ID - Cancel running subagent task")
+		lines = append(lines, fmt.Sprintf("%skill TASK_ID - Cancel running subagent task (all channels)", prefix))
 	}
 	msg := strings.Join(lines, "\n")
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{

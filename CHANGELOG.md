@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.6 - 2026-02-20
+
+### Changed
+- Priority controls moved from Telegram-specific slash flow to channel-agnostic control parsing in core channel ingress:
+  - `<prefix>inject` for immediate urgent handling
+  - `<prefix>first` for inbound queue head insertion
+  - `<prefix>kill` for subagent cancellation
+- Control prefix is configurable via `ingress.concat_prefix` (first rune is used).
+- Escape sequence `<prefix>+` now appends a literal `+` to the previous queued message in the same session (no control parsing).
+- Telegram slash command menu for control operations is cleared; `/help` now points to universal prefix controls.
+
 ## v0.1.5 - 2026-02-20
 
 ### Fixed

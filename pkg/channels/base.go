@@ -19,11 +19,12 @@ type Channel interface {
 }
 
 type BaseChannel struct {
-	config    interface{}
-	bus       *bus.MessageBus
-	running   bool
-	name      string
-	allowList []string
+	config         interface{}
+	bus            *bus.MessageBus
+	running        bool
+	name           string
+	allowList      []string
+	controlHandler func(bus.InboundMessage) bool
 }
 
 func NewBaseChannel(name string, config interface{}, bus *bus.MessageBus, allowList []string) *BaseChannel {
@@ -100,6 +101,9 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		SessionKey: sessionKey,
 		Metadata:   metadata,
 	}
+	if c.controlHandler != nil && c.controlHandler(msg) {
+		return
+	}
 
 	if ok := c.bus.PublishInbound(msg); !ok {
 		logger.WarnCF("channels", "Inbound message dropped: bus queue timeout", map[string]interface{}{
@@ -111,4 +115,8 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 
 func (c *BaseChannel) setRunning(running bool) {
 	c.running = running
+}
+
+func (c *BaseChannel) SetInboundControlHandler(handler func(bus.InboundMessage) bool) {
+	c.controlHandler = handler
 }

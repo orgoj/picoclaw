@@ -129,24 +129,6 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	}, th.CommandEqual("status"))
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-		return c.commands.Inject(ctx, message)
-	}, th.CommandEqual("inject"))
-
-	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-		return c.commands.First(ctx, message)
-	}, th.CommandEqual("first"))
-
-	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-		return c.commands.Urgent(ctx, message)
-	}, th.CommandEqual("urgent"))
-
-	if c.config.Tools.Spawn.Enabled {
-		bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
-			return c.commands.Kill(ctx, message)
-		}, th.CommandEqual("kill"))
-	}
-
-	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.handleMessage(ctx, &message)
 	}, th.AnyMessage())
 
@@ -155,31 +137,8 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 		"username": c.bot.Username(),
 	})
 
-	// Register commands
-	if c.config.Tools.Spawn.Enabled {
-		cmds := []telego.BotCommand{
-			{Command: "start", Description: "Start the bot"},
-			{Command: "help", Description: "Show available commands"},
-			{Command: "status", Description: "Show system and subagents status"},
-			{Command: "inject", Description: "Inject message now (queue bypass)"},
-			{Command: "first", Description: "Queue message at the head"},
-			{Command: "kill", Description: "Cancel subagent by task ID"},
-			{Command: "models", Description: "List configured models"},
-			{Command: "channels", Description: "List available channels"},
-		}
-		err = c.bot.SetMyCommands(ctx, &telego.SetMyCommandsParams{Commands: cmds})
-	} else {
-		cmds := []telego.BotCommand{
-			{Command: "start", Description: "Start the bot"},
-			{Command: "help", Description: "Show available commands"},
-			{Command: "status", Description: "Show system and subagents status"},
-			{Command: "inject", Description: "Inject message now (queue bypass)"},
-			{Command: "first", Description: "Queue message at the head"},
-			{Command: "models", Description: "List configured models"},
-			{Command: "channels", Description: "List available channels"},
-		}
-		err = c.bot.SetMyCommands(ctx, &telego.SetMyCommandsParams{Commands: cmds})
-	}
+	// Clear Telegram slash-command menu: control commands are channel-agnostic via configurable prefix.
+	err = c.bot.SetMyCommands(ctx, &telego.SetMyCommandsParams{Commands: []telego.BotCommand{}})
 	if err != nil {
 		logger.ErrorCF("telegram", "Failed to set bot commands", map[string]interface{}{
 			"error": err.Error(),

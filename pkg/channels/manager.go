@@ -10,9 +10,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/sipeed/picoclaw/pkg/agent"
+	"github.com/sipeed/picoclaw/pkg/audit"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -186,8 +188,20 @@ func (m *Manager) initChannels() error {
 	logger.InfoCF("channels", "Channel initialization completed", map[string]interface{}{
 		"enabled_channels": len(m.channels),
 	})
+	m.attachInboundControlHandlers()
 
 	return nil
+}
+
+func (m *Manager) attachInboundControlHandlers() {
+	for _, channel := range m.channels {
+		type controlCapable interface {
+			SetInboundControlHandler(func(bus.InboundMessage) bool)
+		}
+		if cc, ok := channel.(controlCapable); ok {
+			cc.SetInboundControlHandler(m.handleInboundControl)
+		}
+	}
 }
 
 func (m *Manager) StartAll(ctx context.Context) error {
@@ -294,6 +308,242 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func firstRuneString(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	return string([]rune(s)[0])
+}
+
+func (m *Manager) controlPrefix() string {
+	if m.config == nil {
+		return "+"
+	}
+	prefix := firstRuneString(m.config.Ingress.ConcatPrefix)
+	if prefix == "" {
+		return "+"
+	}
+	return prefix
+}
+
+func splitControlCommand(prefix, content string) (cmd, body string, ok bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		prefix = "+"
+	}
+	text := strings.TrimSpace(content)
+	if !strings.HasPrefix(text, prefix) {
+		return "", "", false
+	}
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return "", "", false
+	}
+	first := fields[0]
+	cmd = strings.TrimPrefix(strings.ToLower(first), strings.ToLower(prefix))
+	body = strings.TrimSpace(strings.TrimPrefix(text, first))
+	return cmd, body, true
+}
+
+func (m *Manager) sendControlReply(msg bus.InboundMessage, content string) {
+	if m.bus == nil || strings.TrimSpace(content) == "" {
+		return
+	}
+	if ok := m.bus.PublishOutbound(bus.OutboundMessage{
+		Channel: msg.Channel,
+		ChatID:  msg.ChatID,
+		Content: content,
+	}); !ok {
+		logger.WarnCF("channels", "Failed to send control reply: outbound queue timeout", map[string]interface{}{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+		})
+	}
+}
+
+func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
+	prefix := m.controlPrefix()
+	text := strings.TrimSpace(msg.Content)
+	if strings.HasPrefix(text, prefix+"+") {
+		// Escape sequence (<prefix>+) appends a literal "+" to the previous
+		// queued message in this session via ingress merge semantics.
+		msg.Content = prefix + "+"
+		if ok := m.bus.PublishInbound(msg); !ok {
+			logger.WarnCF("channels", "Escaped-prefixed message dropped: inbound queue timeout", map[string]interface{}{
+				"channel": msg.Channel,
+				"chat_id": msg.ChatID,
+			})
+		}
+		return true
+	}
+
+	cmd, body, ok := splitControlCommand(prefix, msg.Content)
+	if !ok {
+		return false
+	}
+
+	switch cmd {
+	case "inject", "urgent":
+		return m.handleInjectControl(msg, body)
+	case "first":
+		return m.handleFirstControl(msg, body)
+	case "kill":
+		return m.handleKillControl(msg, body)
+	default:
+		return false
+	}
+}
+
+func (m *Manager) handleInjectControl(msg bus.InboundMessage, body string) bool {
+	prefix := m.controlPrefix()
+	if strings.TrimSpace(body) == "" {
+		m.sendControlReply(msg, fmt.Sprintf("Usage: %sinject MESSAGE", prefix))
+		return true
+	}
+
+	content := fmt.Sprintf(
+		"<urgent_message priority=\"high\" source=\"channel:%sinject\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.",
+		prefix,
+		body,
+	)
+
+	if m.agentLoop != nil && m.agentLoop.InjectUrgent(msg.SessionKey, content) {
+		audit.Record("control_inject_active_run", map[string]interface{}{
+			"session_key": msg.SessionKey,
+			"channel":     msg.Channel,
+			"chat_id":     msg.ChatID,
+		})
+		m.sendControlReply(msg, "Injected into active run.")
+		return true
+	}
+
+	if m.agentLoop != nil {
+		m.sendControlReply(msg, "Inject accepted. Processing now (queue bypass).")
+		audit.Record("control_inject_immediate_start", map[string]interface{}{
+			"session_key": msg.SessionKey,
+			"channel":     msg.Channel,
+			"chat_id":     msg.ChatID,
+		})
+
+		go func() {
+			resp, err := m.agentLoop.ProcessImmediate(context.Background(), msg.Channel, msg.ChatID, msg.SenderID, msg.SessionKey, content)
+			if err != nil {
+				logger.ErrorCF("channels", "Immediate inject processing failed", map[string]interface{}{
+					"error":       err.Error(),
+					"session_key": msg.SessionKey,
+					"channel":     msg.Channel,
+					"chat_id":     msg.ChatID,
+				})
+				resp = "Inject processing failed. Please retry."
+			} else if strings.TrimSpace(resp) == "" {
+				resp = "Inject processed."
+			}
+
+			m.sendControlReply(msg, resp)
+			audit.Record("control_inject_immediate_done", map[string]interface{}{
+				"session_key": msg.SessionKey,
+				"channel":     msg.Channel,
+				"chat_id":     msg.ChatID,
+			})
+		}()
+		return true
+	}
+
+	meta := map[string]string{
+		"urgent": "true",
+		"source": fmt.Sprintf("channel:%sinject", prefix),
+	}
+	id, ok := m.bus.PublishInboundWithID(bus.InboundMessage{
+		Channel:    msg.Channel,
+		SenderID:   msg.SenderID,
+		ChatID:     msg.ChatID,
+		SessionKey: msg.SessionKey,
+		Content:    content,
+		Media:      msg.Media,
+		Metadata:   meta,
+	})
+	if ok {
+		m.sendControlReply(msg, fmt.Sprintf("Inject queued. Queue ID: %s", id))
+	} else {
+		m.sendControlReply(msg, "Failed to process inject message.")
+	}
+	return true
+}
+
+func (m *Manager) handleFirstControl(msg bus.InboundMessage, body string) bool {
+	prefix := m.controlPrefix()
+	if strings.TrimSpace(body) == "" {
+		m.sendControlReply(msg, fmt.Sprintf("Usage: %sfirst MESSAGE", prefix))
+		return true
+	}
+
+	id, ok := m.bus.InsertInboundFirst(bus.InboundMessage{
+		Channel:    msg.Channel,
+		SenderID:   msg.SenderID,
+		ChatID:     msg.ChatID,
+		SessionKey: msg.SessionKey,
+		Content:    body,
+		Media:      msg.Media,
+		Metadata: map[string]string{
+			"source": fmt.Sprintf("channel:%sfirst", prefix),
+		},
+	})
+	if !ok {
+		m.sendControlReply(msg, "Failed to enqueue at head.")
+		return true
+	}
+
+	audit.Record("control_first_enqueue_head", map[string]interface{}{
+		"id":          id,
+		"session_key": msg.SessionKey,
+		"channel":     msg.Channel,
+		"chat_id":     msg.ChatID,
+	})
+	m.sendControlReply(msg, fmt.Sprintf("Enqueued at queue head. Queue ID: %s", id))
+	return true
+}
+
+func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
+	prefix := m.controlPrefix()
+	if m.config == nil || !m.config.Tools.Spawn.Enabled {
+		m.sendControlReply(msg, "Kill is unavailable: spawn tool is disabled in config.")
+		return true
+	}
+	if m.subagentManager == nil {
+		m.sendControlReply(msg, "Subagent manager is not initialized.")
+		return true
+	}
+
+	taskID := strings.TrimSpace(body)
+	if taskID == "" {
+		running := m.subagentManager.GetRunningTasks()
+		if len(running) == 0 {
+			m.sendControlReply(msg, fmt.Sprintf("Usage: %skill <task_id>\nNo running subagents.", prefix))
+			return true
+		}
+		ids := make([]string, 0, len(running))
+		for _, t := range running {
+			ids = append(ids, t.ID)
+		}
+		m.sendControlReply(msg, fmt.Sprintf("Usage: %skill <task_id>\nRunning task IDs: %s", prefix, strings.Join(ids, ", ")))
+		return true
+	}
+
+	if err := m.subagentManager.Cancel(taskID); err != nil {
+		m.sendControlReply(msg, fmt.Sprintf("Failed to cancel task '%s': %v", taskID, err))
+		return true
+	}
+
+	audit.Record("control_kill_cancel", map[string]interface{}{
+		"task_id": taskID,
+		"channel": msg.Channel,
+		"chat_id": msg.ChatID,
+	})
+	m.sendControlReply(msg, fmt.Sprintf("Cancelled subagent task '%s'.", taskID))
+	return true
 }
 
 func (m *Manager) GetChannel(name string) (Channel, bool) {
