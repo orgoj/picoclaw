@@ -80,3 +80,29 @@ func TestConsumeInboundWithTimeout(t *testing.T) {
 		t.Fatal("expected timeout")
 	}
 }
+
+func TestPublishInboundCritical_DropsOldestWhenFull(t *testing.T) {
+	mb := NewMessageBus()
+	mb.inboundCap = 2
+
+	if !mb.PublishInbound(InboundMessage{Content: "a"}) {
+		t.Fatal("publish a failed")
+	}
+	if !mb.PublishInbound(InboundMessage{Content: "b"}) {
+		t.Fatal("publish b failed")
+	}
+	if !mb.PublishInboundCritical(InboundMessage{Content: "critical"}) {
+		t.Fatal("critical publish failed")
+	}
+
+	items := mb.ListInbound()
+	if len(items) != 2 {
+		t.Fatalf("expected queue len 2, got %d", len(items))
+	}
+	if items[0].Message.Content != "b" {
+		t.Fatalf("expected oldest message to be dropped, first item=%q", items[0].Message.Content)
+	}
+	if items[1].Message.Content != "critical" {
+		t.Fatalf("expected critical message at tail, got %q", items[1].Message.Content)
+	}
+}

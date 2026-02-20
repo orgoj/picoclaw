@@ -40,6 +40,7 @@ type ToolLoopResult struct {
 func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []providers.Message, channel, chatID string) (*ToolLoopResult, error) {
 	iteration := 0
 	var finalContent string
+	completed := false
 
 	for iteration < config.MaxIterations {
 		iteration++
@@ -102,6 +103,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		// 4. If no tool calls, we're done
 		if len(response.ToolCalls) == 0 {
 			finalContent = response.Content
+			completed = true
 			logger.InfoCF("toolloop", "LLM response without tool calls (direct answer)",
 				map[string]any{
 					"run_id":        config.RunID,
@@ -175,6 +177,10 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 			}
 			messages = append(messages, toolResultMsg)
 		}
+	}
+
+	if !completed {
+		return nil, fmt.Errorf("tool loop reached max iterations (%d) without final response", config.MaxIterations)
 	}
 
 	return &ToolLoopResult{

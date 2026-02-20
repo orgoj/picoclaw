@@ -15,6 +15,8 @@ import (
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
+const emptySubagentResultMessage = "Subagent finished without textual summary. Check generated files and tool side effects."
+
 type SubagentTask struct {
 	ID            string
 	Task          string
@@ -222,6 +224,25 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	task.Started = time.Now().UnixMilli()
 	sm.mu.Unlock()
 
+	// Fail-safe: never let a subagent terminate without publishing terminal state.
+	defer func() {
+		if r := recover(); r != nil {
+			sm.mu.Lock()
+			if task.Status == "running" || task.Ended == 0 {
+				task.Status = "failed"
+				task.Result = fmt.Sprintf("Panic in subagent execution: %v", r)
+				task.Ended = time.Now().UnixMilli()
+			}
+			delete(sm.cancels, task.ID)
+			sm.mu.Unlock()
+			sm.publishTaskUpdate(task)
+			logger.ErrorCF("subagent", "Subagent task panicked", map[string]interface{}{
+				"task_id": task.ID,
+				"panic":   fmt.Sprint(r),
+			})
+		}
+	}()
+
 	logger.InfoCF("subagent", "Starting subagent task",
 		map[string]interface{}{
 			"task_id":   task.ID,
@@ -316,11 +337,15 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 			Err:     err,
 		}
 	} else {
+		resultContent := strings.TrimSpace(loopResult.Content)
+		if resultContent == "" {
+			resultContent = emptySubagentResultMessage
+		}
 		task.Status = "completed"
-		task.Result = loopResult.Content
+		task.Result = resultContent
 		result = &ToolResult{
-			ForLLM:  fmt.Sprintf("Subagent '%s' completed (iterations: %d): %s", task.Label, loopResult.Iterations, loopResult.Content),
-			ForUser: loopResult.Content,
+			ForLLM:  fmt.Sprintf("Subagent '%s' completed (iterations: %d): %s", task.Label, loopResult.Iterations, resultContent),
+			ForUser: resultContent,
 			Silent:  false,
 			IsError: false,
 			Async:   false,
@@ -551,16 +576,23 @@ func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 		announceContent = fmt.Sprintf("Task '%s' %s.\n\nResult:\n%s", task.Label, status, task.Result)
 	}
 
-	if ok := sm.bus.PublishInbound(bus.InboundMessage{
+	inbound := bus.InboundMessage{
 		Channel:  "system",
 		SenderID: fmt.Sprintf("subagent:%s", task.ID),
 		// Format: "original_channel:original_chat_id" for routing back
 		ChatID:  fmt.Sprintf("%s:%s", task.OriginChannel, task.OriginChatID),
 		Content: announceContent,
-	}); !ok {
-		logger.WarnCF("subagent", "Subagent completion notification dropped: inbound queue timeout", map[string]interface{}{
+	}
+
+	if ok := sm.bus.PublishInbound(inbound); !ok {
+		logger.WarnCF("subagent", "Subagent completion delayed: inbound queue timeout, using critical fallback", map[string]interface{}{
 			"task_id": task.ID,
 		})
+		if criticalOK := sm.bus.PublishInboundCritical(inbound); !criticalOK {
+			logger.ErrorCF("subagent", "Subagent completion delivery failed: inbound bus closed", map[string]interface{}{
+				"task_id": task.ID,
+			})
+		}
 	}
 }
 
@@ -680,8 +712,13 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult(fmt.Sprintf("Subagent execution failed: %v", err)).WithError(err)
 	}
 
+	resultContent := strings.TrimSpace(loopResult.Content)
+	if resultContent == "" {
+		resultContent = emptySubagentResultMessage
+	}
+
 	// ForUser: Brief summary for user (truncated if too long)
-	userContent := loopResult.Content
+	userContent := resultContent
 	maxUserLen := 500
 	if len(userContent) > maxUserLen {
 		userContent = userContent[:maxUserLen] + "..."
@@ -693,7 +730,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		labelStr = "(unnamed)"
 	}
 	llmContent := fmt.Sprintf("Subagent task completed:\nLabel: %s\nIterations: %d\nResult: %s",
-		labelStr, loopResult.Iterations, loopResult.Content)
+		labelStr, loopResult.Iterations, resultContent)
 
 	return &ToolResult{
 		ForLLM:  llmContent,

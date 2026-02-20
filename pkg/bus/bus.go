@@ -38,6 +38,29 @@ func (mb *MessageBus) PublishInbound(msg InboundMessage) bool {
 	return mb.publishInboundWithTimeout(msg, 2*time.Second)
 }
 
+// PublishInboundCritical ensures critical inbound messages are enqueued even when
+// the queue is full by dropping the oldest queued item.
+func (mb *MessageBus) PublishInboundCritical(msg InboundMessage) bool {
+	mb.inboundMu.Lock()
+	defer mb.inboundMu.Unlock()
+
+	if mb.closed {
+		return false
+	}
+	if len(mb.inboundQueue) >= mb.inboundCap && len(mb.inboundQueue) > 0 {
+		mb.inboundQueue = mb.inboundQueue[1:]
+	}
+
+	id := fmt.Sprintf("in-%06d", mb.inboundSeq.Add(1))
+	mb.inboundQueue = append(mb.inboundQueue, &InboundQueueItem{
+		ID:         id,
+		Message:    msg,
+		EnqueuedAt: time.Now().UnixMilli(),
+	})
+	mb.notifyInboundReady()
+	return true
+}
+
 func (mb *MessageBus) PublishInboundWithID(msg InboundMessage) (string, bool) {
 	return mb.publishInboundWithIDTimeout(msg, 2*time.Second)
 }

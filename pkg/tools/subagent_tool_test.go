@@ -37,6 +37,26 @@ func (m *MockLLMProvider) GetContextWindow() int {
 	return 4096
 }
 
+type EmptyResponseProvider struct{}
+
+func (m *EmptyResponseProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, options map[string]interface{}) (*providers.LLMResponse, error) {
+	return &providers.LLMResponse{
+		Content: "",
+	}, nil
+}
+
+func (m *EmptyResponseProvider) GetDefaultModel() string {
+	return "test-model"
+}
+
+func (m *EmptyResponseProvider) SupportsTools() bool {
+	return false
+}
+
+func (m *EmptyResponseProvider) GetContextWindow() int {
+	return 4096
+}
+
 // testConfig creates a minimal config for testing
 func testConfig() *config.Config {
 	cfg := config.DefaultConfig()
@@ -222,6 +242,29 @@ func TestSubagentTool_Execute_NoLabel(t *testing.T) {
 	// ForLLM should show (unnamed) for missing label
 	if !strings.Contains(result.ForLLM, "(unnamed)") {
 		t.Errorf("ForLLM should show '(unnamed)' for missing label, got: %s", result.ForLLM)
+	}
+}
+
+func TestSubagentTool_Execute_EmptyFinalContentUsesFallback(t *testing.T) {
+	provider := &EmptyResponseProvider{}
+	msgBus := bus.NewMessageBus()
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
+	tool := NewSubagentTool(manager)
+
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"task": "task with empty response",
+	}
+
+	result := tool.Execute(ctx, args)
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForUser, "without textual summary") {
+		t.Fatalf("expected fallback user content, got: %q", result.ForUser)
+	}
+	if !strings.Contains(result.ForLLM, "without textual summary") {
+		t.Fatalf("expected fallback llm content, got: %q", result.ForLLM)
 	}
 }
 
