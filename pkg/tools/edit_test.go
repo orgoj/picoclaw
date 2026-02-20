@@ -287,3 +287,31 @@ func TestEditTool_AppendFile_MissingContent(t *testing.T) {
 		t.Errorf("Expected error when content is missing")
 	}
 }
+
+func TestEditTool_EditFile_DenyPattern_UnsafeMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	beadsDir := filepath.Join(tmpDir, ".beads")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatalf("Failed to create .beads dir: %v", err)
+	}
+	testFile := filepath.Join(beadsDir, "issues.json")
+	if err := os.WriteFile(testFile, []byte(`{"status":"open"}`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool := NewEditFileTool(tmpDir, false, "**/.beads/issues.json")
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"path":     ".beads/issues.json",
+		"old_text": "open",
+		"new_text": "closed",
+	}
+
+	result := tool.Execute(ctx, args)
+	if !result.IsError {
+		t.Fatalf("Expected deny-pattern error, got success")
+	}
+	if !strings.Contains(result.ForLLM, "denied pattern") {
+		t.Fatalf("Expected denied pattern message, got: %s", result.ForLLM)
+	}
+}

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.8 - 2026-02-20
+
+### Added
+- New agent defaults field `deny_path_patterns` for hard-blocking file and directory access with glob patterns.
+
+### Changed
+- File tools now enforce deny patterns across `read_file`, `write_file`, `list_dir`, `edit_file`, and `append_file`.
+- Deny patterns are enforced even when `restrict_to_workspace` is set to `false` (unsafe mode).
+- Documented user-visible deny-pattern metadata:
+  - Config field: `agents.defaults.deny_path_patterns`
+  - Glob semantics: `*`, `**`, `?`
+
 ## v0.1.7 - 2026-02-20
 
 ### Fixed

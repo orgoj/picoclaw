@@ -10,15 +10,17 @@ import (
 // EditFileTool edits a file by replacing old_text with new_text.
 // The old_text must exist exactly in the file.
 type EditFileTool struct {
-	allowedDir string
-	restrict   bool
+	allowedDir       string
+	restrict         bool
+	denyPathPatterns []string
 }
 
 // NewEditFileTool creates a new EditFileTool with optional directory restriction.
-func NewEditFileTool(allowedDir string, restrict bool) *EditFileTool {
+func NewEditFileTool(allowedDir string, restrict bool, denyPatterns ...string) *EditFileTool {
 	return &EditFileTool{
-		allowedDir: allowedDir,
-		restrict:   restrict,
+		allowedDir:       allowedDir,
+		restrict:         restrict,
+		denyPathPatterns: denyPatterns,
 	}
 }
 
@@ -67,7 +69,7 @@ func (t *EditFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult("new_text is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.allowedDir, t.restrict)
+	resolvedPath, err := validatePath(path, t.allowedDir, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -105,12 +107,13 @@ func (t *EditFileTool) Execute(ctx context.Context, args map[string]interface{})
 }
 
 type AppendFileTool struct {
-	workspace string
-	restrict  bool
+	workspace        string
+	restrict         bool
+	denyPathPatterns []string
 }
 
-func NewAppendFileTool(workspace string, restrict bool) *AppendFileTool {
-	return &AppendFileTool{workspace: workspace, restrict: restrict}
+func NewAppendFileTool(workspace string, restrict bool, denyPatterns ...string) *AppendFileTool {
+	return &AppendFileTool{workspace: workspace, restrict: restrict, denyPathPatterns: denyPatterns}
 }
 
 func (t *AppendFileTool) Name() string {
@@ -149,7 +152,7 @@ func (t *AppendFileTool) Execute(ctx context.Context, args map[string]interface{
 		return ErrorResult("content is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict)
+	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

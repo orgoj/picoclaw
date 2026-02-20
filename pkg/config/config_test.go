@@ -117,6 +117,34 @@ func TestDefaultConfig_WorkspacePath(t *testing.T) {
 	if cfg.Agents.Defaults.Workspace == "" {
 		t.Error("Workspace should not be empty")
 	}
+	if len(cfg.Agents.Defaults.DenyPathPatterns) != 0 {
+		t.Errorf("Expected empty deny_path_patterns by default, got %v", cfg.Agents.Defaults.DenyPathPatterns)
+	}
+}
+
+func TestDefaultConfig_DenyPathPatternsParsing(t *testing.T) {
+	jsonData := `{
+		"agents": {
+			"defaults": {
+				"deny_path_patterns": ["**/.git/**", "**/.beads/issues.json"]
+			}
+		}
+	}`
+
+	var cfg Config
+	if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+		t.Fatalf("Failed to unmarshal config: %v", err)
+	}
+
+	if len(cfg.Agents.Defaults.DenyPathPatterns) != 2 {
+		t.Fatalf("Expected 2 deny_path_patterns, got %d", len(cfg.Agents.Defaults.DenyPathPatterns))
+	}
+	if cfg.Agents.Defaults.DenyPathPatterns[0] != "**/.git/**" {
+		t.Errorf("Unexpected first deny_path_pattern: %q", cfg.Agents.Defaults.DenyPathPatterns[0])
+	}
+	if cfg.Agents.Defaults.DenyPathPatterns[1] != "**/.beads/issues.json" {
+		t.Errorf("Unexpected second deny_path_pattern: %q", cfg.Agents.Defaults.DenyPathPatterns[1])
+	}
 }
 
 // TestDefaultConfig_Model verifies model is set

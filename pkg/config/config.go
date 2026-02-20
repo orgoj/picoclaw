@@ -212,26 +212,27 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 }
 
 type AgentDefaults struct {
-	Workspace               string  `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
-	RestrictToWorkspace     bool    `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
-	Provider                string  `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
-	Model                   string  `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
-	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
-	ContextWindow           int     `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
-	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
-	MaxToolIterations       int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
-	MaxIterationsSubagent   int     `json:"max_iterations_subagent"`
-	MaxTokensSubagent       int     `json:"max_tokens_subagent"`
-	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_CONCURRENT_SUBAGENTS"`
-	LLMTimeout              int     `json:"llm_timeout"`
-	LLMMaxRetries           int     `json:"llm_max_retries" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_MAX_RETRIES"`
-	LLMRetryBackoffSeconds  int     `json:"llm_retry_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_BACKOFF_SECONDS"`
-	LLMRetryMaxBackoff      int     `json:"llm_retry_max_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_BACKOFF_SECONDS"`
-	LLMRateLimitBackoff     int     `json:"llm_rate_limit_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RATE_LIMIT_BACKOFF_SECONDS"`
-	LLMRateLimitMaxBackoff  int     `json:"llm_rate_limit_max_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RATE_LIMIT_MAX_BACKOFF_SECONDS"`
-	LLMRetryMaxElapsed      int     `json:"llm_retry_max_elapsed_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_ELAPSED_SECONDS"`
-	MemoryThreshold         float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
-	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_HISTORY_MESSAGE_THRESHOLD"`
+	Workspace               string   `json:"workspace" env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
+	RestrictToWorkspace     bool     `json:"restrict_to_workspace" env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
+	DenyPathPatterns        []string `json:"deny_path_patterns" env:"PICOCLAW_AGENTS_DEFAULTS_DENY_PATH_PATTERNS"`
+	Provider                string   `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
+	Model                   string   `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
+	MaxTokens               int      `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	ContextWindow           int      `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
+	Temperature             float64  `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
+	MaxToolIterations       int      `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
+	MaxIterationsSubagent   int      `json:"max_iterations_subagent"`
+	MaxTokensSubagent       int      `json:"max_tokens_subagent"`
+	MaxConcurrentSubagents  int      `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_CONCURRENT_SUBAGENTS"`
+	LLMTimeout              int      `json:"llm_timeout"`
+	LLMMaxRetries           int      `json:"llm_max_retries" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_MAX_RETRIES"`
+	LLMRetryBackoffSeconds  int      `json:"llm_retry_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_BACKOFF_SECONDS"`
+	LLMRetryMaxBackoff      int      `json:"llm_retry_max_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_BACKOFF_SECONDS"`
+	LLMRateLimitBackoff     int      `json:"llm_rate_limit_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RATE_LIMIT_BACKOFF_SECONDS"`
+	LLMRateLimitMaxBackoff  int      `json:"llm_rate_limit_max_backoff_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RATE_LIMIT_MAX_BACKOFF_SECONDS"`
+	LLMRetryMaxElapsed      int      `json:"llm_retry_max_elapsed_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_ELAPSED_SECONDS"`
+	MemoryThreshold         float64  `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
+	HistoryMessageThreshold int      `json:"history_message_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_HISTORY_MESSAGE_THRESHOLD"`
 }
 
 type ChannelsConfig struct {
@@ -427,6 +428,7 @@ func DefaultConfig() *Config {
 			Defaults: AgentDefaults{
 				Workspace:               "~/.picoclaw/workspace",
 				RestrictToWorkspace:     true,
+				DenyPathPatterns:        []string{},
 				Provider:                "",
 				Model:                   "glm-4.7",
 				MaxTokens:               8192,

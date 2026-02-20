@@ -3,6 +3,7 @@
     "defaults": {
       "workspace": "~/.picoclaw/workspace",
       "restrict_to_workspace": true,
+      "deny_path_patterns": [],
       "provider": "",
       "model": "glm-4.7",
       "max_tokens": 8192,

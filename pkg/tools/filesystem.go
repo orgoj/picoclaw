@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 // validatePath ensures the given path is within the workspace if restrict is true.
-func validatePath(path, workspace string, restrict bool) (string, error) {
+func validatePath(path, workspace string, restrict bool, denyPatterns []string) (string, error) {
 	if workspace == "" {
-		return path, nil
+		cleanPath := filepath.Clean(path)
+		if matched, pattern := isPathDenied(cleanPath, "", denyPatterns); matched {
+			return "", fmt.Errorf("access denied: path matches denied pattern %q", pattern)
+		}
+		return cleanPath, nil
 	}
 
 	absWorkspace, err := filepath.Abs(workspace)
@@ -32,17 +37,96 @@ func validatePath(path, workspace string, restrict bool) (string, error) {
 	if restrict && !strings.HasPrefix(absPath, absWorkspace) {
 		return "", fmt.Errorf("access denied: path is outside the workspace")
 	}
+	if matched, pattern := isPathDenied(absPath, absWorkspace, denyPatterns); matched {
+		return "", fmt.Errorf("access denied: path matches denied pattern %q", pattern)
+	}
 
 	return absPath, nil
 }
 
-type ReadFileTool struct {
-	workspace string
-	restrict  bool
+func isPathDenied(absPath, workspace string, patterns []string) (bool, string) {
+	if len(patterns) == 0 {
+		return false, ""
+	}
+
+	absSlash := filepath.ToSlash(filepath.Clean(absPath))
+	candidates := []string{
+		absSlash,
+		strings.TrimPrefix(absSlash, "/"),
+	}
+
+	if workspace != "" {
+		rel, err := filepath.Rel(workspace, absPath)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			relSlash := filepath.ToSlash(rel)
+			candidates = append(candidates, relSlash)
+			if relSlash != "." {
+				candidates = append(candidates, "./"+relSlash)
+			}
+		}
+	}
+
+	for _, pattern := range patterns {
+		normalizedPattern := strings.TrimSpace(filepath.ToSlash(pattern))
+		if normalizedPattern == "" {
+			continue
+		}
+		for _, candidate := range candidates {
+			if globMatchPath(normalizedPattern, candidate) {
+				return true, pattern
+			}
+		}
+	}
+
+	return false, ""
 }
 
-func NewReadFileTool(workspace string, restrict bool) *ReadFileTool {
-	return &ReadFileTool{workspace: workspace, restrict: restrict}
+func globMatchPath(pattern, candidate string) bool {
+	rePattern := strings.Builder{}
+	rePattern.Grow(len(pattern) * 2)
+	rePattern.WriteString("^")
+
+	for i := 0; i < len(pattern); i++ {
+		ch := pattern[i]
+		if ch == '*' {
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
+				rePattern.WriteString(".*")
+				i++
+				continue
+			}
+			rePattern.WriteString(`[^/]*`)
+			continue
+		}
+		if ch == '?' {
+			rePattern.WriteString(`[^/]`)
+			continue
+		}
+		if strings.ContainsRune(`.+()|[]{}^$\\`, rune(ch)) {
+			rePattern.WriteByte('\\')
+		}
+		rePattern.WriteByte(ch)
+	}
+	rePattern.WriteString("$")
+
+	re := regexp.MustCompile(rePattern.String())
+	if re.MatchString(candidate) {
+		return true
+	}
+	// Allow patterns ending with "/**" to match the directory itself.
+	if strings.HasSuffix(pattern, "/**") {
+		return re.MatchString(candidate + "/")
+	}
+	return false
+}
+
+type ReadFileTool struct {
+	workspace        string
+	restrict         bool
+	denyPathPatterns []string
+}
+
+func NewReadFileTool(workspace string, restrict bool, denyPatterns ...string) *ReadFileTool {
+	return &ReadFileTool{workspace: workspace, restrict: restrict, denyPathPatterns: denyPatterns}
 }
 
 func (t *ReadFileTool) Name() string {
@@ -72,7 +156,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult("path is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict)
+	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -86,12 +170,13 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 }
 
 type WriteFileTool struct {
-	workspace string
-	restrict  bool
+	workspace        string
+	restrict         bool
+	denyPathPatterns []string
 }
 
-func NewWriteFileTool(workspace string, restrict bool) *WriteFileTool {
-	return &WriteFileTool{workspace: workspace, restrict: restrict}
+func NewWriteFileTool(workspace string, restrict bool, denyPatterns ...string) *WriteFileTool {
+	return &WriteFileTool{workspace: workspace, restrict: restrict, denyPathPatterns: denyPatterns}
 }
 
 func (t *WriteFileTool) Name() string {
@@ -130,7 +215,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 		return ErrorResult("content is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict)
+	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -151,12 +236,13 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 }
 
 type ListDirTool struct {
-	workspace string
-	restrict  bool
+	workspace        string
+	restrict         bool
+	denyPathPatterns []string
 }
 
-func NewListDirTool(workspace string, restrict bool) *ListDirTool {
-	return &ListDirTool{workspace: workspace, restrict: restrict}
+func NewListDirTool(workspace string, restrict bool, denyPatterns ...string) *ListDirTool {
+	return &ListDirTool{workspace: workspace, restrict: restrict, denyPathPatterns: denyPatterns}
 }
 
 func (t *ListDirTool) Name() string {
@@ -186,7 +272,7 @@ func (t *ListDirTool) Execute(ctx context.Context, args map[string]interface{}) 
 		path = "."
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict)
+	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

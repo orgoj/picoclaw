@@ -95,13 +95,14 @@ type processOptions struct {
 // This is shared between main agent and subagents.
 func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msgBus *bus.MessageBus) *tools.ToolRegistry {
 	registry := tools.NewToolRegistry()
+	denyPathPatterns := cfg.Agents.Defaults.DenyPathPatterns
 
 	// File system tools
-	registry.Register(tools.NewReadFileTool(workspace, restrict))
-	registry.Register(tools.NewWriteFileTool(workspace, restrict))
-	registry.Register(tools.NewListDirTool(workspace, restrict))
-	registry.Register(tools.NewEditFileTool(workspace, restrict))
-	registry.Register(tools.NewAppendFileTool(workspace, restrict))
+	registry.Register(tools.NewReadFileTool(workspace, restrict, denyPathPatterns...))
+	registry.Register(tools.NewWriteFileTool(workspace, restrict, denyPathPatterns...))
+	registry.Register(tools.NewListDirTool(workspace, restrict, denyPathPatterns...))
+	registry.Register(tools.NewEditFileTool(workspace, restrict, denyPathPatterns...))
+	registry.Register(tools.NewAppendFileTool(workspace, restrict, denyPathPatterns...))
 
 	// Shell execution
 	registry.Register(tools.NewExecTool(workspace, restrict))

@@ -793,7 +793,8 @@ PicoClaw runs in a sandboxed environment by default. The agent can only access f
   "agents": {
     "defaults": {
       "workspace": "~/.picoclaw/workspace",
-      "restrict_to_workspace": true
+      "restrict_to_workspace": true,
+      "deny_path_patterns": ["**/.git/**", "**/.beads/issues.json"]
     }
   }
 }
@@ -803,6 +804,7 @@ PicoClaw runs in a sandboxed environment by default. The agent can only access f
 |--------|---------|-------------|
 | `workspace` | `~/.picoclaw/workspace` | Working directory for the agent |
 | `restrict_to_workspace` | `true` | Restrict file/command access to workspace |
+| `deny_path_patterns` | `[]` | Hard-block file/dir access by glob pattern (applies even when `restrict_to_workspace` is `false`) |
 
 #### Protected Tools
 
@@ -827,6 +829,28 @@ Even with `restrict_to_workspace: false`, the `exec` tool blocks these dangerous
 * Writing to `/dev/sd[a-z]` — Direct disk writes
 * `shutdown`, `reboot`, `poweroff` — System shutdown
 * Fork bomb `:(){ :|:& };:`
+
+#### File/Directory Hard-Block (Works in Unsafe Mode)
+
+You can always block sensitive paths with `deny_path_patterns`, even when `restrict_to_workspace` is disabled.
+
+Example:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "restrict_to_workspace": false,
+      "deny_path_patterns": ["**/.git/**", "**/.beads/issues.json"]
+    }
+  }
+}
+```
+
+Supported glob style:
+- `*` matches any chars except `/`
+- `**` matches across directories
+- `?` matches one char except `/`
 
 #### Error Examples
 
@@ -1090,6 +1114,7 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 |--------|---------|-------------|
 | `workspace` | `~/.picoclaw/workspace` | Working directory for the agent |
 | `restrict_to_workspace` | `true` | Restrict file/command access to workspace |
+| `deny_path_patterns` | `[]` | Hard-block file/dir access by glob pattern |
 | `provider` | `""` (auto-detect) | Force a specific provider: `openrouter`, `zhipu`, `anthropic`, `openai`, `gemini`, `groq`, etc. |
 | `model` | `glm-4.7` | Model to use (provider-specific) |
 | `max_tokens` | `8192` | Max tokens for main agent responses |

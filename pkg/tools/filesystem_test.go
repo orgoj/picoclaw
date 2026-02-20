@@ -247,3 +247,51 @@ func TestFilesystemTool_ListDir_DefaultPath(t *testing.T) {
 		t.Errorf("Expected success with default path '.', got IsError=true: %s", result.ForLLM)
 	}
 }
+
+func TestFilesystemTool_ReadFile_DenyPattern_UnsafeMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git dir: %v", err)
+	}
+	testFile := filepath.Join(gitDir, "config")
+	if err := os.WriteFile(testFile, []byte("secret"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool := NewReadFileTool(tmpDir, false, "**/.git/**")
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"path": ".git/config",
+	}
+
+	result := tool.Execute(ctx, args)
+	if !result.IsError {
+		t.Fatalf("Expected deny-pattern error, got success")
+	}
+	if !strings.Contains(result.ForLLM, "denied pattern") {
+		t.Fatalf("Expected denied pattern message, got: %s", result.ForLLM)
+	}
+}
+
+func TestFilesystemTool_ListDir_DenyPattern_BlocksDirectoryPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git dir: %v", err)
+	}
+
+	tool := NewListDirTool(tmpDir, false, "**/.git/**")
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"path": ".git",
+	}
+
+	result := tool.Execute(ctx, args)
+	if !result.IsError {
+		t.Fatalf("Expected deny-pattern error, got success")
+	}
+	if !strings.Contains(result.ForLLM, "denied pattern") {
+		t.Fatalf("Expected denied pattern message, got: %s", result.ForLLM)
+	}
+}
