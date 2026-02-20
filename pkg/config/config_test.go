@@ -2,6 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -463,5 +466,29 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	}
 	if named.Temperature != 0.9 {
 		t.Errorf("Named: expected temperature 0.9 (from defaults), got %f", named.Temperature)
+	}
+}
+
+func TestLoadConfig_SyntaxErrorIncludesLineContext(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	bad := "{\n  \"gateway\": {\n    \"host\": \"0.0.0.0\" \"port\": 18790\n  }\n}\n"
+	if err := os.WriteFile(path, []byte(bad), 0644); err != nil {
+		t.Fatalf("write bad config: %v", err)
+	}
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected syntax error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "line") || !strings.Contains(msg, "column") {
+		t.Fatalf("expected line/column in error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "\"host\": \"0.0.0.0\" \"port\": 18790") {
+		t.Fatalf("expected source line in error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "^") {
+		t.Fatalf("expected caret marker in error, got: %s", msg)
 	}
 }

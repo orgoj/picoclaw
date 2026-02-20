@@ -609,7 +609,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		return nil, formatConfigJSONError(err, data)
 	}
 
 	if err := env.Parse(cfg); err != nil {
@@ -617,6 +617,55 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func formatConfigJSONError(err error, data []byte) error {
+	syntaxErr, ok := err.(*json.SyntaxError)
+	if !ok {
+		return err
+	}
+
+	line, col := jsonOffsetToLineCol(data, syntaxErr.Offset)
+	srcLine := jsonLineAt(data, line)
+	if srcLine == "" {
+		return fmt.Errorf("%w (line %d, column %d)", err, line, col)
+	}
+	caretCol := col
+	if caretCol < 1 {
+		caretCol = 1
+	}
+	return fmt.Errorf("%w (line %d, column %d)\n%s\n%s^", err, line, col, srcLine, strings.Repeat(" ", caretCol-1))
+}
+
+func jsonOffsetToLineCol(data []byte, offset int64) (line int, col int) {
+	if offset < 1 {
+		return 1, 1
+	}
+	line, col = 1, 1
+	target := int(offset - 1)
+	if target > len(data) {
+		target = len(data)
+	}
+	for i := 0; i < target; i++ {
+		if data[i] == '\n' {
+			line++
+			col = 1
+			continue
+		}
+		col++
+	}
+	return line, col
+}
+
+func jsonLineAt(data []byte, targetLine int) string {
+	if targetLine < 1 {
+		return ""
+	}
+	lines := strings.Split(string(data), "\n")
+	if targetLine > len(lines) {
+		return ""
+	}
+	return lines[targetLine-1]
 }
 
 func SaveConfig(path string, cfg *Config) error {
