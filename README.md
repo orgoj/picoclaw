@@ -867,6 +867,33 @@ Available template variables:
 - `{{channel}}`
 - `{{chat_id}}`
 
+#### Shutdown Notice (Ctrl+C / SIGTERM / SIGHUP)
+
+Gateway can send an automatic outbound message to the last active channel/chat before shutdown.
+
+Example:
+
+```json
+{
+  "gateway": {
+    "shutdown_notice": {
+      "enabled": true,
+      "template": "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
+    }
+  }
+}
+```
+
+Template variables:
+- `{{timestamp}}`
+- `{{signal}}`
+- `{{channel}}`
+- `{{chat_id}}`
+
+Note:
+- Works for handled signals (`Ctrl+C`, `SIGTERM`, `SIGHUP`).
+- Cannot run on hard kill (`SIGKILL` / `kill -9`).
+
 ### Heartbeat (Periodic Tasks)
 
 PicoClaw can perform periodic tasks automatically. Create a `HEARTBEAT.md` file in your workspace:
@@ -1052,6 +1079,8 @@ Retry semantics (exact):
 | `startup_prompt.enabled` | `true` | Inject restart context into last active session at startup |
 | `startup_prompt.template` | built-in template | Prompt template for restart context |
 | `startup_prompt.include_preflight_warnings` | `true` | Inject preflight warning-fix task into same main session |
+| `shutdown_notice.enabled` | `true` | Send shutdown message to last active channel before exit |
+| `shutdown_notice.template` | built-in template | Outbound message template for shutdown notice |
 
 #### Heartbeat
 
@@ -1177,6 +1206,10 @@ picoclaw agent -m "Hello"
       "enabled": true,
       "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Greet the user in this channel and continue with full continuity.",
       "include_preflight_warnings": true
+    },
+    "shutdown_notice": {
+      "enabled": true,
+      "template": "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
     }
   },
   "channels": {

@@ -357,15 +357,21 @@ type ProviderConfig struct {
 }
 
 type GatewayConfig struct {
-	Host          string                     `json:"host" env:"PICOCLAW_GATEWAY_HOST"`
-	Port          int                        `json:"port" env:"PICOCLAW_GATEWAY_PORT"`
-	StartupPrompt GatewayStartupPromptConfig `json:"startup_prompt"`
+	Host           string                      `json:"host" env:"PICOCLAW_GATEWAY_HOST"`
+	Port           int                         `json:"port" env:"PICOCLAW_GATEWAY_PORT"`
+	StartupPrompt  GatewayStartupPromptConfig  `json:"startup_prompt"`
+	ShutdownNotice GatewayShutdownNoticeConfig `json:"shutdown_notice"`
 }
 
 type GatewayStartupPromptConfig struct {
 	Enabled                  bool   `json:"enabled" env:"PICOCLAW_GATEWAY_STARTUP_PROMPT_ENABLED"`
 	Template                 string `json:"template" env:"PICOCLAW_GATEWAY_STARTUP_PROMPT_TEMPLATE"`
 	IncludePreflightWarnings bool   `json:"include_preflight_warnings" env:"PICOCLAW_GATEWAY_STARTUP_PROMPT_INCLUDE_PREFLIGHT_WARNINGS"`
+}
+
+type GatewayShutdownNoticeConfig struct {
+	Enabled  bool   `json:"enabled" env:"PICOCLAW_GATEWAY_SHUTDOWN_NOTICE_ENABLED"`
+	Template string `json:"template" env:"PICOCLAW_GATEWAY_SHUTDOWN_NOTICE_TEMPLATE"`
 }
 
 type BraveConfig struct {
@@ -525,6 +531,10 @@ func DefaultConfig() *Config {
 				Enabled:                  true,
 				Template:                 "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Continue in this same thread and preserve continuity. If user requested, send a short restart confirmation.",
 				IncludePreflightWarnings: true,
+			},
+			ShutdownNotice: GatewayShutdownNoticeConfig{
+				Enabled:  true,
+				Template: "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now.",
 			},
 		},
 		Tools: ToolsConfig{

@@ -186,6 +186,10 @@
       "enabled": true,
       "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Continue in this same thread and preserve continuity. If user requested, send a short restart confirmation.",
       "include_preflight_warnings": true
+    },
+    "shutdown_notice": {
+      "enabled": true,
+      "template": "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
     }
   },
   "logging": {

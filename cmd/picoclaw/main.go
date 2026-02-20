@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chzyer/readline"
@@ -780,8 +781,10 @@ func gatewayCmd() {
 	go agentLoop.Run(ctx)
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
-	<-sigChan
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	sig := <-sigChan
+
+	publishShutdownNotice(cfg, stateManager, msgBus, sig)
 
 	fmt.Println("\nShutting down...")
 	cancel()
@@ -869,6 +872,39 @@ func renderStartupPromptTemplate(template, channel, chatID string) string {
 		"{{chat_id}}", chatID,
 	)
 	return replacer.Replace(template)
+}
+
+func publishShutdownNotice(cfg *config.Config, stateManager *state.Manager, msgBus *bus.MessageBus, sig os.Signal) {
+	if cfg == nil || msgBus == nil || !cfg.Gateway.ShutdownNotice.Enabled {
+		return
+	}
+	channel, chatID, _ := resolveStartupTarget(stateManager)
+	if channel == "" || chatID == "" {
+		return
+	}
+
+	template := cfg.Gateway.ShutdownNotice.Template
+	if strings.TrimSpace(template) == "" {
+		template = "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
+	}
+	content := strings.NewReplacer(
+		"{{timestamp}}", time.Now().Format(time.RFC3339),
+		"{{channel}}", channel,
+		"{{chat_id}}", chatID,
+		"{{signal}}", sig.String(),
+	).Replace(template)
+
+	if ok := msgBus.PublishOutbound(bus.OutboundMessage{
+		Channel: channel,
+		ChatID:  chatID,
+		Content: content,
+	}); !ok {
+		logger.WarnCF("gateway", "Failed to publish shutdown notice: outbound queue timeout", map[string]interface{}{
+			"channel": channel,
+			"chat_id": chatID,
+			"signal":  sig.String(),
+		})
+	}
 }
 
 func statusCmd() {
