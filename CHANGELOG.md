@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.16 - 2026-02-20
+
+### Fixed
+- Subagent completion handling from `system` channel now delivers completion metadata to the origin session context instead of returning a response on outbound `system` channel.
+- New completion-path audit metadata:
+  - `subagent_completion_injected_active_run` (completion injected into active origin run)
+  - `subagent_completion_buffered_session` (completion buffered in origin session history when no active run)
+
 ## v0.1.15 - 2026-02-20
 
 ### Changed

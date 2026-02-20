@@ -897,13 +897,15 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 			"chat_id":   msg.ChatID,
 		})
 
-	// Parse origin channel from chat_id (format: "channel:chat_id")
-	var originChannel string
+	// Parse origin channel/chat from chat_id (format: "channel:chat_id")
+	var originChannel, originChatID string
 	if idx := strings.Index(msg.ChatID, ":"); idx > 0 {
 		originChannel = msg.ChatID[:idx]
+		originChatID = msg.ChatID[idx+1:]
 	} else {
 		// Fallback
 		originChannel = "cli"
+		originChatID = "direct"
 	}
 
 	// Extract subagent result from message content
@@ -934,19 +936,36 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 		return "", nil
 	}
 
-	// Agent acts as dispatcher only - subagent handles user interaction via message tool
-	// Don't forward result here, subagent should use message tool to communicate with user
 	logger.InfoCF("agent", "Subagent completed",
 		map[string]interface{}{
 			"sender_id":   msg.SenderID,
 			"channel":     originChannel,
+			"chat_id":     originChatID,
 			"content_len": len(content),
 			"directory":   directory,
 		})
 
-	// Return notification for main agent - it decides what to do with it
+	// Deliver completion to main agent session (not directly to user channel).
 	notification := fmt.Sprintf("📢 Subagent %s completed:\n\n%s", msg.SenderID, content)
-	return notification, nil
+	sessionKey := fmt.Sprintf("%s:%s", originChannel, originChatID)
+
+	// If main agent run is active, inject immediately into that run.
+	if al.InjectUrgent(sessionKey, notification) {
+		audit.Record("subagent_completion_injected_active_run", map[string]interface{}{
+			"session_key": sessionKey,
+			"sender_id":   msg.SenderID,
+		})
+		return "", nil
+	}
+
+	// Otherwise persist in session history so next turn sees it.
+	al.sessions.AddMessage(sessionKey, "system", notification)
+	al.sessions.Save(sessionKey)
+	audit.Record("subagent_completion_buffered_session", map[string]interface{}{
+		"session_key": sessionKey,
+		"sender_id":   msg.SenderID,
+	})
+	return "", nil
 }
 
 // runAgentLoop is the core message processing logic.

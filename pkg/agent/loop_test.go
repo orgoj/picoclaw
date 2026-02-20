@@ -688,6 +688,56 @@ func TestInjectUrgent_PreemptsActiveRunAndKeepsUrgentMessage(t *testing.T) {
 	}
 }
 
+func TestProcessSystemMessage_BuffersCompletionToOriginSession(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &mockProvider{}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	msg := bus.InboundMessage{
+		Channel:  "system",
+		SenderID: "subagent:subagent-1",
+		ChatID:   "telegram:123",
+		Content:  "Task 'X' completed.\n\nResult:\nDONE",
+	}
+
+	resp, err := al.processSystemMessage(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("processSystemMessage failed: %v", err)
+	}
+	if resp != "" {
+		t.Fatalf("expected empty response for system message, got %q", resp)
+	}
+
+	history := al.sessions.GetHistory("telegram:123")
+	if len(history) == 0 {
+		t.Fatal("expected system completion in origin session history")
+	}
+	last := history[len(history)-1]
+	if last.Role != "system" {
+		t.Fatalf("expected last history role=system, got %s", last.Role)
+	}
+	if !strings.Contains(last.Content, "Subagent subagent:subagent-1 completed") {
+		t.Fatalf("unexpected system notification content: %q", last.Content)
+	}
+}
+
 // TestToolResult_SilentToolDoesNotSendUserMessage verifies silent tools don't trigger outbound
 func TestToolResult_SilentToolDoesNotSendUserMessage(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "agent-test-*")
