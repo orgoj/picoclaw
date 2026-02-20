@@ -31,6 +31,7 @@ type SubagentTask struct {
 	Started       int64    // When the task actually started execution
 	Ended         int64    // When the task completed/failed/cancelled
 	PendingMsgs   []string // Queued guidance messages from supervisor
+	Notified      bool     // Terminal state notification already sent to main agent
 }
 
 type SubagentManager struct {
@@ -554,11 +555,21 @@ func (sm *SubagentManager) Cancel(taskID string) error {
 	if cancel != nil {
 		cancel()
 	}
+
+	// Publish terminal update immediately. This guarantees supervisor visibility
+	// even when provider/tool execution does not stop promptly after cancellation.
+	sm.publishTaskUpdate(task)
 	return nil
 }
 
 func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 	if sm.bus == nil || task == nil {
+		return
+	}
+
+	sm.mu.Lock()
+	if task.Notified {
+		sm.mu.Unlock()
 		return
 	}
 
@@ -569,28 +580,37 @@ func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 		status = "finished"
 	}
 
+	task.Notified = true
+	taskID := task.ID
+	taskLabel := task.Label
+	taskName := task.Name
+	taskResult := task.Result
+	originChannel := task.OriginChannel
+	originChatID := task.OriginChatID
+	sm.mu.Unlock()
+
 	var announceContent string
-	if task.Name != "" {
-		announceContent = fmt.Sprintf("Task '%s' [agent: %s] %s.\n\nResult:\n%s", task.Label, task.Name, status, task.Result)
+	if taskName != "" {
+		announceContent = fmt.Sprintf("Task '%s' [agent: %s] %s.\n\nResult:\n%s", taskLabel, taskName, status, taskResult)
 	} else {
-		announceContent = fmt.Sprintf("Task '%s' %s.\n\nResult:\n%s", task.Label, status, task.Result)
+		announceContent = fmt.Sprintf("Task '%s' %s.\n\nResult:\n%s", taskLabel, status, taskResult)
 	}
 
 	inbound := bus.InboundMessage{
 		Channel:  "system",
-		SenderID: fmt.Sprintf("subagent:%s", task.ID),
+		SenderID: fmt.Sprintf("subagent:%s", taskID),
 		// Format: "original_channel:original_chat_id" for routing back
-		ChatID:  fmt.Sprintf("%s:%s", task.OriginChannel, task.OriginChatID),
+		ChatID:  fmt.Sprintf("%s:%s", originChannel, originChatID),
 		Content: announceContent,
 	}
 
 	if ok := sm.bus.PublishInbound(inbound); !ok {
 		logger.WarnCF("subagent", "Subagent completion delayed: inbound queue timeout, using critical fallback", map[string]interface{}{
-			"task_id": task.ID,
+			"task_id": taskID,
 		})
 		if criticalOK := sm.bus.PublishInboundCritical(inbound); !criticalOK {
 			logger.ErrorCF("subagent", "Subagent completion delivery failed: inbound bus closed", map[string]interface{}{
-				"task_id": task.ID,
+				"task_id": taskID,
 			})
 		}
 	}
