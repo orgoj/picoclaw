@@ -2,24 +2,7 @@
 
 ## FIX
 
-- [ ] Nedošla mi message na kanály při stisku CTRL C. 
-2026/02/20 09:21:08 [2026-02-20T08:21:08Z] [INFO] tool: Tool execution started {tool=subagent_status, args=map[]}
-^C
-Shutting down...
-[Fri Feb 20 09:31:02 CET 2026] ERROR Execution error editMessageText: request call: context canceled
-[Fri Feb 20 09:31:02 CET 2026] ERROR Execution error sendMessage: request call: context canceled
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] devices: Device event service stopped
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [ERROR] telegram: HTML parse failed, falling back to plain text {error=telego: sendMessage: internal execution: request call: context canceled}
-[Fri Feb 20 09:31:02 CET 2026] ERROR Execution error sendMessage: request call: context canceled
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [ERROR] channels: Error sending message to channel {error=telego: sendMessage: internal execution: request call: context canceled, channel=telegram}
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: Outbound dispatcher stopped
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: Stopping all channels
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: Stopping channel {channel=telegram}
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] telegram: Stopping Telegram bot...
-2026/02/20 09:31:02 [2026-02-20T08:31:02Z] [INFO] channels: All channels stopped
-✓ Gateway stopped
-2026/02/20 09:31:11 [2026-02-20T08:31:11Z] [INFO] agent: ZAI Search MCP client connected {endpoint=https://api.z.ai/api/mcp/web_search_prime/mcp}
-To se sakra naučí, jak má být formatovaná message pro telegramu, ale to už je zase chybávalo s posílání message na telegramu. Telegram. To máš mi zapsané v AGENTS.md. 
+- (none)
 
 ## Memory tooling (future)
 

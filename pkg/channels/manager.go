@@ -8,6 +8,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -279,6 +280,13 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 			}
 
 			if err := channel.Send(ctx, msg); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+					logger.DebugCF("channels", "Skipping outbound send during shutdown", map[string]interface{}{
+						"channel": msg.Channel,
+						"error":   err.Error(),
+					})
+					continue
+				}
 				logger.ErrorCF("channels", "Error sending message to channel", map[string]interface{}{
 					"channel": msg.Channel,
 					"error":   err.Error(),

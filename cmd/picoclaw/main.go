@@ -788,16 +788,18 @@ func gatewayCmd() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	sig := <-sigChan
 
-	publishShutdownNotice(cfg, stateManager, msgBus, sig)
+	publishShutdownNotice(cfg, stateManager, channelManager, sig)
 
 	fmt.Println("\nShutting down...")
+	agentLoop.Stop()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	channelManager.StopAll(shutdownCtx)
 	cancel()
 	healthServer.Stop(context.Background())
 	deviceService.Stop()
 	heartbeatService.Stop()
 	cronService.Stop()
-	agentLoop.Stop()
-	channelManager.StopAll(ctx)
 	fmt.Println("✓ Gateway stopped")
 }
 
@@ -878,8 +880,8 @@ func renderStartupPromptTemplate(template, channel, chatID string) string {
 	return replacer.Replace(template)
 }
 
-func publishShutdownNotice(cfg *config.Config, stateManager *state.Manager, msgBus *bus.MessageBus, sig os.Signal) {
-	if cfg == nil || msgBus == nil || !cfg.Gateway.ShutdownNotice.Enabled {
+func publishShutdownNotice(cfg *config.Config, stateManager *state.Manager, channelManager *channels.Manager, sig os.Signal) {
+	if cfg == nil || channelManager == nil || !cfg.Gateway.ShutdownNotice.Enabled {
 		return
 	}
 	channel, chatID, _ := resolveStartupTarget(stateManager)
@@ -898,15 +900,30 @@ func publishShutdownNotice(cfg *config.Config, stateManager *state.Manager, msgB
 		"{{signal}}", sig.String(),
 	).Replace(template)
 
-	if ok := msgBus.PublishOutbound(bus.OutboundMessage{
+	msg := bus.OutboundMessage{
 		Channel: channel,
 		ChatID:  chatID,
 		Content: content,
-	}); !ok {
-		logger.WarnCF("gateway", "Failed to publish shutdown notice: outbound queue timeout", map[string]interface{}{
+	}
+
+	ch, ok := channelManager.GetChannel(channel)
+	if !ok {
+		logger.WarnCF("gateway", "Failed to send shutdown notice: channel not available", map[string]interface{}{
 			"channel": channel,
 			"chat_id": chatID,
 			"signal":  sig.String(),
+		})
+		return
+	}
+
+	sendCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ch.Send(sendCtx, msg); err != nil {
+		logger.WarnCF("gateway", "Failed to send shutdown notice", map[string]interface{}{
+			"channel": channel,
+			"chat_id": chatID,
+			"signal":  sig.String(),
+			"error":   err.Error(),
 		})
 	}
 }

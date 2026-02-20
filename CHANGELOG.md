@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.5 - 2026-02-20
+
+### Fixed
+- Gateway shutdown (`Ctrl+C`) now sends shutdown notice directly to the active channel before cancellation, instead of relying on outbound queue dispatch.
+- Channel manager no longer reports expected `context canceled`/timeout sends during shutdown as hard errors.
+- Telegram outbound send path now exits cleanly on cancellation (no misleading HTML-parse fallback log during shutdown), and Telegram handler is explicitly stopped in channel stop flow.
+
 ## v0.1.4 - 2026-02-20
 
 ### Added

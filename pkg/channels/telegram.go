@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,6 +30,7 @@ import (
 type TelegramChannel struct {
 	*BaseChannel
 	bot             *telego.Bot
+	handler         *telegohandler.BotHandler
 	commands        TelegramCommander
 	config          *config.Config
 	subagentManager *tools.SubagentManager
@@ -36,6 +38,7 @@ type TelegramChannel struct {
 	transcriber     *voice.GroqTranscriber
 	placeholders    sync.Map // chatID -> messageID
 	stopThinking    sync.Map // chatID -> thinkingCancel
+	handlerMu       sync.Mutex
 }
 
 type thinkingCancel struct {
@@ -102,6 +105,9 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create bot handler: %w", err)
 	}
+	c.handlerMu.Lock()
+	c.handler = bh
+	c.handlerMu.Unlock()
 
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.commands.Help(ctx, message)
@@ -192,6 +198,12 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 func (c *TelegramChannel) Stop(ctx context.Context) error {
 	logger.InfoC("telegram", "Stopping Telegram bot...")
 	c.setRunning(false)
+	c.handlerMu.Lock()
+	if c.handler != nil {
+		c.handler.Stop()
+		c.handler = nil
+	}
+	c.handlerMu.Unlock()
 	return nil
 }
 
@@ -223,6 +235,8 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 
 		if _, err = c.bot.EditMessageText(ctx, editMsg); err == nil {
 			return nil
+		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
 		}
 		// Fallback to new message if edit fails
 	}
@@ -231,6 +245,9 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 	tgMsg.ParseMode = telego.ModeHTML
 
 	if _, err = c.bot.SendMessage(ctx, tgMsg); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		logger.ErrorCF("telegram", "HTML parse failed, falling back to plain text", map[string]interface{}{
 			"error": err.Error(),
 		})
