@@ -53,6 +53,23 @@
 
 2026-02-09 🎉 PicoClaw Launched! Built in 1 day to bring AI Agents to $10 hardware with <10MB RAM. 🦐 PicoClaw，Let's Go！
 
+## 🍴 Fork Delta (orgoj/picoclaw)
+
+Snapshot date: 2026-02-20
+
+- Fork point from `upstream/main`: `8d757fb` (2026-02-16).
+- `origin/main` is still aligned with that fork point; active fork development is on branch `bot`.
+- Branch `bot` currently carries a large custom delta from `upstream/main` (`+85 / -152` commits).
+
+Major additions in this fork branch:
+
+- Agent orchestration: named sub-agents with persistent identity/memory, configurable sub-agent limits/timeouts, richer startup context injection, and non-silent sub-agent completion guarantees.
+- Telegram operations: `/status`, `/models`, `/help`, `/urgent` improvements, HTML-safe status formatting, queue ID feedback, and channel-aware shutdown notices.
+- Runtime control plane: bounded editable inbound queue, urgent/supervisor message injection into active loops, health/admin APIs for queue and session history.
+- Web observability: minimal dashboard plus SSE snapshot stream (`EventSource`) for live status.
+- Reliability and safety hardening: loop empty-response retry, bounded bus/retry waits, AGENTS bootstrap checks with warning-only preflight mode, and stricter memory path write guards.
+- Documentation and maintenance scaffolding: expanded AGENTS/CODEBASE map, operational TODOs, and implementation reports under `docs/work/`.
+
 ## ✨ Features
 
 🪶 **Ultra-Lightweight**: <10MB Memory footprint — 99% smaller than Clawdbot - core functionality.
