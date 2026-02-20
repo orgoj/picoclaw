@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.17 - 2026-02-20
+
+### Changed
+- Restored full LLM request observability in JSON audit stream via new `llm_request_full` events containing complete `messages_json` and `tools_json`.
+- Kept runtime console/file logs concise (no reintroduction of verbose full payload dump lines there).
+
 ## v0.1.16 - 2026-02-20
 
 ### Fixed

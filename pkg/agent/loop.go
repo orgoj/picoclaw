@@ -1156,6 +1156,16 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"system_prompt_len": len(messages[0].Content),
 			})
 
+		// Keep full payload in audit JSON for observability/forensics.
+		// Console/file logs stay concise to avoid runtime noise.
+		audit.Record("llm_request_full", map[string]interface{}{
+			"run_id":        runID,
+			"session_key":   opts.SessionKey,
+			"iteration":     iteration,
+			"messages_json": formatMessagesForLog(messages),
+			"tools_json":    formatToolsForLog(providerToolDefs),
+		})
+
 		// Call LLM with retry logic for transient errors
 		var response *providers.LLMResponse
 		var err error
