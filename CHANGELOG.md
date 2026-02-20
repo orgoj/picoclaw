@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.10 - 2026-02-20
+
+### Fixed
+- Hardened gateway signal handling to prevent stuck shutdowns:
+  - First `Ctrl+C` starts graceful shutdown.
+  - Second `Ctrl+C` forces immediate process exit.
+  - Graceful shutdown now has a bounded timeout before forced exit.
+
 ## v0.1.9 - 2026-02-20
 
 ### Fixed

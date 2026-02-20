@@ -784,23 +784,40 @@ func gatewayCmd() {
 
 	go agentLoop.Run(ctx)
 
-	sigChan := make(chan os.Signal, 1)
+	sigChan := make(chan os.Signal, 2)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	sig := <-sigChan
 
-	publishShutdownNotice(cfg, stateManager, channelManager, sig)
-
 	fmt.Println("\nShutting down...")
-	agentLoop.Stop()
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	channelManager.StopAll(shutdownCtx)
-	cancel()
-	healthServer.Stop(context.Background())
-	deviceService.Stop()
-	heartbeatService.Stop()
-	cronService.Stop()
-	fmt.Println("✓ Gateway stopped")
+	fmt.Println("Press Ctrl+C again to force exit.")
+
+	go func() {
+		<-sigChan
+		fmt.Println("\nForce exit requested.")
+		os.Exit(130)
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		publishShutdownNotice(cfg, stateManager, channelManager, sig)
+		agentLoop.Stop()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		channelManager.StopAll(shutdownCtx)
+		cancel()
+		healthServer.Stop(context.Background())
+		deviceService.Stop()
+		heartbeatService.Stop()
+		cronService.Stop()
+	}()
+
+	select {
+	case <-done:
+		fmt.Println("✓ Gateway stopped")
+	case <-time.After(8 * time.Second):
+		fmt.Println("⚠ Graceful shutdown timeout reached. Exiting now.")
+	}
 }
 
 func buildPreflightWarningPrompt(issues []preflight.Issue) string {
