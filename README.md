@@ -1131,6 +1131,14 @@ When no message is received for `timeout_minutes`, the agent reads `IDLE.md` fro
 | `gap_notice_seconds` | `600` | Mark long silence gaps in message metadata/context |
 | `concat_prefix` | `+` | Force-merge marker for quick follow-up messages |
 
+Inbound messages are enriched with timing metadata:
+
+- `received_at`
+- `enqueued_at`
+- `delta_since_prev_ms`
+- `queue_len_at_enqueue`
+- `gap_notice` (set when silence gap exceeds `gap_notice_seconds`)
+
 #### Devices
 
 | Option | Default | Description |

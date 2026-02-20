@@ -9,6 +9,12 @@
   - `ingress.merge_window_seconds`
   - `ingress.gap_notice_seconds`
   - `ingress.concat_prefix`
+- Time-aware inbound metadata on queued messages:
+  - `received_at`
+  - `enqueued_at`
+  - `delta_since_prev_ms`
+  - `queue_len_at_enqueue`
+  - `gap_notice` (when silence gap exceeds configured threshold)
 - Audit event log file (`audit.jsonl`) under configured logging directory.
 - `VERSION` file as canonical build version source for `make`.
 
@@ -21,7 +27,7 @@
 - Heartbeat logging path now follows configured logging directory.
 - Inbound queue now enriches message metadata with timing/queue context.
 - Inbound queue supports message merge behavior (same session/sender, time window, or forced prefix).
-- Agent loop injects timing context note into user input when relevant metadata is present.
+- Agent loop injects `<timing_context>` into the user input when relevant metadata is present.
 
 ### Compatibility Notes
 - `logging.file_path` is removed; use `logging.dir`.
