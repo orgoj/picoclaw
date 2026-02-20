@@ -17,3 +17,14 @@ cil je aby bot chapal casove souvisloti a mohl se podle toho chovat
 - [ ] konfigurovatelne, jestli zpravy z queu dostava pri injekci po jedne a nebo najedno
   - to by mozna chtelo i mit moznost to nejak ovlivnit pri psani zpravy (mozna kdyz bude zacinat + ?)
   - takove zpravy by se concatenovaly automaticky bez ohledu na nastaveni
+
+## Memory tooling (future)
+
+- [ ] Zavedeni `memory_*` toolu misto ad-hoc write/read
+  - `memory_append(name, note, tags?)`
+  - `memory_search(name, query, limit?)`
+  - `memory_consolidate(name)` pro slouceni dennich poznamek do dlouhodobe memory
+- [ ] Idle worker pro memory maintenance
+  - periodicky spoustet `memory_consolidate` jen pri idle
+  - detekce duplicit a sumarizace starsich zaznamu
+  - zachovat audit trail (co bylo slouceno a kdy)
