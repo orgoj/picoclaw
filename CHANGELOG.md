@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.4 - 2026-02-20
+
+### Added
+- Reflection hardening rules in `AGENTS.md` from diary consolidation:
+  - confirm implementation direction before edits when requirements are ambiguous
+  - use native `apply_patch` tool directly (avoid shell-wrapped patch flows)
+  - explicitly list user-visible metadata/fields in changelog behavior notes
+  - run `make vet` early after structural/API edits
+  - keep documentation updates only in explicitly requested locations
+
 ## v0.1.3 - 2026-02-20
 
 ### Added
