@@ -235,3 +235,28 @@ func TestShellTool_RestrictToWorkspace(t *testing.T) {
 		t.Errorf("Expected 'blocked' message for path traversal, got ForLLM: %s, ForUser: %s", result.ForLLM, result.ForUser)
 	}
 }
+
+func TestShellTool_GuardCommand_AllowsSlashInDescriptionText(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewExecTool(tmpDir, true)
+
+	command := `br update --description="Fix queue/status handling in dashboard"`
+	guardErr := tool.guardCommand(command, tmpDir)
+	if guardErr != "" {
+		t.Fatalf("Expected description text with slash to pass guard, got: %s", guardErr)
+	}
+}
+
+func TestShellTool_GuardCommand_BlocksAbsolutePathOutsideWorkspace(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewExecTool(tmpDir, true)
+
+	command := "cat /etc/passwd"
+	guardErr := tool.guardCommand(command, tmpDir)
+	if guardErr == "" {
+		t.Fatal("Expected absolute path outside workspace to be blocked")
+	}
+	if !strings.Contains(guardErr, "path outside working dir") {
+		t.Fatalf("Expected path restriction error, got: %s", guardErr)
+	}
+}

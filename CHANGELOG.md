@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.26 - 2026-02-20
+
+### Fixed
+- Exec safety guard no longer misclassifies slash-containing free-text arguments as out-of-workspace paths (for `--description`, `--body`, `--message`, `--title`, and `-m`).
+- Workspace path restriction for `exec` still blocks actual absolute filesystem path arguments outside the configured working directory.
+
+### Added
+- Explicit user-visible exec guard metadata for supported free-text flags:
+  - `--description`
+  - `--body`
+  - `--message`
+  - `--title`
+  - `-m`
+
 ## v0.1.25 - 2026-02-20
 
 ### Changed

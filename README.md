@@ -876,6 +876,13 @@ Even with `restrict_to_workspace: false`, the `exec` tool blocks these dangerous
 * `shutdown`, `reboot`, `poweroff` — System shutdown
 * Fork bomb `:(){ :|:& };:`
 
+When `restrict_to_workspace: true`, absolute-path checks ignore known free-text flags so descriptive text is not misclassified as a filesystem path:
+- `--description`
+- `--body`
+- `--message`
+- `--title`
+- `-m`
+
 #### File/Directory Hard-Block (Works in Unsafe Mode)
 
 You can always block sensitive paths with `deny_path_patterns`, even when `restrict_to_workspace` is disabled.

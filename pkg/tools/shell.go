@@ -15,6 +15,18 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
+var freeTextFlagValuePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`--description\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--description\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--body\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--body\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--message\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--message\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--title\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`--title\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+	regexp.MustCompile(`-m\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
+}
+
 type ExecTool struct {
 	workingDir          string
 	timeout             time.Duration
@@ -207,13 +219,19 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 		// Must be preceded by start of string, whitespace, =, or quotes
 		// EXCLUSION: Ignore paths that look like URLs (http://, https://) or contain only localhost/IPs without leading slash
 		absPathPattern := regexp.MustCompile(`(?:^|[\s="'` + "`" + `])([A-Za-z]:\\[^\s\\\"']+|/(?:[^\s\"'/][^\s\"']*))`)
-		matches := absPathPattern.FindAllStringSubmatch(cmd, -1)
+		matches := absPathPattern.FindAllStringSubmatchIndex(cmd, -1)
 
 		for _, match := range matches {
-			if len(match) < 2 {
+			if len(match) < 4 {
 				continue
 			}
-			raw := match[1]
+			rawStart := match[2]
+			rawEnd := match[3]
+			raw := cmd[rawStart:rawEnd]
+
+			if isWithinFreeTextFlagValue(cmd, rawStart) {
+				continue
+			}
 
 			// Skip if it looks like a URL (contains ://)
 			if strings.Contains(raw, "://") {
@@ -245,6 +263,23 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 	}
 
 	return ""
+}
+
+func isWithinFreeTextFlagValue(command string, pathStart int) bool {
+	for _, pattern := range freeTextFlagValuePatterns {
+		matches := pattern.FindAllStringSubmatchIndex(command, -1)
+		for _, match := range matches {
+			if len(match) < 4 {
+				continue
+			}
+			valueStart := match[2]
+			valueEnd := match[3]
+			if pathStart >= valueStart && pathStart < valueEnd {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (t *ExecTool) SetTimeout(timeout time.Duration) {
