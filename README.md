@@ -70,9 +70,9 @@
 >   - Non-silent completion guarantees (explicit fallback text, max-iteration exhaustion treated as error).
 >   - Strict memory write-scope protection for named-agent paths.
 > - **Cross-channel control plane**
->   - Channel-agnostic controls: `<prefix>inject`, `<prefix>first`, `<prefix>kill` (**not Telegram-only**).
+>   - Channel-agnostic controls: `<prefix>status`, `<prefix>inject`, `<prefix>first`, `<prefix>kill` (**not Telegram-only**).
 >   - Configurable command prefix via `ingress.concat_prefix` (first rune).
->   - Escape behavior `<prefix>+` appends literal `+` to the previous queued message.
+>   - Append behavior `<prefix><prefix>MESSAGE` appends MESSAGE to previous queued message and returns explicit confirmation.
 >   - Priority behavior: active-run urgent injection + queue-head insertion semantics.
 > - **Inbound queue, timing, and observability**
 >   - Bounded/editable inbound queue APIs (inspect/update/delete/reorder).
@@ -407,10 +407,11 @@ picoclaw gateway
 
 | Control | Description |
 |--------|-------------|
+| `<prefix>status` | Immediate runtime status response (no queue wait) |
 | `<prefix>inject MESSAGE` | Immediate priority inject (active-run inject, otherwise queue bypass immediate processing) |
 | `<prefix>first MESSAGE` | Enqueue message at inbound queue head |
 | `<prefix>kill TASK_ID` | Cancel running subagent task |
-| `<prefix>+` | Append literal `+` to previous queued message in the same session (escape, no control command) |
+| `<prefix><prefix>MESSAGE` | Append `MESSAGE` to previous queued message in the same session, with explicit append confirmation |
 
 </details>
 

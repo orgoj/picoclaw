@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -367,17 +368,19 @@ func (m *Manager) sendControlReply(msg bus.InboundMessage, content string) {
 func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
 	prefix := m.controlPrefix()
 	text := strings.TrimSpace(msg.Content)
-	if strings.HasPrefix(text, prefix+"+") {
-		// Escape sequence (<prefix>+) appends a literal "+" to the previous
-		// queued message in this session via ingress merge semantics.
-		msg.Content = prefix + "+"
-		if ok := m.bus.PublishInbound(msg); !ok {
-			logger.WarnCF("channels", "Escaped-prefixed message dropped: inbound queue timeout", map[string]interface{}{
-				"channel": msg.Channel,
-				"chat_id": msg.ChatID,
-			})
+	if strings.HasPrefix(text, prefix+prefix) {
+		appendBody := strings.TrimSpace(strings.TrimPrefix(text, prefix+prefix))
+		if appendBody == "" {
+			appendBody = "+"
 		}
-		return true
+		return m.handleAppendControl(msg, appendBody)
+	}
+	if prefix != "+" && strings.HasPrefix(text, prefix+"+") {
+		appendBody := strings.TrimSpace(strings.TrimPrefix(text, prefix+"+"))
+		if appendBody == "" {
+			appendBody = "+"
+		}
+		return m.handleAppendControl(msg, appendBody)
 	}
 
 	cmd, body, ok := splitControlCommand(prefix, msg.Content)
@@ -386,6 +389,8 @@ func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
 	}
 
 	switch cmd {
+	case "status":
+		return m.handleStatusControl(msg)
 	case "inject", "urgent":
 		return m.handleInjectControl(msg, body)
 	case "first":
@@ -395,6 +400,127 @@ func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
 	default:
 		return false
 	}
+}
+
+func isUrgentMeta(meta map[string]string) bool {
+	if len(meta) == 0 {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(meta["urgent"]), "true")
+}
+
+func (m *Manager) canAppendToTail(tail bus.InboundQueueItem, msg bus.InboundMessage) bool {
+	return tail.Message.SessionKey != "" &&
+		tail.Message.SessionKey == msg.SessionKey &&
+		tail.Message.Channel == msg.Channel &&
+		tail.Message.ChatID == msg.ChatID &&
+		tail.Message.SenderID == msg.SenderID &&
+		!isUrgentMeta(tail.Message.Metadata)
+}
+
+func (m *Manager) handleAppendControl(msg bus.InboundMessage, appendBody string) bool {
+	prefix := m.controlPrefix()
+	appendBody = strings.TrimSpace(appendBody)
+	if appendBody == "" {
+		appendBody = "+"
+	}
+	items := m.bus.ListInbound()
+	if len(items) == 0 {
+		m.sendControlReply(msg, "Nothing to append to: inbound queue is empty.")
+		return true
+	}
+
+	tail := items[len(items)-1]
+	if !m.canAppendToTail(tail, msg) {
+		m.sendControlReply(msg, "Nothing to append to: last queued message is from a different session/sender.")
+		return true
+	}
+
+	appendContent := prefix + appendBody
+	id, ok := m.bus.PublishInboundWithID(bus.InboundMessage{
+		Channel:    msg.Channel,
+		SenderID:   msg.SenderID,
+		ChatID:     msg.ChatID,
+		SessionKey: msg.SessionKey,
+		Content:    appendContent,
+		Metadata: map[string]string{
+			"source": "channel:append",
+		},
+	})
+	if !ok {
+		m.sendControlReply(msg, "Failed to append to previous message.")
+		return true
+	}
+
+	m.sendControlReply(msg, fmt.Sprintf("Appended to previous queued message. Queue ID: %s", id))
+	audit.Record("control_append_tail", map[string]interface{}{
+		"id":          id,
+		"session_key": msg.SessionKey,
+		"channel":     msg.Channel,
+		"chat_id":     msg.ChatID,
+	})
+	return true
+}
+
+func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
+	var sb strings.Builder
+	sb.WriteString("PicoClaw Status\n")
+
+	inbound := m.bus.ListInbound()
+	sb.WriteString(fmt.Sprintf("Inbound queue: %d\n", len(inbound)))
+
+	if m.subagentManager != nil {
+		running := m.subagentManager.GetRunningTasks()
+		sb.WriteString(fmt.Sprintf("Running subagents: %d\n", len(running)))
+		if len(running) > 0 {
+			ids := make([]string, 0, len(running))
+			for _, t := range running {
+				ids = append(ids, t.ID)
+			}
+			sb.WriteString(fmt.Sprintf("Task IDs: %s\n", strings.Join(ids, ", ")))
+		}
+		sb.WriteString(fmt.Sprintf("Subagent msg queue: %d\n", m.subagentManager.GetMessageQueueCount()))
+	}
+
+	if m.agentLoop != nil {
+		info := m.agentLoop.GetRuntimeInfo()
+		if toolsInfo, ok := info["tools"].(map[string]interface{}); ok {
+			sb.WriteString(fmt.Sprintf("Tools: %v\n", toolsInfo["count"]))
+		}
+		if skillsInfo, ok := info["skills"].(map[string]interface{}); ok {
+			sb.WriteString(fmt.Sprintf("Skills: %v/%v\n", skillsInfo["available"], skillsInfo["total"]))
+		}
+		if agentsInfo, ok := info["agents"].(map[string]interface{}); ok {
+			sb.WriteString(fmt.Sprintf("Named agents: %v\n", agentsInfo["count"]))
+		}
+	}
+
+	chStatus := m.GetStatus()
+	if len(chStatus) > 0 {
+		sb.WriteString("Channels:\n")
+		for name, raw := range chStatus {
+			statusMap, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			running := false
+			switch v := statusMap["running"].(type) {
+			case bool:
+				running = v
+			case string:
+				b, _ := strconv.ParseBool(v)
+				running = b
+			}
+			if running {
+				sb.WriteString(fmt.Sprintf("- %s: running\n", name))
+			} else {
+				sb.WriteString(fmt.Sprintf("- %s: stopped\n", name))
+			}
+		}
+	}
+
+	m.sendControlReply(msg, strings.TrimSpace(sb.String()))
+	return true
 }
 
 func (m *Manager) handleInjectControl(msg bus.InboundMessage, body string) bool {

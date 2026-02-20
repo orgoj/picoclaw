@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.7 - 2026-02-20
+
+### Fixed
+- Added channel-agnostic `<prefix>status` control command with immediate runtime status reply.
+- Updated append control semantics to support `<prefix><prefix>MESSAGE` for appending to the previous queued message in the same session, with explicit confirmation reply.
+- Prevented append escape from silently enqueuing unintended standalone messages.
+
 ## v0.1.6 - 2026-02-20
 
 ### Changed

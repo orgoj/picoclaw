@@ -123,9 +123,9 @@ clean:
 vet:
 	@$(GO) vet ./...
 
-## test: Run tests
+## test: Run tests (optional TEST=./pkg/... RUN=Regex)
 test:
-	@$(GO) test ./...
+	@$(GO) test $(if $(TEST),$(TEST),./...) $(if $(RUN),-run $(RUN),)
 
 ## fmt: Format Go code
 fmt:
@@ -153,6 +153,7 @@ help:
 	@echo "Examples:"
 	@echo "  make build              # Build for current platform"
 	@echo "  make install            # Install to ~/.local/bin"
+	@echo "  make test TEST=./pkg/channels RUN=Control  # Run a subset of tests"
 	@echo "  make uninstall          # Remove from /usr/local/bin"
 	@echo "  make install-skills     # Install skills to workspace"
 	@echo ""
@@ -160,6 +161,8 @@ help:
 	@echo "  INSTALL_PREFIX          # Installation prefix (default: ~/.local)"
 	@echo "  WORKSPACE_DIR           # Workspace directory (default: ~/.picoclaw/workspace)"
 	@echo "  VERSION                 # Version string (default: git describe)"
+	@echo "  TEST                    # Optional go test package/path selector"
+	@echo "  RUN                     # Optional go test -run regex"
 	@echo ""
 	@echo "Current Configuration:"
 	@echo "  Platform: $(PLATFORM)/$(ARCH)"

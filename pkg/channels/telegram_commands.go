@@ -64,8 +64,10 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 		"/models - List available models",
 		"/channels - List enabled channels",
 		"",
+		fmt.Sprintf("%sstatus - Immediate runtime status (all channels)", prefix),
 		fmt.Sprintf("%sinject MESSAGE - Immediate priority inject (all channels)", prefix),
 		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head (all channels)", prefix),
+		fmt.Sprintf("%s%s MESSAGE - Append MESSAGE to previous queued message", prefix, prefix),
 	}
 	if c.config != nil && c.config.Tools.Spawn.Enabled {
 		lines = append(lines, fmt.Sprintf("%skill TASK_ID - Cancel running subagent task (all channels)", prefix))
