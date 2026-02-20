@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.9 - 2026-02-20
+
+### Fixed
+- Completed channel-agnostic control interception so control commands are handled by ingress instead of leaking to main agent text flow.
+- Restored rich runtime detail for `<prefix>status` including running subagents, recent subagents, queue context, and session context.
+
+### Added
+- New channel-agnostic controls:
+  - `<prefix>help`
+  - `<prefix>models`
+  - `<prefix>channels`
+  - `<prefix>delete` (deletes last queued message in same session/sender)
+- Updated Telegram `/help` and README command list to include all prefix controls.
+
 ## v0.1.8 - 2026-02-20
 
 ### Added

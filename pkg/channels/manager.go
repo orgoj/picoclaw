@@ -21,6 +21,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/tools"
+	"github.com/sipeed/picoclaw/pkg/version"
 )
 
 type Manager struct {
@@ -389,17 +390,45 @@ func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
 	}
 
 	switch cmd {
+	case "help":
+		return m.handleHelpControl(msg)
 	case "status":
 		return m.handleStatusControl(msg)
+	case "models":
+		return m.handleModelsControl(msg)
+	case "channels":
+		return m.handleChannelsControl(msg)
 	case "inject", "urgent":
 		return m.handleInjectControl(msg, body)
 	case "first":
 		return m.handleFirstControl(msg, body)
 	case "kill":
 		return m.handleKillControl(msg, body)
+	case "delete":
+		return m.handleDeleteControl(msg)
 	default:
 		return false
 	}
+}
+
+func (m *Manager) handleHelpControl(msg bus.InboundMessage) bool {
+	prefix := m.controlPrefix()
+	lines := []string{
+		"PicoClaw Controls",
+		fmt.Sprintf("%shelp - Show this help", prefix),
+		fmt.Sprintf("%sstatus - Immediate runtime status", prefix),
+		fmt.Sprintf("%smodels - Show configured model/provider", prefix),
+		fmt.Sprintf("%schannels - Show channel status", prefix),
+		fmt.Sprintf("%sinject MESSAGE - Immediate priority inject", prefix),
+		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head", prefix),
+		fmt.Sprintf("%sdelete - Delete last queued message in this session", prefix),
+		fmt.Sprintf("%s%sMESSAGE - Append to previous queued message in this session", prefix, prefix),
+	}
+	if m.config != nil && m.config.Tools.Spawn.Enabled {
+		lines = append(lines, fmt.Sprintf("%skill TASK_ID - Cancel running subagent task", prefix))
+	}
+	m.sendControlReply(msg, strings.Join(lines, "\n"))
+	return true
 }
 
 func isUrgentMeta(meta map[string]string) bool {
@@ -464,28 +493,63 @@ func (m *Manager) handleAppendControl(msg bus.InboundMessage, appendBody string)
 
 func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
 	var sb strings.Builder
-	sb.WriteString("PicoClaw Status\n")
+	sb.WriteString("PicoClaw Status\n\n")
+	sb.WriteString(fmt.Sprintf("Version: %s\n", version.Format()))
+	sb.WriteString(fmt.Sprintf("Go: %s\n\n", version.GetGoVersion()))
 
 	inbound := m.bus.ListInbound()
 	sb.WriteString(fmt.Sprintf("Inbound queue: %d\n", len(inbound)))
 
 	if m.subagentManager != nil {
 		running := m.subagentManager.GetRunningTasks()
-		sb.WriteString(fmt.Sprintf("Running subagents: %d\n", len(running)))
-		if len(running) > 0 {
-			ids := make([]string, 0, len(running))
+		recent := m.subagentManager.GetRecentTasks(5)
+		sb.WriteString("\nRunning subagents:\n")
+		if len(running) == 0 {
+			sb.WriteString("- none\n")
+		} else {
 			for _, t := range running {
-				ids = append(ids, t.ID)
+				timeRange := fmt.Sprintf("[%s - ...]", formatTimeShort(t.Started))
+				sb.WriteString(fmt.Sprintf("- %s %s\n", t.ID, timeRange))
+				if t.Label != "" {
+					sb.WriteString(fmt.Sprintf("  Label: %s\n", t.Label))
+				}
+				if t.Name != "" {
+					sb.WriteString(fmt.Sprintf("  Agent: %s\n", t.Name))
+				}
+				sb.WriteString(fmt.Sprintf("  Task: %s\n", truncateStr(t.Task, 60)))
+				if len(t.PendingMsgs) > 0 {
+					sb.WriteString(fmt.Sprintf("  Pending: %d\n", len(t.PendingMsgs)))
+				}
 			}
-			sb.WriteString(fmt.Sprintf("Task IDs: %s\n", strings.Join(ids, ", ")))
+		}
+		sb.WriteString(fmt.Sprintf("\nRecent subagents (%d):\n", len(recent)))
+		if len(recent) == 0 {
+			sb.WriteString("- none\n")
+		} else {
+			for _, t := range recent {
+				timeRange := fmt.Sprintf("[%s - %s]", formatTimeShort(t.Started), formatTimeShort(t.Ended))
+				sb.WriteString(fmt.Sprintf("- %s %s [%s]\n", t.ID, timeRange, t.Status))
+				if t.Label != "" {
+					sb.WriteString(fmt.Sprintf("  Label: %s\n", t.Label))
+				}
+				if t.Name != "" {
+					sb.WriteString(fmt.Sprintf("  Agent: %s\n", t.Name))
+				}
+			}
 		}
 		sb.WriteString(fmt.Sprintf("Subagent msg queue: %d\n", m.subagentManager.GetMessageQueueCount()))
+		firstMsg := m.subagentManager.GetFirstQueuedMessage()
+		if firstMsg != "" {
+			sb.WriteString(fmt.Sprintf("Next subagent message: %s\n", truncateStr(firstMsg, 80)))
+		}
+	} else {
+		sb.WriteString("\nSubagents: unavailable\n")
 	}
 
 	if m.agentLoop != nil {
 		info := m.agentLoop.GetRuntimeInfo()
 		if toolsInfo, ok := info["tools"].(map[string]interface{}); ok {
-			sb.WriteString(fmt.Sprintf("Tools: %v\n", toolsInfo["count"]))
+			sb.WriteString(fmt.Sprintf("\nTools: %v\n", toolsInfo["count"]))
 		}
 		if skillsInfo, ok := info["skills"].(map[string]interface{}); ok {
 			sb.WriteString(fmt.Sprintf("Skills: %v/%v\n", skillsInfo["available"], skillsInfo["total"]))
@@ -493,11 +557,26 @@ func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
 		if agentsInfo, ok := info["agents"].(map[string]interface{}); ok {
 			sb.WriteString(fmt.Sprintf("Named agents: %v\n", agentsInfo["count"]))
 		}
+
+		stats := m.agentLoop.GetSessionStats(msg.SessionKey)
+		memPct := 0
+		if stats.ContextWindow > 0 {
+			memPct = int(float64(stats.TokenEstimate) / float64(stats.ContextWindow) * 100)
+		}
+		sb.WriteString("\nMain agent (this session):\n")
+		sb.WriteString(fmt.Sprintf("- Model: %s\n", m.config.Agents.Defaults.Model))
+		sb.WriteString(fmt.Sprintf("- Messages: %d\n", stats.MessageCount))
+		sb.WriteString(fmt.Sprintf("- Context: ~%d/%d tokens (%d%%)\n", stats.TokenEstimate, stats.ContextWindow, memPct))
+		if stats.HasSummary {
+			sb.WriteString("- Summary: yes\n")
+		} else {
+			sb.WriteString("- Summary: no\n")
+		}
 	}
 
 	chStatus := m.GetStatus()
 	if len(chStatus) > 0 {
-		sb.WriteString("Channels:\n")
+		sb.WriteString("\nChannels:\n")
 		for name, raw := range chStatus {
 			statusMap, ok := raw.(map[string]interface{})
 			if !ok {
@@ -519,6 +598,53 @@ func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
 		}
 	}
 
+	m.sendControlReply(msg, strings.TrimSpace(sb.String()))
+	return true
+}
+
+func (m *Manager) handleModelsControl(msg bus.InboundMessage) bool {
+	if m.config == nil {
+		m.sendControlReply(msg, "Model info unavailable: config is not initialized.")
+		return true
+	}
+	mainModel := m.config.Agents.Defaults.Model
+	mainProvider := resolvedProviderName(m.config, mainModel)
+	reply := fmt.Sprintf(
+		"Configured models\nMain agent: %s (%s)\nSubagents: %s (%s)",
+		mainModel, mainProvider, mainModel, mainProvider,
+	)
+	m.sendControlReply(msg, reply)
+	return true
+}
+
+func (m *Manager) handleChannelsControl(msg bus.InboundMessage) bool {
+	chStatus := m.GetStatus()
+	if len(chStatus) == 0 {
+		m.sendControlReply(msg, "No channels enabled.")
+		return true
+	}
+	var sb strings.Builder
+	sb.WriteString("Available channels\n")
+	for name, raw := range chStatus {
+		statusMap, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		running := false
+		switch v := statusMap["running"].(type) {
+		case bool:
+			running = v
+		case string:
+			b, _ := strconv.ParseBool(v)
+			running = b
+		}
+		if running {
+			sb.WriteString(fmt.Sprintf("- %s *\n", name))
+		} else {
+			sb.WriteString(fmt.Sprintf("- %s\n", name))
+		}
+	}
+	sb.WriteString("* = active")
 	m.sendControlReply(msg, strings.TrimSpace(sb.String()))
 	return true
 }
@@ -669,6 +795,42 @@ func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
 		"chat_id": msg.ChatID,
 	})
 	m.sendControlReply(msg, fmt.Sprintf("Cancelled subagent task '%s'.", taskID))
+	return true
+}
+
+func (m *Manager) handleDeleteControl(msg bus.InboundMessage) bool {
+	items := m.bus.ListInbound()
+	if len(items) == 0 {
+		m.sendControlReply(msg, "Nothing to delete: inbound queue is empty.")
+		return true
+	}
+
+	targetID := ""
+	targetContent := ""
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		if m.canAppendToTail(item, msg) {
+			targetID = item.ID
+			targetContent = item.Message.Content
+			break
+		}
+	}
+	if targetID == "" {
+		m.sendControlReply(msg, "Nothing to delete: no queued message found for this session/sender.")
+		return true
+	}
+	if !m.bus.DeleteInbound(targetID) {
+		m.sendControlReply(msg, "Failed to delete queued message.")
+		return true
+	}
+
+	audit.Record("control_delete_tail", map[string]interface{}{
+		"id":          targetID,
+		"session_key": msg.SessionKey,
+		"channel":     msg.Channel,
+		"chat_id":     msg.ChatID,
+	})
+	m.sendControlReply(msg, fmt.Sprintf("Deleted last queued message. Queue ID: %s\nContent: %q", targetID, truncateStr(targetContent, 80)))
 	return true
 }
 

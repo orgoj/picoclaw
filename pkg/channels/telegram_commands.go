@@ -65,8 +65,12 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 		"/channels - List enabled channels",
 		"",
 		fmt.Sprintf("%sstatus - Immediate runtime status (all channels)", prefix),
+		fmt.Sprintf("%shelp - Show control help (all channels)", prefix),
+		fmt.Sprintf("%smodels - Show configured model/provider (all channels)", prefix),
+		fmt.Sprintf("%schannels - Show channel status (all channels)", prefix),
 		fmt.Sprintf("%sinject MESSAGE - Immediate priority inject (all channels)", prefix),
 		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head (all channels)", prefix),
+		fmt.Sprintf("%sdelete - Delete last queued message in this session (all channels)", prefix),
 		fmt.Sprintf("%s%s MESSAGE - Append MESSAGE to previous queued message", prefix, prefix),
 	}
 	if c.config != nil && c.config.Tools.Spawn.Enabled {

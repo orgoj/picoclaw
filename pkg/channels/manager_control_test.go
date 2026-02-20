@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,5 +103,95 @@ func TestHandleInboundControl_FirstEnqueuesHead(t *testing.T) {
 	defer cancel()
 	if _, ok := mb.SubscribeOutbound(ctx); !ok {
 		t.Fatal("expected +first acknowledgement in outbound queue")
+	}
+}
+
+func TestHandleInboundControl_HelpHandled(t *testing.T) {
+	mb := bus.NewMessageBus()
+	cfg := config.DefaultConfig()
+
+	m := &Manager{
+		bus:    mb,
+		config: cfg,
+	}
+
+	handled := m.handleInboundControl(bus.InboundMessage{
+		Channel:    "discord",
+		SenderID:   "u1",
+		ChatID:     "c1",
+		SessionKey: "discord:c1",
+		Content:    "+help",
+	})
+	if !handled {
+		t.Fatal("expected +help to be handled")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	out, ok := mb.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected +help response")
+	}
+	if !strings.Contains(out.Content, "+status") {
+		t.Fatalf("expected help response to include +status, got %q", out.Content)
+	}
+}
+
+func TestHandleInboundControl_DeleteRemovesLastSameSession(t *testing.T) {
+	mb := bus.NewMessageBus()
+	mb.ConfigureIngress(0, 10*time.Minute, "+")
+	cfg := config.DefaultConfig()
+
+	m := &Manager{
+		bus:    mb,
+		config: cfg,
+	}
+
+	if _, ok := mb.PublishInboundWithID(bus.InboundMessage{
+		Channel:    "line",
+		SenderID:   "u1",
+		ChatID:     "c1",
+		SessionKey: "line:c1",
+		Content:    "older",
+	}); !ok {
+		t.Fatal("failed to enqueue older")
+	}
+	if _, ok := mb.PublishInboundWithID(bus.InboundMessage{
+		Channel:    "line",
+		SenderID:   "u1",
+		ChatID:     "c1",
+		SessionKey: "line:c1",
+		Content:    "newer",
+	}); !ok {
+		t.Fatal("failed to enqueue newer")
+	}
+
+	handled := m.handleInboundControl(bus.InboundMessage{
+		Channel:    "line",
+		SenderID:   "u1",
+		ChatID:     "c1",
+		SessionKey: "line:c1",
+		Content:    "+delete",
+	})
+	if !handled {
+		t.Fatal("expected +delete to be handled")
+	}
+
+	items := mb.ListInbound()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 queued item after delete, got %d", len(items))
+	}
+	if items[0].Message.Content != "older" {
+		t.Fatalf("expected remaining content older, got %q", items[0].Message.Content)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	out, ok := mb.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected +delete acknowledgement")
+	}
+	if !strings.Contains(out.Content, "Deleted last queued message") {
+		t.Fatalf("unexpected +delete reply: %q", out.Content)
 	}
 }
