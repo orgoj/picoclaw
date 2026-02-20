@@ -275,6 +275,57 @@ func TestToolRegistry_GetDefinitions(t *testing.T) {
 	}
 }
 
+func TestIdleMetricsTracking(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &mockProvider{}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	al.idleTimeout = 5 * time.Minute
+
+	m1 := al.markIdleTriggered()
+	if m1.StreakCount != 1 {
+		t.Fatalf("expected streak 1, got %d", m1.StreakCount)
+	}
+	if m1.IdleSince.IsZero() {
+		t.Fatal("expected idle_since to be set")
+	}
+	if m1.LastUserMessage.IsZero() {
+		t.Fatal("expected fallback last_user_message to be set")
+	}
+
+	m2 := al.markIdleTriggered()
+	if m2.StreakCount != 2 {
+		t.Fatalf("expected streak 2, got %d", m2.StreakCount)
+	}
+
+	al.resetIdleTracking()
+	if al.idleStreakCount != 0 {
+		t.Fatalf("expected idle streak reset to 0, got %d", al.idleStreakCount)
+	}
+	if !al.idleSince.IsZero() {
+		t.Fatal("expected idle_since reset")
+	}
+	if al.lastUserMessageAt.IsZero() {
+		t.Fatal("expected lastUserMessageAt to be set on reset")
+	}
+}
+
 // TestAgentLoop_GetStartupInfo verifies startup info contains tools
 func TestAgentLoop_GetStartupInfo(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "agent-test-*")

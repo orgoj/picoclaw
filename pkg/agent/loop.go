@@ -61,10 +61,22 @@ type AgentLoop struct {
 	idleTimeout             time.Duration
 	idleRepeat              bool
 	idleRecentSubagents     int // Number of recent subagents to show in IDLE prompt
+	idleMu                  sync.Mutex
+	idleStreakCount         int
+	idleSince               time.Time
+	lastUserMessageAt       time.Time
 	runCounter              atomic.Uint64
 	urgentMu                sync.Mutex
 	urgentBySession         map[string][]string
 	activeRunsBySession     map[string]int
+}
+
+type idleMetrics struct {
+	StreakCount      int
+	IdleSince        time.Time
+	LastUserMessage  time.Time
+	Now              time.Time
+	SecondsSinceUser int64
 }
 
 // processOptions configures how a message is processed
@@ -278,7 +290,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				if timedOut {
 					if !idleTriggered || al.idleRepeat {
 						idleTriggered = true
-						al.triggerIdle(ctx)
+						al.triggerIdle(ctx, al.markIdleTriggered())
 					}
 					continue
 				}
@@ -290,8 +302,11 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				continue
 			}
 
-			// Got a message — reset idle state
-			idleTriggered = false
+			// Got an external user message — reset idle state/metrics.
+			if !constants.IsInternalChannel(msg.Channel) {
+				idleTriggered = false
+				al.resetIdleTracking()
+			}
 
 			// Recover from panics to prevent agent crash
 			func() {
@@ -456,7 +471,7 @@ func (al *AgentLoop) Stop() {
 
 // triggerIdle runs IDLE.md as a prompt when the agent has been idle.
 // Uses heartbeat-style processing: no session history, result sent to last channel.
-func (al *AgentLoop) triggerIdle(ctx context.Context) {
+func (al *AgentLoop) triggerIdle(ctx context.Context, m idleMetrics) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.ErrorCF("agent", "Recovered from panic in idle processing",
@@ -497,8 +512,10 @@ func (al *AgentLoop) triggerIdle(ctx context.Context) {
 	}
 
 	logger.InfoCF("agent", "Triggering idle processing", map[string]interface{}{
-		"channel": channel,
-		"chat_id": chatID,
+		"channel":            channel,
+		"chat_id":            chatID,
+		"idle_streak_count":  m.StreakCount,
+		"seconds_since_user": m.SecondsSinceUser,
 	})
 
 	now := time.Now().Format("2006-01-02 15:04:05")
@@ -506,9 +523,17 @@ func (al *AgentLoop) triggerIdle(ctx context.Context) {
 	// Build subagent status context
 	subagentStatus := al.buildSubagentStatus()
 
-	prompt := fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s", now, content)
+	idleCtx := fmt.Sprintf(
+		"<idle_context>\nidle_streak_count=%d\nidle_since=%s\nlast_user_message_at=%s\nseconds_since_user_message=%d\n</idle_context>",
+		m.StreakCount,
+		m.IdleSince.Format(time.RFC3339),
+		m.LastUserMessage.Format(time.RFC3339),
+		m.SecondsSinceUser,
+	)
+
+	prompt := fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s\n\n%s", now, idleCtx, content)
 	if subagentStatus != "" {
-		prompt = fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s\n\n%s", now, subagentStatus, content)
+		prompt = fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s\n\n%s\n\n%s", now, idleCtx, subagentStatus, content)
 	}
 
 	response, err := al.runAgentLoop(ctx, processOptions{
@@ -539,6 +564,43 @@ func (al *AgentLoop) triggerIdle(ctx context.Context) {
 			})
 		}
 	}
+}
+
+func (al *AgentLoop) markIdleTriggered() idleMetrics {
+	al.idleMu.Lock()
+	defer al.idleMu.Unlock()
+
+	now := time.Now()
+	if al.idleSince.IsZero() {
+		al.idleSince = now
+	}
+	al.idleStreakCount++
+
+	last := al.lastUserMessageAt
+	if last.IsZero() {
+		// Fallback for early startup before first user message.
+		last = now.Add(-al.idleTimeout)
+	}
+	seconds := int64(now.Sub(last).Seconds())
+	if seconds < 0 {
+		seconds = 0
+	}
+
+	return idleMetrics{
+		StreakCount:      al.idleStreakCount,
+		IdleSince:        al.idleSince,
+		LastUserMessage:  last,
+		Now:              now,
+		SecondsSinceUser: seconds,
+	}
+}
+
+func (al *AgentLoop) resetIdleTracking() {
+	al.idleMu.Lock()
+	defer al.idleMu.Unlock()
+	al.idleStreakCount = 0
+	al.idleSince = time.Time{}
+	al.lastUserMessageAt = time.Now()
 }
 
 // buildSubagentStatus creates a formatted string with active and recent subagent status.

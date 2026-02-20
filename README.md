@@ -1109,6 +1109,12 @@ Retry semantics (exact):
 #### Idle
 
 When no message is received for `timeout_minutes`, the agent reads `IDLE.md` from the workspace and executes it as a prompt.
+The idle prompt includes runtime idle context metadata:
+
+- `idle_streak_count`
+- `idle_since`
+- `last_user_message_at`
+- `seconds_since_user_message`
 
 | Option | Default | Description |
 |--------|---------|-------------|

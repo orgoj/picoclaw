@@ -28,6 +28,7 @@
 - Inbound queue now enriches message metadata with timing/queue context.
 - Inbound queue supports message merge behavior (same session/sender, time window, or forced prefix).
 - Agent loop injects `<timing_context>` into the user input when relevant metadata is present.
+- Idle processing now tracks and injects idle runtime context (`idle_streak_count`, `idle_since`, `last_user_message_at`, `seconds_since_user_message`).
 
 ### Compatibility Notes
 - `logging.file_path` is removed; use `logging.dir`.

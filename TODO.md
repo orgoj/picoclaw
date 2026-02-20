@@ -27,10 +27,10 @@ cil je aby bot chapal casove souvisloti a mohl se podle toho chovat
 - aby vedel je dlouho se flaka a mohl pustit nejake memory clean terba po 30 minutach flakani
 - aby vedel ze uzivatel tuto zpravu napsal o 3 hodiny po predchozi a kdyz se pta na nejaky stav tak uz je to jinak a musi ho znova zjistovat
 
-- [ ] IDELE metrick
-  - pocitat kolik bylo bessage idle v rade za sbou
-  - pridavat pocitadlo a cas zacatklu a aktualini cas jako nejaka metadata to idle message (aby na ne podle promptu mohl reagovat)
-  - nuloat pocitadlo pri message z chanel od usera
+- [x] IDELE metrick
+  - [x] pocitat kolik bylo bessage idle v rade za sbou
+  - [x] pridavat pocitadlo a cas zacatklu a aktualini cas jako nejaka metadata to idle message (aby na ne podle promptu mohl reagovat)
+  - [x] nuloat pocitadlo pri message z chanel od usera
 - [x] k message od usera pridavat casova  metadata (kdy message prisla do fronty)
   - [x] konfigurovatelna hodnota pro minimalni casovy rozestup od predchozi message (default 10minut)
   - [x] pokudd je prekrocena prida pak pri injekci message botovy do proptu metadata s upozornemim jaky cas byl od posledni message)
