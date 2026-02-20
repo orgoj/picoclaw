@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/channels"
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/devices"
 	"github.com/sipeed/picoclaw/pkg/health"
@@ -38,6 +40,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/migrate"
 	"github.com/sipeed/picoclaw/pkg/preflight"
 	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/skills"
 	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
@@ -766,14 +769,17 @@ func gatewayCmd() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	startupErrors := make([]string, 0, 4)
 
 	if err := cronService.Start(); err != nil {
 		fmt.Printf("Error starting cron service: %v\n", err)
+		startupErrors = append(startupErrors, fmt.Sprintf("Error starting cron service: %v", err))
 	}
 	fmt.Println("✓ Cron service started")
 
 	if err := heartbeatService.Start(); err != nil {
 		fmt.Printf("Error starting heartbeat service: %v\n", err)
+		startupErrors = append(startupErrors, fmt.Sprintf("Error starting heartbeat service: %v", err))
 	}
 	fmt.Println("✓ Heartbeat service started")
 
@@ -785,12 +791,18 @@ func gatewayCmd() {
 	deviceService.SetBus(msgBus)
 	if err := deviceService.Start(ctx); err != nil {
 		fmt.Printf("Error starting device service: %v\n", err)
+		startupErrors = append(startupErrors, fmt.Sprintf("Error starting device service: %v", err))
 	} else if cfg.Devices.Enabled {
 		fmt.Println("✓ Device event service started")
 	}
 
 	if err := channelManager.StartAll(ctx); err != nil {
 		fmt.Printf("Error starting channels: %v\n", err)
+		startupErrors = append(startupErrors, fmt.Sprintf("Error starting channels: %v", err))
+	}
+	publishStartupNotice(cfg, stateManager, channelManager)
+	for _, startupErr := range startupErrors {
+		publishGatewayErrorNotice(cfg, stateManager, channelManager, startupErr)
 	}
 
 	healthServer := health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port)
@@ -802,6 +814,7 @@ func gatewayCmd() {
 	go func() {
 		if err := healthServer.Start(); err != nil && err != http.ErrServerClosed {
 			logger.ErrorCF("health", "Health server error", map[string]interface{}{"error": err.Error()})
+			publishGatewayErrorNotice(cfg, stateManager, channelManager, fmt.Sprintf("Health server error: %v", err))
 		}
 	}()
 	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/runtime, /api/v1/sessions, /api/v1/inbound, /api/v1/history, /api/v1/events, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
@@ -876,6 +889,116 @@ func buildPreflightWarningPrompt(issues []preflight.Issue) string {
 	return sb.String()
 }
 
+type notificationTarget struct {
+	channel string
+	chatID  string
+}
+
+func parseSessionKeyTarget(sessionKey string) (notificationTarget, bool) {
+	parts := strings.SplitN(strings.TrimSpace(sessionKey), ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return notificationTarget{}, false
+	}
+	if constants.IsInternalChannel(parts[0]) {
+		return notificationTarget{}, false
+	}
+	return notificationTarget{
+		channel: parts[0],
+		chatID:  parts[1],
+	}, true
+}
+
+func collectNotificationTargets(cfg *config.Config, stateManager *state.Manager) []notificationTarget {
+	if cfg == nil {
+		return nil
+	}
+
+	seen := make(map[string]notificationTarget)
+	sessionStore := filepath.Join(cfg.WorkspacePath(), "sessions")
+	sm := session.NewSessionManager(sessionStore)
+	for _, summary := range sm.ListSummaries(0) {
+		target, ok := parseSessionKeyTarget(summary.Key)
+		if !ok {
+			continue
+		}
+		seen[target.channel+":"+target.chatID] = target
+	}
+
+	channel, chatID, _ := resolveStartupTarget(stateManager)
+	if channel != "" && chatID != "" && !constants.IsInternalChannel(channel) {
+		seen[channel+":"+chatID] = notificationTarget{
+			channel: channel,
+			chatID:  chatID,
+		}
+	}
+
+	targets := make([]notificationTarget, 0, len(seen))
+	for _, target := range seen {
+		targets = append(targets, target)
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].channel == targets[j].channel {
+			return targets[i].chatID < targets[j].chatID
+		}
+		return targets[i].channel < targets[j].channel
+	})
+	return targets
+}
+
+func gatewayAutoMessagePrefix(cfg *config.Config) string {
+	if cfg == nil {
+		return "[AUTO]"
+	}
+	prefix := strings.TrimSpace(cfg.Gateway.AutoMessagePrefix)
+	if prefix == "" {
+		return "[AUTO]"
+	}
+	return prefix
+}
+
+func prefixAutoMessage(cfg *config.Config, content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return gatewayAutoMessagePrefix(cfg)
+	}
+	prefix := gatewayAutoMessagePrefix(cfg)
+	if strings.HasPrefix(content, prefix) {
+		return content
+	}
+	sep := " "
+	if strings.HasSuffix(prefix, " ") {
+		sep = ""
+	}
+	return prefix + sep + content
+}
+
+func sendSystemNotice(cfg *config.Config, channelManager *channels.Manager, target notificationTarget, content string) {
+	if channelManager == nil || target.channel == "" || target.chatID == "" || strings.TrimSpace(content) == "" {
+		return
+	}
+	ch, ok := channelManager.GetChannel(target.channel)
+	if !ok {
+		logger.WarnCF("gateway", "Failed to send system notice: channel not available", map[string]interface{}{
+			"channel": target.channel,
+			"chat_id": target.chatID,
+		})
+		return
+	}
+	sendCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ch.Send(sendCtx, bus.OutboundMessage{
+		Channel: target.channel,
+		ChatID:  target.chatID,
+		Content: prefixAutoMessage(cfg, content),
+	}); err != nil {
+		logger.WarnCF("gateway", "Failed to send system notice", map[string]interface{}{
+			"channel": target.channel,
+			"chat_id": target.chatID,
+			"error":   err.Error(),
+		})
+	}
+}
+
 func buildStartupMessages(cfg *config.Config, stateManager *state.Manager, warnings []preflight.Issue) []bus.InboundMessage {
 	channel, chatID, sessionKey := resolveStartupTarget(stateManager)
 	if channel == "" || chatID == "" || sessionKey == "" {
@@ -932,51 +1055,51 @@ func renderStartupPromptTemplate(template, channel, chatID string) string {
 	return replacer.Replace(template)
 }
 
+func publishStartupNotice(cfg *config.Config, stateManager *state.Manager, channelManager *channels.Manager) {
+	if cfg == nil || channelManager == nil {
+		return
+	}
+	for _, target := range collectNotificationTargets(cfg, stateManager) {
+		content := strings.NewReplacer(
+			"{{timestamp}}", time.Now().Format(time.RFC3339),
+			"{{channel}}", target.channel,
+			"{{chat_id}}", target.chatID,
+		).Replace("Gateway started at {{timestamp}} for {{channel}}:{{chat_id}}. PicoClaw is online.")
+		sendSystemNotice(cfg, channelManager, target, content)
+	}
+}
+
+func publishGatewayErrorNotice(cfg *config.Config, stateManager *state.Manager, channelManager *channels.Manager, errMessage string) {
+	if cfg == nil || channelManager == nil || strings.TrimSpace(errMessage) == "" {
+		return
+	}
+	for _, target := range collectNotificationTargets(cfg, stateManager) {
+		content := strings.NewReplacer(
+			"{{timestamp}}", time.Now().Format(time.RFC3339),
+			"{{channel}}", target.channel,
+			"{{chat_id}}", target.chatID,
+			"{{error}}", errMessage,
+		).Replace("Gateway runtime error at {{timestamp}} for {{channel}}:{{chat_id}}: {{error}}")
+		sendSystemNotice(cfg, channelManager, target, content)
+	}
+}
+
 func publishShutdownNotice(cfg *config.Config, stateManager *state.Manager, channelManager *channels.Manager, sig os.Signal) {
 	if cfg == nil || channelManager == nil || !cfg.Gateway.ShutdownNotice.Enabled {
 		return
 	}
-	channel, chatID, _ := resolveStartupTarget(stateManager)
-	if channel == "" || chatID == "" {
-		return
-	}
-
-	template := cfg.Gateway.ShutdownNotice.Template
-	if strings.TrimSpace(template) == "" {
+	template := strings.TrimSpace(cfg.Gateway.ShutdownNotice.Template)
+	if template == "" {
 		template = "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
 	}
-	content := strings.NewReplacer(
-		"{{timestamp}}", time.Now().Format(time.RFC3339),
-		"{{channel}}", channel,
-		"{{chat_id}}", chatID,
-		"{{signal}}", sig.String(),
-	).Replace(template)
-
-	msg := bus.OutboundMessage{
-		Channel: channel,
-		ChatID:  chatID,
-		Content: content,
-	}
-
-	ch, ok := channelManager.GetChannel(channel)
-	if !ok {
-		logger.WarnCF("gateway", "Failed to send shutdown notice: channel not available", map[string]interface{}{
-			"channel": channel,
-			"chat_id": chatID,
-			"signal":  sig.String(),
-		})
-		return
-	}
-
-	sendCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := ch.Send(sendCtx, msg); err != nil {
-		logger.WarnCF("gateway", "Failed to send shutdown notice", map[string]interface{}{
-			"channel": channel,
-			"chat_id": chatID,
-			"signal":  sig.String(),
-			"error":   err.Error(),
-		})
+	for _, target := range collectNotificationTargets(cfg, stateManager) {
+		content := strings.NewReplacer(
+			"{{timestamp}}", time.Now().Format(time.RFC3339),
+			"{{channel}}", target.channel,
+			"{{chat_id}}", target.chatID,
+			"{{signal}}", sig.String(),
+		).Replace(template)
+		sendSystemNotice(cfg, channelManager, target, content)
 	}
 }
 

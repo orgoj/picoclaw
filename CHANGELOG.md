@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.19 - 2026-02-20
+
+### Changed
+- Gateway automatic notices are now broadcast to all known external sessions (`channel:chat`) discovered from session history, not only the last active session.
+- Automatic gateway notices now include startup online notice, shutdown notice, and runtime startup/health error notices.
+- All automatic gateway notices now include a configurable visible prefix.
+
+### Added
+- New config field: `gateway.auto_message_prefix` (default: `[AUTO]`).
+- New user-visible notice metadata/fields in templates and payload context:
+  - `{{timestamp}}`
+  - `{{channel}}`
+  - `{{chat_id}}`
+  - `{{signal}}` (shutdown notice)
+  - `{{error}}` (runtime error notice)
+
 ## v0.1.18 - 2026-02-20
 
 ### Changed

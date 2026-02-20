@@ -946,6 +946,7 @@ Startup behavior:
 #### Startup Restart Prompt (Main Thread)
 
 You can configure a startup prompt that is injected into the last active channel/session immediately after gateway start (not idle).
+Gateway also sends an automatic startup notice to all known external sessions (`channel:chat`) with the configured auto-message prefix.
 
 Example:
 
@@ -968,13 +969,14 @@ Available template variables:
 
 #### Shutdown Notice (Ctrl+C / SIGTERM / SIGHUP)
 
-Gateway can send an automatic outbound message to the last active channel/chat before shutdown.
+Gateway can send an automatic outbound message to all known external sessions before shutdown.
 
 Example:
 
 ```json
 {
   "gateway": {
+    "auto_message_prefix": "[AUTO]",
     "shutdown_notice": {
       "enabled": true,
       "template": "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
@@ -1176,10 +1178,11 @@ Retry semantics (exact):
 |--------|---------|-------------|
 | `host` | `0.0.0.0` | Gateway listen host |
 | `port` | `18790` | Gateway listen port |
+| `auto_message_prefix` | `[AUTO]` | Prefix added to automatic gateway notices (startup/shutdown/runtime errors) |
 | `startup_prompt.enabled` | `true` | Inject restart context into last active session at startup |
 | `startup_prompt.template` | built-in template | Prompt template for restart context |
 | `startup_prompt.include_preflight_warnings` | `true` | Inject preflight warning-fix task into same main session |
-| `shutdown_notice.enabled` | `true` | Send shutdown message to last active channel before exit |
+| `shutdown_notice.enabled` | `true` | Send shutdown message to all known external sessions before exit |
 | `shutdown_notice.template` | built-in template | Outbound message template for shutdown notice |
 
 #### Heartbeat
@@ -1330,6 +1333,7 @@ picoclaw agent -m "Hello"
   "gateway": {
     "host": "0.0.0.0",
     "port": 18790,
+    "auto_message_prefix": "[AUTO]",
     "startup_prompt": {
       "enabled": true,
       "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Greet the user in this channel and continue with full continuity.",
