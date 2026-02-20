@@ -140,3 +140,37 @@ func TestSubagentWriteScope_AllowsSelfUpdateProjectWrite(t *testing.T) {
 		t.Fatalf("expected file in self-update scope, stat failed: %v", err)
 	}
 }
+
+func TestSubagentWriteScope_BlocksNestedWorkspaceMemoryMirrorInProject(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "agents", "code-reviewer", "memory"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(workspace, "projects", "fitness-redesign"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := &writeScopeProvider{toolPath: "projects/fitness-redesign/.picoclaw/workspace/agents/code-reviewer/memory/MEMORY.md"}
+	manager := NewSubagentManager(provider, writeScopeTestConfig(workspace), workspace, nil)
+	registry := NewToolRegistry()
+	registry.Register(NewWriteFileTool(workspace, true))
+	manager.SetTools(registry)
+
+	tool := NewSubagentTool(manager)
+	result := tool.Execute(context.Background(), map[string]interface{}{
+		"task":      "write mirrored memory path",
+		"name":      "code-reviewer",
+		"directory": "projects/fitness-redesign",
+	})
+	if result.IsError {
+		t.Fatalf("expected non-fatal completion, got error: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "not under canonical agent memory root") {
+		t.Fatalf("expected canonical memory root denial, got: %s", result.ForLLM)
+	}
+
+	badPath := filepath.Join(workspace, "projects", "fitness-redesign", ".picoclaw", "workspace", "agents", "code-reviewer", "memory", "MEMORY.md")
+	if _, err := os.Stat(badPath); !os.IsNotExist(err) {
+		t.Fatalf("expected mirrored memory path to be blocked, got stat err: %v", err)
+	}
+}
