@@ -839,7 +839,33 @@ Before `agent` and `gateway` start, PicoClaw runs a preflight check to fail fast
 - Lints `SKILL.md` files for valid YAML frontmatter (`name`, `description`)
 - Blocks unsafe instruction patterns in skills (for example `grep -r` and `find . -name`)
 
-If any issue is found, startup is aborted with a clear report.
+Startup behavior:
+- Fatal issues (workspace/bootstrap structure) abort startup.
+- Skill lint issues are warning-only (startup continues).
+- On gateway startup, warnings can be injected into the active session so the main agent can fix them in the main thread.
+
+#### Startup Restart Prompt (Main Thread)
+
+You can configure a startup prompt that is injected into the last active channel/session immediately after gateway start (not idle).
+
+Example:
+
+```json
+{
+  "gateway": {
+    "startup_prompt": {
+      "enabled": true,
+      "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Greet the user in this channel and continue with full continuity.",
+      "include_preflight_warnings": true
+    }
+  }
+}
+```
+
+Available template variables:
+- `{{timestamp}}`
+- `{{channel}}`
+- `{{chat_id}}`
 
 ### Heartbeat (Periodic Tasks)
 
@@ -1023,6 +1049,9 @@ Retry semantics (exact):
 |--------|---------|-------------|
 | `host` | `0.0.0.0` | Gateway listen host |
 | `port` | `18790` | Gateway listen port |
+| `startup_prompt.enabled` | `true` | Inject restart context into last active session at startup |
+| `startup_prompt.template` | built-in template | Prompt template for restart context |
+| `startup_prompt.include_preflight_warnings` | `true` | Inject preflight warning-fix task into same main session |
 
 #### Heartbeat
 
@@ -1143,7 +1172,12 @@ picoclaw agent -m "Hello"
   },
   "gateway": {
     "host": "0.0.0.0",
-    "port": 18790
+    "port": 18790,
+    "startup_prompt": {
+      "enabled": true,
+      "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Greet the user in this channel and continue with full continuity.",
+      "include_preflight_warnings": true
+    }
   },
   "channels": {
     "telegram": {

@@ -25,6 +25,7 @@ cil je aby bot chapal casove souvisloti a mohl se podle toho chovat
   - `memory_search(name, query, limit?)`
   - `memory_consolidate(name)` pro slouceni dennich poznamek do dlouhodobe memory
 - [ ] Idle worker pro memory maintenance
+  - to by mel byt nejaky prompt, ktery by se poustel na memory dir kazdeho (sub)agenta
   - periodicky spoustet `memory_consolidate` jen pri idle
   - detekce duplicit a sumarizace starsich zaznamu
   - zachovat audit trail (co bylo slouceno a kdy)
