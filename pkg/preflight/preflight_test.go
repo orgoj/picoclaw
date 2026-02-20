@@ -58,7 +58,7 @@ func TestRun_FailsForBadProjectAgentsDir(t *testing.T) {
 	}
 }
 
-func TestRun_FailsForSkillLinterViolations(t *testing.T) {
+func TestRun_WarnsButDoesNotFailForSkillLinterViolations(t *testing.T) {
 	ws := makeBootstrapWorkspace(t)
 	skill := `---
 name: bad-skill
@@ -69,14 +69,7 @@ Use grep -r and find . -name.`
 	writeFile(t, filepath.Join(ws, "skills", "bad", "SKILL.md"), skill)
 
 	err := Run(ws)
-	if err == nil {
-		t.Fatal("expected preflight failure")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "grep -r") {
-		t.Fatalf("expected grep -r violation, got: %v", err)
-	}
-	if !strings.Contains(msg, "find . -name") {
-		t.Fatalf("expected find . -name violation, got: %v", err)
+	if err != nil {
+		t.Fatalf("expected warning-only behavior, got error: %v", err)
 	}
 }

@@ -55,10 +55,42 @@ func Run(workspace string) error {
 	checkBadProjectAgentDirs(absWorkspace, report)
 	lintSkills(absWorkspace, report)
 
-	if report.HasIssues() {
-		return report
+	fatalIssues := make([]Issue, 0, len(report.Issues))
+	warnIssues := make([]Issue, 0, len(report.Issues))
+	for _, issue := range report.Issues {
+		if isNonFatalIssue(issue) {
+			warnIssues = append(warnIssues, issue)
+		} else {
+			fatalIssues = append(fatalIssues, issue)
+		}
+	}
+
+	if len(warnIssues) > 0 {
+		fmt.Fprintf(os.Stderr, "Startup preflight warnings (%d):\n", len(warnIssues))
+		for i, issue := range warnIssues {
+			fmt.Fprintf(os.Stderr, "%d) [%s] %s\n", i+1, issue.Check, issue.Message)
+			if issue.Path != "" {
+				fmt.Fprintf(os.Stderr, "   path: %s\n", issue.Path)
+			}
+			if issue.Hint != "" {
+				fmt.Fprintf(os.Stderr, "   hint: %s\n", issue.Hint)
+			}
+		}
+	}
+
+	if len(fatalIssues) > 0 {
+		return &Report{Issues: fatalIssues}
 	}
 	return nil
+}
+
+func isNonFatalIssue(issue Issue) bool {
+	switch issue.Check {
+	case "skill-read", "skill-frontmatter", "skill-instruction":
+		return true
+	default:
+		return false
+	}
 }
 
 func checkWorkspaceBootstrap(workspace string, report *Report) {
