@@ -499,7 +499,7 @@ func (al *AgentLoop) triggerIdle(ctx context.Context, m idleMetrics) {
 		return
 	}
 
-	// LastChannel stores "platform:chatID" format (same as heartbeat)
+	// LastChannel stores "platform:chatID" format.
 	lastChannel := al.state.GetLastChannel()
 	if lastChannel == "" {
 		logger.DebugC("agent", "No last channel for idle trigger, skipping")
@@ -537,20 +537,30 @@ func (al *AgentLoop) triggerIdle(ctx context.Context, m idleMetrics) {
 		m.SecondsSinceUser,
 	)
 
-	prompt := fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s\n\n%s", now, idleCtx, content)
+	idleProtocol := content
+	idleMessage := fmt.Sprintf(
+		"<idle_message source=\"idle_timer\">\n<current_time>%s</current_time>\n%s\n\n<idle_protocol>\n%s\n</idle_protocol>\n",
+		now,
+		idleCtx,
+		idleProtocol,
+	)
 	if subagentStatus != "" {
-		prompt = fmt.Sprintf("# Idle Check\n\nCurrent time: %s\n\n%s\n\n%s\n\n%s", now, idleCtx, subagentStatus, content)
+		idleMessage += fmt.Sprintf("\n<subagent_status>\n%s\n</subagent_status>\n", subagentStatus)
 	}
+	idleMessage += "</idle_message>\nTreat this as a normal message in the main session. You are in IDLE mode."
 
-	response, err := al.runAgentLoop(ctx, processOptions{
-		SessionKey:      "idle",
-		Channel:         channel,
-		ChatID:          chatID,
-		UserMessage:     prompt,
-		DefaultResponse: "",
-		EnableSummary:   false,
-		SendResponse:    false,
-		NoHistory:       true,
+	// Route IDLE through the same live session and same processing path as normal message.
+	sessionKey := fmt.Sprintf("%s:%s", channel, chatID)
+	response, err := al.processMessage(ctx, bus.InboundMessage{
+		Channel:    channel,
+		SenderID:   "idle",
+		ChatID:     chatID,
+		SessionKey: sessionKey,
+		Content:    idleMessage,
+		Metadata: map[string]string{
+			"idle":   "true",
+			"source": "idle_timer",
+		},
 	})
 
 	if err != nil {

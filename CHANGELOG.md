@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.18 - 2026-02-20
+
+### Changed
+- IDLE trigger now enters the same main session flow as a normal message (same `channel/chat/session`), instead of running in an isolated idle-only context.
+- IDLE payload is XML-wrapped (`<idle_message>`, `<idle_context>`, `<idle_protocol>`, optional `<subagent_status>`) so the main agent has explicit idle-mode context in the conversation history.
+
 ## v0.1.17 - 2026-02-20
 
 ### Changed
