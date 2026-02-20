@@ -55,20 +55,38 @@
 
 ## 🍴 Fork Delta (orgoj/picoclaw)
 
-Snapshot date: 2026-02-20
-
-- Fork point from `upstream/main`: `8d757fb` (2026-02-16).
-- `origin/main` is still aligned with that fork point; active fork development is on branch `bot`.
-- Branch `bot` currently carries a large custom delta from `upstream/main` (`+85 / -152` commits).
-
-Major additions in this fork branch:
-
-- Agent orchestration: named sub-agents with persistent identity/memory, configurable sub-agent limits/timeouts, richer startup context injection, and non-silent sub-agent completion guarantees.
-- Cross-channel operations: configurable-prefix controls (`<prefix>inject`, `<prefix>first`, `<prefix>kill`) with queue bypass/head enqueue semantics, plus Telegram status/help/model formatting and channel-aware shutdown notices.
-- Runtime control plane: bounded editable inbound queue, urgent/supervisor message injection into active loops, health/admin APIs for queue and session history.
-- Web observability: minimal dashboard plus SSE snapshot stream (`EventSource`) for live status.
-- Reliability and safety hardening: loop empty-response retry, bounded bus/retry waits, AGENTS bootstrap checks with warning-only preflight mode, and stricter memory path write guards.
-- Documentation and maintenance scaffolding: expanded AGENTS/CODEBASE map, operational TODOs, and implementation reports under `docs/work/`.
+> [!IMPORTANT]
+> **Fork-specific capabilities in `orgoj/picoclaw` (snapshot: 2026-02-20)**
+>
+> **Delta at a glance**
+> - **Upstream baseline:** merge-base `9d5728e` (2026-02-16).
+> - **`upstream/main...bot`:** `+94 / -152` commits (**94 ahead**, **152 behind**).
+> - **`origin/main...bot`:** `+94 / -6` commits (**active development is on `bot`**).
+>
+> **What this fork adds beyond upstream**
+> - **Multi-agent orchestration and memory**
+>   - Named sub-agents (`name`) with persistent identity/memory in `workspace/agents/<name>/`.
+>   - Named-agent discovery summary injected into main-agent system context.
+>   - Non-silent completion guarantees (explicit fallback text, max-iteration exhaustion treated as error).
+>   - Strict memory write-scope protection for named-agent paths.
+> - **Cross-channel control plane**
+>   - Channel-agnostic controls: `<prefix>inject`, `<prefix>first`, `<prefix>kill` (**not Telegram-only**).
+>   - Configurable command prefix via `ingress.concat_prefix` (first rune).
+>   - Escape behavior `<prefix>+` appends literal `+` to the previous queued message.
+>   - Priority behavior: active-run urgent injection + queue-head insertion semantics.
+> - **Inbound queue, timing, and observability**
+>   - Bounded/editable inbound queue APIs (inspect/update/delete/reorder).
+>   - Ingress timing metadata: `received_at`, `enqueued_at`, `delta_since_prev_ms`, `queue_len_at_enqueue`, `gap_notice`.
+>   - Ingress merge controls with forced-prefix concat behavior.
+>   - Unified runtime logging under `logging.dir` plus `audit.jsonl`.
+>   - Live ops visibility via dashboard + SSE snapshot stream.
+> - **Startup/idle/autonomy behavior**
+>   - Startup prompt and preflight warning injection into autonomous idle flow.
+>   - Preflight skill-lint switched to warning-only with idle-session warning summary.
+>   - Idle runtime context now includes user-idle metrics and recent subagent context.
+> - **Ops and documentation discipline**
+>   - Expanded operational memory in `AGENTS.md` and navigation in `CODEBASE-MAP.md`.
+>   - Changelog/version delivery discipline with explicit behavior-field documentation.
 
 ## ✨ Features
 
