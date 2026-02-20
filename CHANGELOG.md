@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.20 - 2026-02-20
+
+### Fixed
+- Dashboard SSE stream (`/api/v1/events`) no longer gets cut by the gateway HTTP write timeout every few seconds.
+- Gateway HTTP server timeout profile updated for long-lived streams:
+  - `WriteTimeout` disabled for SSE compatibility.
+  - `ReadHeaderTimeout` set to `5s`.
+  - `ReadTimeout` set to `10s`.
+  - `IdleTimeout` set to `120s`.
+
 ## v0.1.19 - 2026-02-20
 
 ### Changed

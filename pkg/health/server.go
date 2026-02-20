@@ -45,10 +45,13 @@ func NewServer(host string, port int) *Server {
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	s.server = &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		// Keep disabled for long-lived streaming endpoints (SSE /api/v1/events).
+		WriteTimeout: 0,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	return s
