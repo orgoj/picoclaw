@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.1.25 - 2026-02-20
+
+### Changed
+- Dashboard history auto-scroll now respects operator reading position: live updates only stick to bottom when user is already near the bottom.
+- Dashboard subagent filter no longer silently falls back to full history when no match exists; the history pane now shows explicit empty-state text for selected-agent scope.
+- Dashboard `session_key` input is no longer hardcoded to a fixed Telegram value.
+- Dashboard outbound status feedback now uses concise operator-facing result text instead of raw JSON blobs.
+
+### Added
+- Destructive action confirmations in dashboard controls:
+  - message mode `Delete Last`
+  - queue row `del`
+  - subagent `KILL`
+- Request busy-state handling on dashboard action buttons to reduce accidental duplicate operations (send/save/move/delete/kill).
+
+## v0.1.24 - 2026-02-20
+
+### Changed
+- Dashboard message composer now maps directly to channel-agnostic prefix controls instead of a generic urgent toggle.
+- Dashboard subagent table restores per-row `KILL` action when runtime controls include `<prefix>kill TASK_ID`.
+- Dashboard inbound queue table now exposes explicit reorder actions (`top`, `up`, `down`, `bottom`) alongside save/delete.
+- Dashboard subagent selection and history filtering behavior was tightened:
+  - active subagent row uses persistent selected-row highlight
+  - history filter matches subagent markers more broadly (`subagent:*` patterns)
+  - if no explicit marker exists, history falls back to full session stream so live updates remain visible
+  - agents panel now includes explicit `Clear filter` action to reset subagent history filter in one click
+
+### Added
+- New user-visible dashboard message fields:
+  - `Mode` selector: `Queue`, `Inject`, `Force First`, `Append`, `Delete Last`
+  - `commandHint` helper text showing the exact resolved control command with configured prefix
+
 ## v0.1.23 - 2026-02-20
 
 ### Changed

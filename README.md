@@ -90,6 +90,13 @@
 >     - Click filters: session and subagent.
 >     - Draggable splitters (horizontal + vertical), persisted in browser local storage.
 >     - History view keeps latest 1000 messages with scroll.
+>     - Message panel modes map to prefix controls (`inject/first/delete/append`) using active runtime prefix.
+>     - Agents table shows `KILL` action for running/pending tasks when control is enabled.
+>     - Agents panel includes `Clear filter` to quickly return from subagent-only history view.
+>     - Queue table supports per-row reorder (`top/up/down/bottom`) and delete.
+>     - Destructive dashboard actions (`Delete Last`, queue `del`, `KILL`) require confirmation.
+>     - Action buttons use busy states to reduce accidental duplicate clicks.
+>     - History pane keeps manual reading position and no longer forces auto-scroll while user is inspecting older lines.
 > - **Startup/idle/autonomy behavior**
 >   - Startup prompt and preflight warning injection into autonomous idle flow.
 >   - Preflight skill-lint switched to warning-only with idle-session warning summary.

@@ -210,7 +210,10 @@ const dashboardHTML = `<!doctype html>
     <div class="rightCol">
       <section class="card rightCard">
         <h2>Agents</h2>
-        <div class="small">Click agent to filter history</div>
+        <div class="row">
+          <div class="small grow">Click agent to filter history</div>
+          <button id="clearAgentBtn" type="button">Clear filter</button>
+        </div>
         <div class="tableWrap"><table id="subagentTable"></table></div>
       </section>
       <div class="rowSplitter" title="Drag to resize"></div>
@@ -231,12 +234,20 @@ const dashboardHTML = `<!doctype html>
 
       <section class="card rightCard">
         <h2>Message</h2>
-        <div class="row"><input id="sessionKey" class="grow" placeholder="session_key (e.g. telegram:7221629441)" value="telegram:7221629441"></div>
+        <div class="row"><input id="sessionKey" class="grow" placeholder="session_key (e.g. telegram:7221629441)"></div>
         <div class="row"><textarea id="content" placeholder="Type message..."></textarea></div>
         <div class="row">
-          <label class="small"><input id="urgent" type="checkbox"> urgent</label>
+          <label class="small" for="messageMode">Mode</label>
+          <select id="messageMode" style="width:auto">
+            <option value="normal">Queue</option>
+            <option value="inject">Inject</option>
+            <option value="first">Force First</option>
+            <option value="append">Append</option>
+            <option value="delete">Delete Last</option>
+          </select>
           <button id="sendBtn">Send</button>
         </div>
+        <div id="commandHint" class="small"></div>
         <div id="sendOut" class="small"></div>
       </section>
     </div>
@@ -258,6 +269,8 @@ const state = {
   sessions: [],
   subagents: [],
   historyLimit: 1000,
+  controlPrefix: "+",
+  hasKillControl: true,
 };
 
 async function jfetch(url, opts={}) {
@@ -268,33 +281,75 @@ async function jfetch(url, opts={}) {
 }
 
 async function sendMessage() {
-  const body = {
-    session_key: $("sessionKey").value.trim(),
-    content: $("content").value,
-    urgent: $("urgent").checked,
-  };
+  const btn = $("sendBtn");
   try {
-    const res = await jfetch("/api/v1/main/message", { method:"POST", body: JSON.stringify(body) });
-    $("sendOut").textContent = JSON.stringify(res);
-    $("content").value = "";
+    setButtonBusy(btn, true, "Sending...");
+    const mode = (($("messageMode") && $("messageMode").value) || "normal").trim();
+    const input = $("content").value;
+    let content = "";
+    if (mode === "normal") {
+      content = input;
+    } else if (mode === "inject") {
+      if (!String(input).trim()) throw new Error("MESSAGE required for inject");
+      content = state.controlPrefix + "inject " + input;
+    } else if (mode === "first") {
+      if (!String(input).trim()) throw new Error("MESSAGE required for force first");
+      content = state.controlPrefix + "first " + input;
+    } else if (mode === "append") {
+      if (!String(input).trim()) throw new Error("MESSAGE required for append");
+      content = state.controlPrefix + state.controlPrefix + input;
+    } else if (mode === "delete") {
+      if (!window.confirm("Delete last queued message for this session?")) return;
+      content = state.controlPrefix + "delete";
+    } else {
+      throw new Error("Unknown mode: " + mode);
+    }
+    const res = await sendMainContent(content);
+    setSendOut(describeMainResponse(mode, res), false);
+    if (mode !== "delete") $("content").value = "";
   } catch (e) {
-    $("sendOut").textContent = "ERROR: "+e.message;
+    setSendOut("ERROR: "+e.message, true);
+  } finally {
+    setButtonBusy(btn, false, "Send");
   }
+}
+
+async function sendMainContent(content) {
+  const sessionKey = $("sessionKey").value.trim();
+  if (!sessionKey) throw new Error("session_key is required");
+  return jfetch("/api/v1/main/message", {
+    method:"POST",
+    body: JSON.stringify({ session_key: sessionKey, content }),
+  });
+}
+
+function escapeHTML(v) {
+  return String(v || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function renderInbound(items) {
   const t = $("inboundTable");
-  let html = "<tr><th>ID</th><th>Session</th><th>Content</th><th></th></tr>";
-  for (const it of (items || [])) {
+  const rows = (items || []);
+  let html = "<tr><th>#</th><th>ID</th><th>Session</th><th>Content</th><th></th></tr>";
+  for (let i = 0; i < rows.length; i++) {
+    const it = rows[i];
     const id = it.id;
     const m = it.message || {};
     html += "<tr>";
-    html += "<td>"+id+"</td>";
-    html += "<td>"+(m.session_key||"")+"</td>";
-    html += "<td><textarea id='e_"+id+"' style='min-height:54px'>"+(m.content||"")+"</textarea></td>";
+    html += "<td>"+i+"</td>";
+    html += "<td>"+escapeHTML(id)+"</td>";
+    html += "<td>"+escapeHTML(m.session_key||"")+"</td>";
+    html += "<td><textarea id='e_"+id+"' style='min-height:54px'>"+escapeHTML(m.content||"")+"</textarea></td>";
     html += "<td>";
-    html += "<button onclick='patchItem(\""+id+"\")'>save</button> ";
-    html += "<button onclick='delItem(\""+id+"\")'>del</button>";
+    html += "<button onclick='moveItem(\""+id+"\",0,this,event)'>top</button> ";
+    if (i > 0) html += "<button onclick='moveItem(\""+id+"\","+(i-1)+",this,event)'>up</button> ";
+    if (i < rows.length - 1) html += "<button onclick='moveItem(\""+id+"\","+(i+1)+",this,event)'>down</button> ";
+    html += "<button onclick='moveItem(\""+id+"\","+(rows.length - 1)+",this,event)'>bottom</button> ";
+    html += "<button onclick='patchItem(\""+id+"\",this,event)'>save</button> ";
+    html += "<button onclick='delItem(\""+id+"\",this,event)'>del</button>";
     html += "</td></tr>";
   }
   t.innerHTML = html;
@@ -302,8 +357,13 @@ function renderInbound(items) {
 
 function matchSelectedAgent(m) {
   if (!state.selectedAgentID && !state.selectedAgentName) return true;
-  const c = String((m && m.content) || "").toLowerCase();
-  if (state.selectedAgentID && c.includes(state.selectedAgentID.toLowerCase())) return true;
+  const content = String((m && m.content) || "").toLowerCase();
+  const role = String((m && m.role) || "").toLowerCase();
+  const c = role + "\n" + content;
+  if (state.selectedAgentID) {
+    const id = state.selectedAgentID.toLowerCase();
+    if (c.includes(id) || c.includes("subagent:"+id) || c.includes("subagent-"+id)) return true;
+  }
   if (state.selectedAgentName && c.includes(state.selectedAgentName.toLowerCase())) return true;
   return false;
 }
@@ -314,8 +374,14 @@ function renderHistory(items) {
   const filtered = all.filter(matchSelectedAgent);
   const shown = filtered.length > state.historyLimit ? filtered.slice(filtered.length - state.historyLimit) : filtered;
   const base = Math.max(0, filtered.length - shown.length);
-  box.textContent = shown.map((m,i) => "["+(base+i)+"] "+m.role+": "+(m.content||"")).join("\n\n");
-  box.scrollTop = box.scrollHeight;
+  const nearBottom = (box.scrollHeight - (box.scrollTop + box.clientHeight)) <= 40;
+  const activeAgentFilter = !!(state.selectedAgentID || state.selectedAgentName);
+  if (shown.length === 0 && activeAgentFilter) {
+    box.textContent = "No messages for selected agent in this session yet.";
+  } else {
+    box.textContent = shown.map((m,i) => "["+(base+i)+"] "+m.role+": "+(m.content||"")).join("\n\n");
+  }
+  if (nearBottom || !activeAgentFilter) box.scrollTop = box.scrollHeight;
   const meta = $("historyMeta");
   if (meta) {
     let tag = state.selectedSession ? "session="+state.selectedSession : "session=(none)";
@@ -327,17 +393,22 @@ function renderHistory(items) {
 function renderSubagents(items) {
   const t = $("subagentTable");
   const ordered = (items || []).slice().reverse();
-  let html = "<tr><th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th></tr>";
+  let html = "<tr><th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th></tr>";
   for (const it of ordered) {
     const running = it.status === "running" || it.status === "pending";
     const cls = running ? "agent-running" : "agent-stopped";
     const selected = state.selectedAgentID === it.id ? " selected" : "";
-    html += "<tr>";
-    html += "<td class='clickable "+cls+selected+"' onclick='selectAgent(\""+it.id+"\",\""+escapeAttr(it.name||"")+"\")'>"+it.id+"</td>";
-    html += "<td>"+it.status+"</td>";
-    html += "<td>"+(it.name||"")+"</td>";
-    html += "<td>"+(it.label||"")+"</td>";
+    html += "<tr class='clickable "+cls+selected+"' onclick='selectAgent(\""+it.id+"\",\""+escapeAttr(it.name||"")+"\")'>";
+    html += "<td>"+escapeHTML(it.id)+"</td>";
+    html += "<td>"+escapeHTML(it.status)+"</td>";
+    html += "<td>"+escapeHTML(it.name||"")+"</td>";
+    html += "<td>"+escapeHTML(it.label||"")+"</td>";
     html += "<td>"+(it.pending||0)+"</td>";
+    html += "<td>";
+    if (running && state.hasKillControl) {
+      html += "<button onclick='killSubagent(\""+it.id+"\",this,event)'>KILL</button>";
+    }
+    html += "</td>";
     html += "</tr>";
   }
   t.innerHTML = html;
@@ -350,7 +421,7 @@ function renderSessions(items) {
   for (const it of rows) {
     const selected = state.selectedSession === it.key ? " selected" : "";
     html += "<tr class='clickable"+selected+"' onclick='selectSession(\""+escapeAttr(it.key||"")+"\")'>";
-    html += "<td>"+(it.key||"")+"</td>";
+    html += "<td>"+escapeHTML(it.key||"")+"</td>";
     html += "<td>"+(it.messages||0)+"</td>";
     html += "<td>"+fmtTs(it.updated)+"</td>";
     html += "</tr>";
@@ -367,16 +438,64 @@ async function refreshInbound() {
   }
 }
 
-async function patchItem(id) {
+async function patchItem(id, btn, ev) {
+  if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
   const el = $("e_"+id);
   const content = el ? el.value : "";
-  await jfetch("/api/v1/inbound/"+id, { method:"PATCH", body: JSON.stringify({ content }) });
-  await refreshInbound();
+  try {
+    setButtonBusy(btn, true, "saving...");
+    await jfetch("/api/v1/inbound/"+id, { method:"PATCH", body: JSON.stringify({ content }) });
+    await refreshInbound();
+    setSendOut("Queue item saved.", false);
+  } catch (e) {
+    setSendOut("ERROR: " + e.message, true);
+  } finally {
+    setButtonBusy(btn, false, "save");
+  }
 }
 
-async function delItem(id) {
-  await jfetch("/api/v1/inbound/"+id, { method:"DELETE" });
-  await refreshInbound();
+async function delItem(id, btn, ev) {
+  if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
+  if (!window.confirm("Delete this queued item?")) return;
+  try {
+    setButtonBusy(btn, true, "deleting...");
+    await jfetch("/api/v1/inbound/"+id, { method:"DELETE" });
+    await refreshInbound();
+    setSendOut("Queue item deleted.", false);
+  } catch (e) {
+    setSendOut("ERROR: " + e.message, true);
+  } finally {
+    setButtonBusy(btn, false, "del");
+  }
+}
+
+async function moveItem(id, index, btn, ev) {
+  if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
+  const old = btn && btn.textContent ? btn.textContent : "move";
+  try {
+    setButtonBusy(btn, true, "moving...");
+    await jfetch("/api/v1/inbound/"+id+"/move", { method:"POST", body: JSON.stringify({ index }) });
+    await refreshInbound();
+  } catch (e) {
+    setSendOut("ERROR: " + e.message, true);
+  } finally {
+    setButtonBusy(btn, false, old);
+  }
+}
+
+async function killSubagent(id, btn, ev) {
+  if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
+  if (!id) return;
+  if (!window.confirm("Cancel subagent task '" + id + "'?")) return;
+  try {
+    setButtonBusy(btn, true, "killing...");
+    const res = await sendMainContent(state.controlPrefix + "kill " + id);
+    setSendOut(describeMainResponse("kill", res), false);
+  } catch (e) {
+    setSendOut("ERROR: " + e.message, true);
+  } finally {
+    setButtonBusy(btn, false, "KILL");
+  }
 }
 
 async function refreshHistory() {
@@ -657,6 +776,11 @@ async function refreshRuntime(silent) {
   try {
     const res = await jfetch("/api/v1/runtime");
     const rt = (res && res.runtime) || {};
+    const controls = rt.controls || {};
+    const prefix = String(controls.prefix || "+").trim();
+    if (prefix) state.controlPrefix = prefix;
+    const cmds = Array.isArray(controls.commands) ? controls.commands : [];
+    state.hasKillControl = cmds.some((c) => String(c).indexOf(state.controlPrefix + "kill ") === 0);
     $("runtimeSummaryBox").textContent = buildRuntimeSummary(rt);
     const cfg = rt.config || {};
     const top = {
@@ -665,9 +789,65 @@ async function refreshRuntime(silent) {
       error: cfg.error || "",
     };
     $("runtimeConfigBox").textContent = "Config Meta\n" + fmtObj(top) + "\n\nSanitized Config\n" + fmtObj(cfg.sanitized || {});
+    updateMessageModeUI();
+    renderSubagents(state.subagents);
   } catch (e) {
     if (!silent) $("runtimeSummaryBox").textContent = "ERROR: " + e.message;
   }
+}
+
+function updateMessageModeUI() {
+  const modeEl = $("messageMode");
+  const content = $("content");
+  const hint = $("commandHint");
+  if (!modeEl || !content || !hint) return;
+  const mode = modeEl.value || "normal";
+  const p = state.controlPrefix || "+";
+  let text = "";
+  if (mode === "normal") {
+    text = "Queue normal message";
+    content.placeholder = "Type message...";
+    content.disabled = false;
+  } else if (mode === "inject") {
+    text = "Control command: " + p + "inject MESSAGE";
+    content.placeholder = "MESSAGE for inject";
+    content.disabled = false;
+  } else if (mode === "first") {
+    text = "Control command: " + p + "first MESSAGE";
+    content.placeholder = "MESSAGE for force-first";
+    content.disabled = false;
+  } else if (mode === "append") {
+    text = "Control command: " + p + p + "MESSAGE";
+    content.placeholder = "MESSAGE to append to last queued message";
+    content.disabled = false;
+  } else if (mode === "delete") {
+    text = "Control command: " + p + "delete";
+    content.placeholder = "No message body needed for delete";
+    content.disabled = true;
+  }
+  hint.textContent = text;
+}
+
+function setButtonBusy(btn, busy, label) {
+  if (!btn) return;
+  btn.disabled = !!busy;
+  if (typeof label === "string") btn.textContent = label;
+}
+
+function setSendOut(text, isError) {
+  const out = $("sendOut");
+  if (!out) return;
+  out.textContent = String(text || "");
+  out.className = "small " + (isError ? "bad" : "ok");
+}
+
+function describeMainResponse(mode, res) {
+  const r = res || {};
+  if (r.injected) return "Injected into active run.";
+  if (r.queued) return "Queued. Queue ID: " + (r.id || "(unknown)");
+  if (mode === "delete") return "Delete command sent.";
+  if (mode === "kill") return "Kill command sent.";
+  return "Sent.";
 }
 
 function showRuntime() {
@@ -720,6 +900,8 @@ function initTheme() {
 
 const sendBtn = $("sendBtn");
 if (sendBtn) sendBtn.addEventListener("click", sendMessage);
+const messageMode = $("messageMode");
+if (messageMode) messageMode.addEventListener("change", updateMessageModeUI);
 const contentBox = $("content");
 if (contentBox) {
   contentBox.addEventListener("keydown", (ev) => {
@@ -733,6 +915,8 @@ const refreshInboundBtn = $("refreshInbound");
 if (refreshInboundBtn) refreshInboundBtn.addEventListener("click", refreshInbound);
 const sessionKey = $("sessionKey");
 if (sessionKey) sessionKey.addEventListener("change", () => selectSession(sessionKey.value.trim()));
+const clearAgentBtn = $("clearAgentBtn");
+if (clearAgentBtn) clearAgentBtn.addEventListener("click", clearAgentFilter);
 const showRuntimeBtn = $("showRuntimeBtn");
 if (showRuntimeBtn) showRuntimeBtn.addEventListener("click", showRuntime);
 const closeRuntimeBtn = $("closeRuntimeBtn");
@@ -746,13 +930,16 @@ if (runtimeModal) runtimeModal.addEventListener("click", (ev) => {
 
 window.patchItem = patchItem;
 window.delItem = delItem;
+window.moveItem = moveItem;
 window.selectSession = selectSession;
 window.selectAgent = selectAgent;
 window.clearAgentFilter = clearAgentFilter;
+window.killSubagent = killSubagent;
 
 initTheme();
 initSplitter();
 initRightRowSplitters();
+updateMessageModeUI();
 refreshInbound();
 refreshSubagents();
 refreshSessions();
