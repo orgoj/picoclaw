@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/tools"
+	"github.com/sipeed/picoclaw/pkg/version"
 )
 
 type routeRegistrar interface {
@@ -18,6 +22,15 @@ type routeRegistrar interface {
 
 type sessionHistoryProvider interface {
 	GetSessionHistory(sessionKey string) []providers.Message
+}
+
+type runtimeInfoProvider interface {
+	GetRuntimeInfo() map[string]interface{}
+}
+
+type channelStatusProvider interface {
+	GetStatus() map[string]interface{}
+	GetEnabledChannels() []string
 }
 
 type injectUrgentProvider interface {
@@ -29,19 +42,33 @@ type subagentManagerProvider interface {
 }
 
 type inboundAPI struct {
-	msgBus      *bus.MessageBus
-	hist        sessionHistoryProvider
-	injector    injectUrgentProvider
-	subagentMgr *tools.SubagentManager
+	msgBus         *bus.MessageBus
+	hist           sessionHistoryProvider
+	injector       injectUrgentProvider
+	subagentMgr    *tools.SubagentManager
+	cfg            *config.Config
+	cfgPath        string
+	channelRuntime channelStatusProvider
 }
 
-func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime sessionHistoryProvider) {
+type RuntimeOptions struct {
+	Config         *config.Config
+	ConfigPath     string
+	ChannelRuntime channelStatusProvider
+}
+
+func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime sessionHistoryProvider, opts *RuntimeOptions) {
 	if r == nil || msgBus == nil {
 		return
 	}
 	api := &inboundAPI{
 		msgBus: msgBus,
 		hist:   runtime,
+	}
+	if opts != nil {
+		api.cfg = opts.Config
+		api.cfgPath = strings.TrimSpace(opts.ConfigPath)
+		api.channelRuntime = opts.ChannelRuntime
 	}
 	if inj, ok := runtime.(injectUrgentProvider); ok {
 		api.injector = inj
@@ -57,6 +84,7 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/subagents", api.handleSubagents)
 	r.HandleFunc("/api/v1/subagents/", api.handleSubagentItem)
 	r.HandleFunc("/api/v1/events", api.handleEvents)
+	r.HandleFunc("/api/v1/runtime", api.handleRuntime)
 	RegisterDashboardRoutes(r)
 }
 
@@ -329,6 +357,179 @@ func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
 			sendSnapshot()
 		}
 	}
+}
+
+func (a *inboundAPI) handleRuntime(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+
+	runtime := map[string]any{
+		"version": map[string]any{
+			"app": version.Format(),
+			"go":  version.GetGoVersion(),
+		},
+		"inbound_queue": map[string]any{
+			"count": len(a.msgBus.ListInbound()),
+		},
+		"subagents": map[string]any{
+			"running_count": 0,
+			"recent_count":  0,
+			"queue_count":   0,
+		},
+	}
+
+	if rp, ok := a.hist.(runtimeInfoProvider); ok {
+		info := rp.GetRuntimeInfo()
+		runtime["agent"] = info
+	}
+
+	if a.subagentMgr != nil {
+		runtime["subagents"] = map[string]any{
+			"running_count": len(a.subagentMgr.GetRunningTasks()),
+			"recent_count":  len(a.subagentMgr.GetRecentTasks(20)),
+			"queue_count":   a.subagentMgr.GetMessageQueueCount(),
+		}
+	}
+
+	if a.channelRuntime != nil {
+		enabled := a.channelRuntime.GetEnabledChannels()
+		sort.Strings(enabled)
+		runtime["channels"] = map[string]any{
+			"enabled_count": len(enabled),
+			"enabled":       enabled,
+			"status":        a.channelRuntime.GetStatus(),
+		}
+	}
+
+	if a.cfg != nil {
+		prefix := "+"
+		if p := strings.TrimSpace(a.cfg.Ingress.ConcatPrefix); p != "" {
+			prefix = string([]rune(p)[0])
+		}
+		commands := runtimeControlCommands(prefix, a.cfg.Tools.Spawn.Enabled)
+		runtime["controls"] = map[string]any{
+			"prefix":   prefix,
+			"count":    len(commands),
+			"commands": commands,
+		}
+		runtime["model"] = map[string]any{
+			"provider": a.cfg.Agents.Defaults.Provider,
+			"model":    a.cfg.Agents.Defaults.Model,
+		}
+		cfgData, cfgErr := a.loadSanitizedConfig()
+		runtime["config"] = map[string]any{
+			"path":      a.cfgPath,
+			"available": cfgErr == "",
+			"error":     cfgErr,
+			"sanitized": cfgData,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"runtime": runtime})
+}
+
+func runtimeControlCommands(prefix string, includeKill bool) []string {
+	cmds := []string{
+		prefix + "help",
+		prefix + "status",
+		prefix + "models",
+		prefix + "channels",
+		prefix + "inject MESSAGE",
+		prefix + "first MESSAGE",
+		prefix + "delete",
+		prefix + prefix + "MESSAGE",
+	}
+	if includeKill {
+		cmds = append(cmds, prefix+"kill TASK_ID")
+	}
+	return cmds
+}
+
+func (a *inboundAPI) loadSanitizedConfig() (any, string) {
+	// Prefer raw config file for exact user-edited structure (includes named agents).
+	if a.cfgPath != "" {
+		raw, err := os.ReadFile(a.cfgPath)
+		if err == nil && len(raw) > 0 {
+			var doc any
+			if err := json.Unmarshal(raw, &doc); err == nil {
+				return sanitizeConfigValue(doc, ""), ""
+			}
+			return nil, "failed to parse config JSON"
+		}
+	}
+	// Fallback to loaded config object.
+	if a.cfg != nil {
+		raw, err := json.Marshal(a.cfg)
+		if err != nil {
+			return nil, "failed to marshal config"
+		}
+		var doc any
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, "failed to decode config"
+		}
+		return sanitizeConfigValue(doc, ""), ""
+	}
+	return nil, "config unavailable"
+}
+
+func sanitizeConfigValue(v any, key string) any {
+	switch vv := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(vv))
+		for k, val := range vv {
+			out[k] = sanitizeConfigValue(val, k)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(vv))
+		for _, item := range vv {
+			out = append(out, sanitizeConfigValue(item, key))
+		}
+		return out
+	case string:
+		if isSensitiveConfigKey(key) {
+			return maskSecret(vv)
+		}
+		return vv
+	default:
+		if isSensitiveConfigKey(key) {
+			return "***"
+		}
+		return v
+	}
+}
+
+func isSensitiveConfigKey(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	if k == "" {
+		return false
+	}
+	switch {
+	case strings.Contains(k, "token"):
+		return true
+	case strings.Contains(k, "secret"):
+		return true
+	case strings.Contains(k, "api_key"):
+		return true
+	case strings.Contains(k, "apikey"):
+		return true
+	case strings.Contains(k, "password"):
+		return true
+	default:
+		return false
+	}
+}
+
+func maskSecret(s string) string {
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 4 {
+		return strings.Repeat("*", len(s))
+	}
+	return s[:2] + strings.Repeat("*", len(s)-4) + s[len(s)-2:]
 }
 
 type taskView struct {

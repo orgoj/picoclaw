@@ -58,6 +58,10 @@
 > [!IMPORTANT]
 > **Fork-specific capabilities in `orgoj/picoclaw` (snapshot: 2026-02-20)**
 >
+> **This fork includes both:**
+> - **Admin API** (`/api/v1/runtime`, `/api/v1/inbound`, `/api/v1/history`, `/api/v1/subagents`, `/api/v1/events`)
+> - **Web UI dashboard** (`/dashboard`) backed by the same runtime APIs/SSE stream
+>
 > **Delta at a glance**
 > - **Upstream baseline:** merge-base `9d5728e` (2026-02-16).
 > - **`upstream/main...bot`:** `+94 / -152` commits (**94 ahead**, **152 behind**).
@@ -87,6 +91,15 @@
 > - **Ops and documentation discipline**
 >   - Expanded operational memory in `AGENTS.md` and navigation in `CODEBASE-MAP.md`.
 >   - Changelog/version delivery discipline with explicit behavior-field documentation.
+
+> [!TIP]
+> **Quick local verify (API + Web UI)**
+> 1. `make install`
+> 2. Ensure `~/.picoclaw/config.json` has:
+>    - `"gateway": { "host": "0.0.0.0", "port": 18790 }`
+> 3. Run `picoclaw gateway`
+> 4. Open `http://127.0.0.1:18790/dashboard`
+> 5. Check API: `curl http://127.0.0.1:18790/api/v1/runtime`
 
 ## ✨ Features
 

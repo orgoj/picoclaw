@@ -794,13 +794,17 @@ func gatewayCmd() {
 	}
 
 	healthServer := health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port)
-	adminapi.RegisterInboundRoutes(healthServer, msgBus, agentLoop)
+	adminapi.RegisterInboundRoutes(healthServer, msgBus, agentLoop, &adminapi.RuntimeOptions{
+		Config:         cfg,
+		ConfigPath:     getConfigPath(),
+		ChannelRuntime: channelManager,
+	})
 	go func() {
 		if err := healthServer.Start(); err != nil && err != http.ErrServerClosed {
 			logger.ErrorCF("health", "Health server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
-	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/inbound, /api/v1/history, /api/v1/events, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
+	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/runtime, /api/v1/inbound, /api/v1/history, /api/v1/events, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
 
 	startupMsgs := buildStartupMessages(cfg, stateManager, preflightWarnings)
 	for _, startupMsg := range startupMsgs {

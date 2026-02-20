@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.13 - 2026-02-20
+
+### Added
+- New runtime inspection API endpoint: `/api/v1/runtime`.
+- Dashboard "Runtime info" popup with operator summary and sanitized config view.
+
+### Changed
+- Gateway startup endpoint banner now includes `/api/v1/runtime`.
+- Dashboard now fetches runtime metadata continuously from API (version, tools/skills/agents counts, channel status, control commands list/count, queue/subagent counters).
+- Config shown in dashboard runtime inspector is secret-sanitized (tokens/API keys/secrets/password fields masked).
+
 ## v0.1.12 - 2026-02-20
 
 ### Added

@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
@@ -40,7 +43,7 @@ func TestInboundRoutes_ListPatchMoveDelete(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, nil)
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, nil, nil)
 
 	// PATCH second
 	patchBody, _ := json.Marshal(map[string]any{"content": "second-edited"})
@@ -93,7 +96,7 @@ func TestInboundRoutes_ListPatchMoveDelete(t *testing.T) {
 func TestHistoryRoute(t *testing.T) {
 	msgBus := bus.NewMessageBus()
 	mux := http.NewServeMux()
-	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/history?session_key=telegram:1", nil)
 	rr := httptest.NewRecorder()
@@ -120,7 +123,7 @@ func TestHistoryRoute(t *testing.T) {
 func TestMainMessageRoute_QueuesMessage(t *testing.T) {
 	msgBus := bus.NewMessageBus()
 	mux := http.NewServeMux()
-	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{}, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"session_key": "telegram:1",
@@ -148,7 +151,7 @@ func TestMainMessageRoute_QueuesMessage(t *testing.T) {
 func TestDashboardRoute(t *testing.T) {
 	msgBus := bus.NewMessageBus()
 	mux := http.NewServeMux()
-	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	rr := httptest.NewRecorder()
@@ -165,7 +168,7 @@ func TestEventsRoute_StreamsSnapshot(t *testing.T) {
 	msgBus := bus.NewMessageBus()
 	_, _ = msgBus.PublishInboundWithID(bus.InboundMessage{Content: "x"})
 	mux := http.NewServeMux()
-	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{})
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
 	defer cancel()
@@ -179,5 +182,106 @@ func TestEventsRoute_StreamsSnapshot(t *testing.T) {
 	}
 	if !strings.Contains(got, "\"session_key\":\"telegram:1\"") {
 		t.Fatalf("expected session key in snapshot, got: %q", got)
+	}
+}
+
+type fakeRuntimeHistory struct {
+	fakeHistory
+}
+
+func (f fakeRuntimeHistory) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"tools": map[string]interface{}{
+			"count": 3,
+			"names": []string{"exec", "read_file", "spawn"},
+		},
+		"skills": map[string]interface{}{
+			"available": 4,
+			"total":     4,
+		},
+		"agents": map[string]interface{}{
+			"count": 2,
+		},
+	}
+}
+
+type fakeChannels struct{}
+
+func (f fakeChannels) GetStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"telegram": map[string]interface{}{"enabled": true, "running": true},
+	}
+}
+
+func (f fakeChannels) GetEnabledChannels() []string {
+	return []string{"telegram"}
+}
+
+func TestRuntimeRoute_ProvidesSummaryAndSanitizedConfig(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	_, _ = msgBus.PublishInboundWithID(bus.InboundMessage{Content: "x"})
+
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	rawCfg := `{
+  "agents": { "defaults": { "model": "glm-4.7", "provider": "zhipu" } },
+  "ingress": { "concat_prefix": "+" },
+  "tools": { "spawn": { "enabled": true } },
+  "channels": { "telegram": { "enabled": true, "token": "1234567890TOKEN" } },
+  "providers": { "zhipu": { "api_key": "SECRET_API_KEY_12345" } }
+}`
+	if err := os.WriteFile(cfgPath, []byte(rawCfg), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Model = "glm-4.7"
+	cfg.Agents.Defaults.Provider = "zhipu"
+	cfg.Ingress.ConcatPrefix = "+"
+	cfg.Tools.Spawn.Enabled = true
+
+	mux := http.NewServeMux()
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeRuntimeHistory{}, &RuntimeOptions{
+		Config:         cfg,
+		ConfigPath:     cfgPath,
+		ChannelRuntime: fakeChannels{},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtime", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET runtime status=%d want=200 body=%s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Runtime map[string]interface{} `json:"runtime"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal runtime response: %v", err)
+	}
+	if resp.Runtime["agent"] == nil {
+		t.Fatalf("runtime.agent missing: %+v", resp.Runtime)
+	}
+	controls, ok := resp.Runtime["controls"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("runtime.controls missing: %+v", resp.Runtime)
+	}
+	if controls["count"] == nil {
+		t.Fatalf("runtime.controls.count missing: %+v", controls)
+	}
+	cfgNode, ok := resp.Runtime["config"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("runtime.config missing: %+v", resp.Runtime)
+	}
+	if cfgNode["available"] != true {
+		t.Fatalf("runtime.config.available=%v want=true", cfgNode["available"])
+	}
+	sanitizedRaw, err := json.Marshal(cfgNode["sanitized"])
+	if err != nil {
+		t.Fatalf("marshal sanitized config: %v", err)
+	}
+	sanitized := string(sanitizedRaw)
+	if strings.Contains(sanitized, "SECRET_API_KEY_12345") || strings.Contains(sanitized, "1234567890TOKEN") {
+		t.Fatalf("sanitized config leaked secrets: %s", sanitized)
 	}
 }
