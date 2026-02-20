@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,14 @@ type SessionManager struct {
 	sessions map[string]*Session
 	mu       sync.RWMutex
 	storage  string
+}
+
+type SessionSummary struct {
+	Key        string `json:"key"`
+	Messages   int    `json:"messages"`
+	Created    int64  `json:"created"`
+	Updated    int64  `json:"updated"`
+	HasSummary bool   `json:"has_summary"`
 }
 
 func NewSessionManager(storage string) *SessionManager {
@@ -263,4 +272,33 @@ func (sm *SessionManager) loadSessions() error {
 	}
 
 	return nil
+}
+
+func (sm *SessionManager) ListSummaries(limit int) []SessionSummary {
+	sm.mu.RLock()
+	out := make([]SessionSummary, 0, len(sm.sessions))
+	for _, s := range sm.sessions {
+		if s == nil {
+			continue
+		}
+		out = append(out, SessionSummary{
+			Key:        s.Key,
+			Messages:   len(s.Messages),
+			Created:    s.Created.UnixMilli(),
+			Updated:    s.Updated.UnixMilli(),
+			HasSummary: strings.TrimSpace(s.Summary) != "",
+		})
+	}
+	sm.mu.RUnlock()
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Updated == out[j].Updated {
+			return out[i].Key < out[j].Key
+		}
+		return out[i].Updated > out[j].Updated
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }

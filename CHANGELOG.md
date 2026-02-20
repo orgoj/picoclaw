@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.14 - 2026-02-20
+
+### Added
+- New sessions API endpoint: `/api/v1/sessions` (recent sessions with message count and timestamps).
+
+### Changed
+- Dashboard layout redesigned for ops flow:
+  - left full-height history pane
+  - right stacked panels: agents, sessions, queue, message
+  - draggable splitters to resize left/right columns and right-column row heights
+- History panel now supports click filters:
+  - click session to switch stream/history source
+  - click subagent to filter history messages by that subagent context
+- History rendering now shows last 1000 messages (scrollable) with visible "showing X / Y" metadata.
+- Subagent rows now include visual status cues (running vs. stopped/finished background state).
+- Dashboard splitter positions are persisted in browser local storage.
+- Gateway startup endpoint banner and README include `/api/v1/sessions`.
+- Production binary size check (linux/amd64): `28,523,335` bytes.
+- Upstream baseline (`9d5728e`) size: `26,375,085` bytes.
+- Delta vs upstream baseline: `+2,148,250` bytes (`+8.15%`).
+
 ## v0.1.13 - 2026-02-20
 
 ### Added

@@ -804,7 +804,7 @@ func gatewayCmd() {
 			logger.ErrorCF("health", "Health server error", map[string]interface{}{"error": err.Error()})
 		}
 	}()
-	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/runtime, /api/v1/inbound, /api/v1/history, /api/v1/events, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
+	fmt.Printf("✓ Health/API endpoints available at http://%s:%d/health, /ready, /api/v1/runtime, /api/v1/sessions, /api/v1/inbound, /api/v1/history, /api/v1/events, /dashboard\n", cfg.Gateway.Host, cfg.Gateway.Port)
 
 	startupMsgs := buildStartupMessages(cfg, stateManager, preflightWarnings)
 	for _, startupMsg := range startupMsgs {

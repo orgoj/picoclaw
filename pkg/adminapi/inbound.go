@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/version"
 )
@@ -26,6 +28,10 @@ type sessionHistoryProvider interface {
 
 type runtimeInfoProvider interface {
 	GetRuntimeInfo() map[string]interface{}
+}
+
+type sessionListProvider interface {
+	ListSessions(limit int) []session.SessionSummary
 }
 
 type channelStatusProvider interface {
@@ -80,6 +86,7 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/inbound", api.handleInboundRoot)
 	r.HandleFunc("/api/v1/inbound/", api.handleInboundItem)
 	r.HandleFunc("/api/v1/history", api.handleHistory)
+	r.HandleFunc("/api/v1/sessions", api.handleSessions)
 	r.HandleFunc("/api/v1/main/message", api.handleMainMessage)
 	r.HandleFunc("/api/v1/subagents", api.handleSubagents)
 	r.HandleFunc("/api/v1/subagents/", api.handleSubagentItem)
@@ -180,6 +187,28 @@ func (a *inboundAPI) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_key": sessionKey,
 		"items":       a.hist.GetSessionHistory(sessionKey),
+	})
+}
+
+func (a *inboundAPI) handleSessions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	lp, ok := a.hist.(sessionListProvider)
+	if !ok || lp == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sessions provider unavailable"})
+		return
+	}
+	limit := 200
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	items := lp.ListSessions(limit)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
 	})
 }
 
@@ -330,33 +359,62 @@ func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 
-	sendSnapshot := func() {
+	sendSnapshot := func() error {
 		payload := map[string]any{
 			"session_key": sessionKey,
 			"inbound":     a.msgBus.ListInbound(),
 			"history":     a.hist.GetSessionHistory(sessionKey),
 			"subagents":   a.listSubagentViews(),
+			"sessions":    a.listSessions(200),
 			"ts":          time.Now().UnixMilli(),
 		}
 		raw, _ := json.Marshal(payload)
-		_, _ = fmt.Fprintf(w, "event: snapshot\n")
-		_, _ = fmt.Fprintf(w, "data: %s\n\n", raw)
+		if _, err := fmt.Fprintf(w, "event: snapshot\n"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
+			return err
+		}
 		flusher.Flush()
+		return nil
 	}
 
-	sendSnapshot()
+	_, _ = fmt.Fprintf(w, "retry: 1500\n\n")
+	flusher.Flush()
+
+	if err := sendSnapshot(); err != nil {
+		return
+	}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	keepalive := time.NewTicker(15 * time.Second)
+	defer keepalive.Stop()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			sendSnapshot()
+			if err := sendSnapshot(); err != nil {
+				return
+			}
+		case <-keepalive.C:
+			if _, err := fmt.Fprintf(w, ": keepalive %d\n\n", time.Now().Unix()); err != nil {
+				return
+			}
+			flusher.Flush()
 		}
 	}
+}
+
+func (a *inboundAPI) listSessions(limit int) []session.SessionSummary {
+	lp, ok := a.hist.(sessionListProvider)
+	if !ok || lp == nil {
+		return nil
+	}
+	return lp.ListSessions(limit)
 }
 
 func (a *inboundAPI) handleRuntime(w http.ResponseWriter, r *http.Request) {

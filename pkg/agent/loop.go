@@ -719,6 +719,14 @@ func (al *AgentLoop) GetSessionHistory(sessionKey string) []providers.Message {
 	return out
 }
 
+// ListSessions returns session summaries sorted by last update descending.
+func (al *AgentLoop) ListSessions(limit int) []session.SessionSummary {
+	if al.sessions == nil {
+		return nil
+	}
+	return al.sessions.ListSummaries(limit)
+}
+
 // RecordLastChannel records the last active channel for this workspace.
 // This uses the atomic state save mechanism to prevent data loss on crash.
 func (al *AgentLoop) RecordLastChannel(channel string) error {

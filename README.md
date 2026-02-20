@@ -59,7 +59,7 @@
 > **Fork-specific capabilities in `orgoj/picoclaw` (snapshot: 2026-02-20)**
 >
 > **This fork includes both:**
-> - **Admin API** (`/api/v1/runtime`, `/api/v1/inbound`, `/api/v1/history`, `/api/v1/subagents`, `/api/v1/events`)
+> - **Admin API** (`/api/v1/runtime`, `/api/v1/sessions`, `/api/v1/inbound`, `/api/v1/history`, `/api/v1/subagents`, `/api/v1/events`)
 > - **Web UI dashboard** (`/dashboard`) backed by the same runtime APIs/SSE stream
 >
 > **Delta at a glance**
@@ -84,6 +84,12 @@
 >   - Ingress merge controls with forced-prefix concat behavior.
 >   - Unified runtime logging under `logging.dir` plus `audit.jsonl`.
 >   - Live ops visibility via dashboard + SSE snapshot stream.
+>   - Dashboard ops layout:
+>     - Left: full-height history pane.
+>     - Right: stacked `Agents / Sessions / Queue / Message`.
+>     - Click filters: session and subagent.
+>     - Draggable splitters (horizontal + vertical), persisted in browser local storage.
+>     - History view keeps latest 1000 messages with scroll.
 > - **Startup/idle/autonomy behavior**
 >   - Startup prompt and preflight warning injection into autonomous idle flow.
 >   - Preflight skill-lint switched to warning-only with idle-session warning summary.
@@ -100,6 +106,12 @@
 > 3. Run `picoclaw gateway`
 > 4. Open `http://127.0.0.1:18790/dashboard`
 > 5. Check API: `curl http://127.0.0.1:18790/api/v1/runtime`
+
+> **Binary size (production, linux/amd64)**
+> - Current production binary (`make build`): **28,523,335 B** (~27.20 MiB)
+> - Upstream baseline binary (`9d5728e`): **26,375,085 B** (~25.15 MiB)
+> - Growth vs upstream baseline: **+2,148,250 B** (~+2.05 MiB, **+8.15%**)
+> - Practical impact: still typically fine for low-cost Linux SBC devices, but this is no longer a negligible delta. For constrained boards, watch both RAM profile and storage budget.
 
 ## ✨ Features
 

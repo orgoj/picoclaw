@@ -15,6 +15,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/picoclaw/pkg/session"
 )
 
 type muxRegistrar struct {
@@ -29,6 +30,17 @@ type fakeHistory struct{}
 
 func (f fakeHistory) GetSessionHistory(sessionKey string) []providers.Message {
 	return []providers.Message{{Role: "user", Content: "hello " + sessionKey}}
+}
+
+func (f fakeHistory) ListSessions(limit int) []session.SessionSummary {
+	out := []session.SessionSummary{
+		{Key: "telegram:1", Messages: 2, Updated: 200},
+		{Key: "telegram:2", Messages: 1, Updated: 100},
+	}
+	if limit > 0 && len(out) > limit {
+		return out[:limit]
+	}
+	return out
 }
 
 func TestInboundRoutes_ListPatchMoveDelete(t *testing.T) {
@@ -145,6 +157,31 @@ func TestMainMessageRoute_QueuesMessage(t *testing.T) {
 	}
 	if items[0].Message.Content != "hello" {
 		t.Fatalf("queued content=%q want=hello", items[0].Message.Content)
+	}
+}
+
+func TestSessionsRoute_ReturnsSummaries(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	mux := http.NewServeMux()
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions?limit=1", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET sessions status=%d want=200 body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Items []session.SessionSummary `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal sessions response: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("sessions len=%d want=1", len(resp.Items))
+	}
+	if resp.Items[0].Key != "telegram:1" {
+		t.Fatalf("sessions[0].key=%q want telegram:1", resp.Items[0].Key)
 	}
 }
 
