@@ -44,3 +44,8 @@ tasks/
 
 # Added by goreleaser init:
 dist/
+
+# Build caches and local temp artifacts
+.cache/
+tmp/
+.tmp/

@@ -199,6 +199,9 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 				if t.Label != "" {
 					sb.WriteString(fmt.Sprintf("  Label: %s\n", html.EscapeString(t.Label)))
 				}
+				if t.Name != "" {
+					sb.WriteString(fmt.Sprintf("  Agent: %s\n", html.EscapeString(t.Name)))
+				}
 
 				// Task preview (first 30 chars)
 				taskPreview := html.EscapeString(truncateStr(t.Task, 30))
@@ -234,6 +237,9 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 
 				if t.Label != "" {
 					sb.WriteString(fmt.Sprintf("  Label: %s\n", html.EscapeString(t.Label)))
+				}
+				if t.Name != "" {
+					sb.WriteString(fmt.Sprintf("  Agent: %s\n", html.EscapeString(t.Name)))
 				}
 			}
 		}
