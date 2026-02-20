@@ -60,3 +60,42 @@ func TestPublishTaskUpdate_OnlyOncePerTask(t *testing.T) {
 		t.Fatal("expected no duplicate terminal update")
 	}
 }
+
+func TestRunTask_NoDeadlockOnTerminalPublish(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	manager := NewSubagentManager(&MockLLMProvider{}, testConfig(), t.TempDir(), msgBus)
+
+	task := &SubagentTask{
+		ID:            "subagent-deadlock-check",
+		Task:          "quick task",
+		Status:        "running",
+		OriginChannel: "telegram",
+		OriginChatID:  "chat-deadlock",
+	}
+
+	manager.mu.Lock()
+	manager.tasks[task.ID] = task
+	manager.cancels[task.ID] = func() {}
+	manager.mu.Unlock()
+
+	done := make(chan struct{})
+	go manager.runTask(context.Background(), task, func(ctx context.Context, result *ToolResult) {
+		close(done)
+	})
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("runTask callback did not complete (possible deadlock)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	msg, ok := msgBus.ConsumeInbound(ctx)
+	if !ok {
+		t.Fatal("expected terminal update message")
+	}
+	if msg.SenderID != "subagent:subagent-deadlock-check" {
+		t.Fatalf("unexpected sender id: %s", msg.SenderID)
+	}
+}

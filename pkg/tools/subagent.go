@@ -312,14 +312,6 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	sm.mu.Lock()
 	var result *ToolResult
 	task.Ended = time.Now().UnixMilli()
-	defer func() {
-		delete(sm.cancels, task.ID)
-		sm.mu.Unlock()
-		// Call callback if provided and result is set
-		if callback != nil && result != nil {
-			callback(ctx, result)
-		}
-	}()
 
 	if err != nil {
 		task.Status = "failed"
@@ -353,8 +345,17 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		}
 	}
 
+	// IMPORTANT: release manager lock before publish/callback to avoid lock re-entry deadlocks.
+	delete(sm.cancels, task.ID)
+	sm.mu.Unlock()
+
 	// Send announce message back to main agent.
 	sm.publishTaskUpdate(task)
+
+	// Call callback if provided and result is set.
+	if callback != nil && result != nil {
+		callback(ctx, result)
+	}
 }
 
 func sanitizeAgentName(name string) string {
