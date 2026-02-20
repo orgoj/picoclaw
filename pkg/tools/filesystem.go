@@ -156,7 +156,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult("path is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
+	resolvedPath, err := validatePath(resolvePathFromContext(ctx, path), t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -215,7 +215,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 		return ErrorResult("content is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
+	resolvedPath, err := validatePath(resolvePathFromContext(ctx, path), t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -272,7 +272,7 @@ func (t *ListDirTool) Execute(ctx context.Context, args map[string]interface{}) 
 		path = "."
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
+	resolvedPath, err := validatePath(resolvePathFromContext(ctx, path), t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

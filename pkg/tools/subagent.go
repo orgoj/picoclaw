@@ -292,7 +292,10 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	tools := sm.tools
 	sm.mu.RUnlock()
 
-	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
+	scopedCtx := WithWriteScope(ctx, sm.resolveWriteRoots(task.Name, task.Directory))
+	scopedCtx = WithWorkingDirectory(scopedCtx, sm.workspace, task.Directory)
+
+	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
 		Provider:      sm.provider,
 		Model:         sm.defaultModel,
 		Tools:         tools,
@@ -720,6 +723,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	sm.mu.RUnlock()
 
 	scopedCtx := WithWriteScope(ctx, sm.resolveWriteRoots(name, directory))
+	scopedCtx = WithWorkingDirectory(scopedCtx, sm.workspace, directory)
 	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
 		Provider:                sm.provider,
 		Model:                   sm.defaultModel,

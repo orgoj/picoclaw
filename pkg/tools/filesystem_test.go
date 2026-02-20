@@ -118,6 +118,37 @@ func TestFilesystemTool_WriteFile_Success(t *testing.T) {
 	}
 }
 
+// TestFilesystemTool_WriteFile_RelativePath_FromContext verifies relative paths are resolved from subagent directory.
+func TestFilesystemTool_WriteFile_RelativePath_FromContext(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "projects", "demo")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatalf("Failed to create project dir: %v", err)
+	}
+
+	tool := NewWriteFileTool(workspace, true)
+	ctx := WithWorkingDirectory(context.Background(), workspace, "projects/demo")
+	args := map[string]interface{}{
+		"path":    "notes.txt",
+		"content": "from context",
+	}
+
+	result := tool.Execute(ctx, args)
+	if result.IsError {
+		t.Fatalf("Expected success, got error: %s", result.ForLLM)
+	}
+
+	projectFile := filepath.Join(projectDir, "notes.txt")
+	if _, err := os.Stat(projectFile); err != nil {
+		t.Fatalf("Expected file in project dir, got error: %v", err)
+	}
+
+	rootFile := filepath.Join(workspace, "notes.txt")
+	if _, err := os.Stat(rootFile); err == nil {
+		t.Fatalf("Did not expect file at workspace root: %s", rootFile)
+	}
+}
+
 // TestFilesystemTool_WriteFile_CreateDir verifies directory creation
 func TestFilesystemTool_WriteFile_CreateDir(t *testing.T) {
 	tmpDir := t.TempDir()

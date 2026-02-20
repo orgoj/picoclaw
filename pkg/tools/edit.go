@@ -69,7 +69,7 @@ func (t *EditFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult("new_text is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.allowedDir, t.restrict, t.denyPathPatterns)
+	resolvedPath, err := validatePath(resolvePathFromContext(ctx, path), t.allowedDir, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -152,7 +152,7 @@ func (t *AppendFileTool) Execute(ctx context.Context, args map[string]interface{
 		return ErrorResult("content is required")
 	}
 
-	resolvedPath, err := validatePath(path, t.workspace, t.restrict, t.denyPathPatterns)
+	resolvedPath, err := validatePath(resolvePathFromContext(ctx, path), t.workspace, t.restrict, t.denyPathPatterns)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

@@ -78,6 +78,9 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]interface{}) *To
 	}
 
 	cwd := t.workingDir
+	if scopedWD, ok := extractWorkingDirectory(ctx); ok {
+		cwd = scopedWD
+	}
 	if wd, ok := args["working_dir"].(string); ok && wd != "" {
 		cwd = wd
 	}

@@ -112,6 +112,33 @@ func TestShellTool_WorkingDir(t *testing.T) {
 	}
 }
 
+// TestShellTool_WorkingDir_FromContext verifies subagent-scoped working directory is applied automatically.
+func TestShellTool_WorkingDir_FromContext(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "projects", "demo")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatalf("Failed to create project dir: %v", err)
+	}
+	testFile := filepath.Join(projectDir, "ctx.txt")
+	if err := os.WriteFile(testFile, []byte("context content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool := NewExecTool(workspace, false)
+	ctx := WithWorkingDirectory(context.Background(), workspace, "projects/demo")
+	args := map[string]interface{}{
+		"command": "cat ctx.txt",
+	}
+
+	result := tool.Execute(ctx, args)
+	if result.IsError {
+		t.Fatalf("Expected success in context working dir, got error: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForUser, "context content") {
+		t.Fatalf("Expected output from context working dir, got: %s", result.ForUser)
+	}
+}
+
 // TestShellTool_DangerousCommand verifies safety guard blocks dangerous commands
 func TestShellTool_DangerousCommand(t *testing.T) {
 	tool := NewExecTool("", false)
