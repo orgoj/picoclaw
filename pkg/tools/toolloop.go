@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/sipeed/picoclaw/pkg/llm"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/utils"
@@ -26,6 +27,7 @@ type ToolLoopConfig struct {
 	RunID                   string
 	PullInjectedMessages    func() []string
 	LLMOptions              map[string]any
+	LLMRetry                llm.RetryConfig
 	ContextLimit            int // Max total chars in message history. 0 = no limit.
 	HistoryMessageThreshold int // Max number of messages before trimming. 0 = no limit.
 }
@@ -91,7 +93,19 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		llmOpts := config.LLMOptions
 
 		// 3. Call LLM
-		response, err := config.Provider.Chat(ctx, messages, providerToolDefs, config.Model, llmOpts)
+		response, err := llm.CallWithRetry(ctx, llm.CallConfig{
+			Provider:     config.Provider,
+			Messages:     messages,
+			Tools:        providerToolDefs,
+			Model:        config.Model,
+			Options:      llmOpts,
+			Retry:        config.LLMRetry,
+			LogComponent: "toolloop",
+			LogFields: map[string]any{
+				"run_id":    config.RunID,
+				"iteration": iteration,
+			},
+		})
 		if err != nil {
 			logger.ErrorCF("toolloop", "LLM call failed",
 				map[string]any{

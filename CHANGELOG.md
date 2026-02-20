@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.27 - 2026-02-20
+
+### Changed
+- Unified LLM retry/backoff behavior into a shared helper used by:
+  - main agent run loop,
+  - subagent tool loop,
+  - conversation summarization/summary-merge calls.
+- Subagent LLM requests now use the same transient error retry policy as the main loop instead of failing on first timeout/EOF.
+
+### Added
+- New internal module `pkg/llm/retry.go` for centralized retry logic with:
+  - retryable network/5xx detection,
+  - rate-limit backoff handling,
+  - max elapsed retry window clamping,
+  - consistent retry observability fields in logs.
+
 ## v0.1.26 - 2026-02-20
 
 ### Fixed

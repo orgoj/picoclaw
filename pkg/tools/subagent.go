@@ -11,6 +11,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/llm"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -313,6 +314,14 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
 			"temperature": temperature,
+		},
+		LLMRetry: llm.RetryConfig{
+			MaxRetries:              sm.cfg.Agents.Defaults.LLMMaxRetries,
+			RetryBackoffSeconds:     sm.cfg.Agents.Defaults.LLMRetryBackoffSeconds,
+			RetryMaxBackoffSeconds:  sm.cfg.Agents.Defaults.LLMRetryMaxBackoff,
+			RateLimitBackoffSeconds: sm.cfg.Agents.Defaults.LLMRateLimitBackoff,
+			RateLimitMaxBackoffSecs: sm.cfg.Agents.Defaults.LLMRateLimitMaxBackoff,
+			RetryMaxElapsedSeconds:  sm.cfg.Agents.Defaults.LLMRetryMaxElapsed,
 		},
 	}, messages, task.OriginChannel, task.OriginChatID)
 
@@ -743,6 +752,14 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
 			"temperature": temperature,
+		},
+		LLMRetry: llm.RetryConfig{
+			MaxRetries:              sm.cfg.Agents.Defaults.LLMMaxRetries,
+			RetryBackoffSeconds:     sm.cfg.Agents.Defaults.LLMRetryBackoffSeconds,
+			RetryMaxBackoffSeconds:  sm.cfg.Agents.Defaults.LLMRetryMaxBackoff,
+			RateLimitBackoffSeconds: sm.cfg.Agents.Defaults.LLMRateLimitBackoff,
+			RateLimitMaxBackoffSecs: sm.cfg.Agents.Defaults.LLMRateLimitMaxBackoff,
+			RetryMaxElapsedSeconds:  sm.cfg.Agents.Defaults.LLMRetryMaxElapsed,
 		},
 	}, messages, t.originChannel, t.originChatID)
 

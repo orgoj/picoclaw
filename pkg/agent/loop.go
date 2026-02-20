@@ -23,6 +23,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
+	"github.com/sipeed/picoclaw/pkg/llm"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/mcp"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -1179,95 +1180,30 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			"tools_json":    formatToolsForLog(providerToolDefs),
 		})
 
-		// Call LLM with retry logic for transient errors
-		var response *providers.LLMResponse
-		var err error
-		maxRetries := al.llmMaxRetries
-		retryStart := time.Now()
-		for retry := 0; retry <= maxRetries; retry++ {
-			response, err = al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
+		response, err := llm.CallWithRetry(ctx, llm.CallConfig{
+			Provider: al.provider,
+			Messages: messages,
+			Tools:    providerToolDefs,
+			Model:    al.model,
+			Options: map[string]any{
 				"max_tokens":  al.maxTokens,
 				"temperature": al.temperature,
-			})
-
-			if err == nil {
-				break // Success
-			}
-
-			// Check if error is retryable (network/transient errors + 5xx server errors)
-			errStr := err.Error()
-			isRetryable := strings.Contains(errStr, "unexpected EOF") ||
-				strings.Contains(errStr, "connection reset") ||
-				strings.Contains(errStr, "timeout") ||
-				strings.Contains(errStr, "temporary failure") ||
-				strings.Contains(errStr, "status=5") ||
-				strings.Contains(errStr, "500") ||
-				strings.Contains(errStr, "502") ||
-				strings.Contains(errStr, "503") ||
-				strings.Contains(errStr, "504")
-
-			// Check for rate limit (429) - needs special handling with longer wait
-			isRateLimit := strings.Contains(errStr, "429") ||
-				strings.Contains(errStr, "rate limit") ||
-				strings.Contains(errStr, "too many requests")
-
-			if isRateLimit && retry < maxRetries {
-				// Rate limit: linear backoff, bounded by configured cap.
-				waitSeconds := al.llmRateLimitBackoff * (retry + 1)
-				if waitSeconds > al.llmRateLimitMaxBackoff {
-					waitSeconds = al.llmRateLimitMaxBackoff
-				}
-				waitTime := time.Duration(waitSeconds) * time.Second
-				waitTime, canWait := al.clampRetryWait(waitTime, retryStart)
-				if !canWait {
-					break
-				}
-				logger.WarnCF("agent", "Rate limited, waiting",
-					map[string]interface{}{
-						"run_id":       runID,
-						"session_key":  opts.SessionKey,
-						"iteration":    iteration,
-						"retry":        retry + 1,
-						"max_retries":  maxRetries,
-						"wait_seconds": waitTime.Seconds(),
-						"error":        errStr,
-					})
-				if err := waitWithContext(ctx, waitTime); err != nil {
-					return "", iteration, sentUserViaTool, err
-				}
-				continue
-			}
-
-			if isRetryable && retry < maxRetries {
-				// Retryable errors: exponential backoff, bounded by configured cap.
-				waitSeconds := al.llmRetryBackoffSeconds << retry
-				if waitSeconds > al.llmRetryMaxBackoff {
-					waitSeconds = al.llmRetryMaxBackoff
-				}
-				waitTime := time.Duration(waitSeconds) * time.Second
-				waitTime, canWait := al.clampRetryWait(waitTime, retryStart)
-				if !canWait {
-					break
-				}
-				logger.WarnCF("agent", "LLM call failed, retrying",
-					map[string]interface{}{
-						"run_id":       runID,
-						"session_key":  opts.SessionKey,
-						"iteration":    iteration,
-						"retry":        retry + 1,
-						"max_retries":  maxRetries,
-						"wait_seconds": waitTime.Seconds(),
-						"error":        errStr,
-					})
-				if err := waitWithContext(ctx, waitTime); err != nil {
-					return "", iteration, sentUserViaTool, err
-				}
-				continue
-			}
-
-			// Non-retryable error or max retries exceeded
-			break
-		}
+			},
+			Retry: llm.RetryConfig{
+				MaxRetries:              al.llmMaxRetries,
+				RetryBackoffSeconds:     al.llmRetryBackoffSeconds,
+				RetryMaxBackoffSeconds:  al.llmRetryMaxBackoff,
+				RateLimitBackoffSeconds: al.llmRateLimitBackoff,
+				RateLimitMaxBackoffSecs: al.llmRateLimitMaxBackoff,
+				RetryMaxElapsedSeconds:  al.llmRetryMaxElapsed,
+			},
+			LogComponent: "agent",
+			LogFields: map[string]any{
+				"run_id":      runID,
+				"session_key": opts.SessionKey,
+				"iteration":   iteration,
+			},
+		})
 
 		if err != nil {
 			logger.ErrorCF("agent", "LLM call failed",
@@ -1537,39 +1473,11 @@ func (al *AgentLoop) consumeInjectPreempt(sessionKey string) bool {
 	return true
 }
 
-func (al *AgentLoop) clampRetryWait(wait time.Duration, retryStart time.Time) (time.Duration, bool) {
-	if al.llmRetryMaxElapsed <= 0 {
-		return wait, true
-	}
-
-	maxElapsed := time.Duration(al.llmRetryMaxElapsed) * time.Second
-	elapsed := time.Since(retryStart)
-	remaining := maxElapsed - elapsed
-	if remaining <= 0 {
-		return 0, false
-	}
-	if wait > remaining {
-		wait = remaining
-	}
-	return wait, true
-}
-
 func maxInt(v, min int) int {
 	if v < min {
 		return min
 	}
 	return v
-}
-
-func waitWithContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 // maybeSummarize triggers summarization if the session history exceeds thresholds.
@@ -1742,9 +1650,27 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 		// Merge them
 		mergePrompt := fmt.Sprintf("Merge these two conversation summaries into one cohesive summary:\n\n1: %s\n\n2: %s", s1, s2)
 		var resp *providers.LLMResponse
-		resp, err = al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.model, map[string]interface{}{
-			"max_tokens":  1024,
-			"temperature": 0.3,
+		resp, err = llm.CallWithRetry(ctx, llm.CallConfig{
+			Provider: al.provider,
+			Messages: []providers.Message{{Role: "user", Content: mergePrompt}},
+			Model:    al.model,
+			Options: map[string]any{
+				"max_tokens":  1024,
+				"temperature": 0.3,
+			},
+			Retry: llm.RetryConfig{
+				MaxRetries:              al.llmMaxRetries,
+				RetryBackoffSeconds:     al.llmRetryBackoffSeconds,
+				RetryMaxBackoffSeconds:  al.llmRetryMaxBackoff,
+				RateLimitBackoffSeconds: al.llmRateLimitBackoff,
+				RateLimitMaxBackoffSecs: al.llmRateLimitMaxBackoff,
+				RetryMaxElapsedSeconds:  al.llmRetryMaxElapsed,
+			},
+			LogComponent: "agent",
+			LogFields: map[string]any{
+				"session_key": sessionKey,
+				"phase":       "summary_merge",
+			},
 		})
 		if err == nil {
 			finalSummary = resp.Content
@@ -1790,9 +1716,26 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 		prompt += fmt.Sprintf("%s: %s\n", m.Role, m.Content)
 	}
 
-	response, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.model, map[string]interface{}{
-		"max_tokens":  1024,
-		"temperature": 0.3,
+	response, err := llm.CallWithRetry(ctx, llm.CallConfig{
+		Provider: al.provider,
+		Messages: []providers.Message{{Role: "user", Content: prompt}},
+		Model:    al.model,
+		Options: map[string]any{
+			"max_tokens":  1024,
+			"temperature": 0.3,
+		},
+		Retry: llm.RetryConfig{
+			MaxRetries:              al.llmMaxRetries,
+			RetryBackoffSeconds:     al.llmRetryBackoffSeconds,
+			RetryMaxBackoffSeconds:  al.llmRetryMaxBackoff,
+			RateLimitBackoffSeconds: al.llmRateLimitBackoff,
+			RateLimitMaxBackoffSecs: al.llmRateLimitMaxBackoff,
+			RetryMaxElapsedSeconds:  al.llmRetryMaxElapsed,
+		},
+		LogComponent: "agent",
+		LogFields: map[string]any{
+			"phase": "summary_batch",
+		},
 	})
 	if err != nil {
 		return "", err

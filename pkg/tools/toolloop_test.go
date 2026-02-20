@@ -2,9 +2,11 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/sipeed/picoclaw/pkg/llm"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
@@ -36,6 +38,23 @@ func (d *directAnswerProvider) Chat(ctx context.Context, messages []providers.Me
 }
 
 func (d *directAnswerProvider) GetDefaultModel() string {
+	return "test-model"
+}
+
+type flakyDirectProvider struct {
+	failures int
+	calls    int
+}
+
+func (f *flakyDirectProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, options map[string]interface{}) (*providers.LLMResponse, error) {
+	f.calls++
+	if f.calls <= f.failures {
+		return nil, errors.New("failed to send request: unexpected EOF")
+	}
+	return &providers.LLMResponse{Content: "done"}, nil
+}
+
+func (f *flakyDirectProvider) GetDefaultModel() string {
 	return "test-model"
 }
 
@@ -78,5 +97,37 @@ func TestRunToolLoop_SucceedsWithDirectAnswer(t *testing.T) {
 	}
 	if res == nil || res.Content != "done" {
 		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestRunToolLoop_RetriesLLMFailures(t *testing.T) {
+	provider := &flakyDirectProvider{failures: 1}
+	cfg := ToolLoopConfig{
+		Provider:      provider,
+		Model:         "test-model",
+		MaxIterations: 3,
+		RunID:         "test-retry",
+		LLMOptions:    map[string]any{"max_tokens": 128},
+		LLMRetry: llm.RetryConfig{
+			MaxRetries:              2,
+			RetryBackoffSeconds:     1,
+			RetryMaxBackoffSeconds:  1,
+			RateLimitBackoffSeconds: 1,
+			RateLimitMaxBackoffSecs: 1,
+		},
+	}
+
+	res, err := RunToolLoop(context.Background(), cfg, []providers.Message{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "user"},
+	}, "cli", "direct")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil || res.Content != "done" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	if provider.calls != 2 {
+		t.Fatalf("expected 2 calls, got %d", provider.calls)
 	}
 }
