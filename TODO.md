@@ -21,25 +21,6 @@ Shutting down...
 2026/02/20 09:31:11 [2026-02-20T08:31:11Z] [INFO] agent: ZAI Search MCP client connected {endpoint=https://api.z.ai/api/mcp/web_search_prime/mcp}
 To se sakra naučí, jak má být formatovaná message pro telegramu, ale to už je zase chybávalo s posílání message na telegramu. Telegram. To máš mi zapsané v AGENTS.md. 
 
-## Povedomi o case a message
-
-cil je aby bot chapal casove souvisloti a mohl se podle toho chovat
-- aby vedel je dlouho se flaka a mohl pustit nejake memory clean terba po 30 minutach flakani
-- aby vedel ze uzivatel tuto zpravu napsal o 3 hodiny po predchozi a kdyz se pta na nejaky stav tak uz je to jinak a musi ho znova zjistovat
-
-- [x] IDELE metrick
-  - [x] pocitat kolik bylo bessage idle v rade za sbou
-  - [x] pridavat pocitadlo a cas zacatklu a aktualini cas jako nejaka metadata to idle message (aby na ne podle promptu mohl reagovat)
-  - [x] nuloat pocitadlo pri message z chanel od usera
-- [x] k message od usera pridavat casova  metadata (kdy message prisla do fronty)
-  - [x] konfigurovatelna hodnota pro minimalni casovy rozestup od predchozi message (default 10minut)
-  - [x] pokudd je prekrocena prida pak pri injekci message botovy do proptu metadata s upozornemim jaky cas byl od posledni message)
-- [x] pomohlo by pridava metadata s informaci o poctu message ve fronte pri injekci zpravy ? asi configurovatelne a zkusime to
-- [x] konfigurovatelne, jestli zpravy z queu dostava pri injekci po jedne a nebo najedno
-  - implementovano jako ingress merge okno + prefix `+` (concat)
-  - to by mozna chtelo i mit moznost to nejak ovlivnit pri psani zpravy (mozna kdyz bude zacinat + ?)
-  - takove zpravy by se concatenovaly automaticky bez ohledu na nastaveni
-
 ## Memory tooling (future)
 
 - [ ] Zavedeni `memory_*` toolu misto ad-hoc write/read
