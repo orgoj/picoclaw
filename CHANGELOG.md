@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.23 - 2026-02-20
+
+### Changed
+- Runtime loop limits are now explicit and separated for both main agent and subagents:
+  - `max_iterations` = max total LLM loop iterations
+  - `max_tool_iterations` = max iterations that include tool calls
+- Subagent resolver no longer aliases one limit to the other; both values are resolved independently from `agents.subagents` and optional `agents.<name>` overrides.
+
+### Docs
+- Updated `config/config.example.json` and README config references to show both loop limits for `agents.defaults`, `agents.subagents`, and named agents.
+
 ## v0.1.22 - 2026-02-20
 
 ### Changed

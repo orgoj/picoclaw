@@ -254,6 +254,7 @@ picoclaw onboard
       "workspace": "~/.picoclaw/workspace",
       "model": "glm-4.7",
       "max_tokens": 8192,
+      "max_iterations": 20,
       "temperature": 0.7,
       "max_tool_iterations": 20,
       "llm_timeout": 120,
@@ -267,7 +268,9 @@ picoclaw onboard
     },
     "subagents": {
       "model": "glm-4.7",
-      "max_iterations": 20
+      "max_tokens": 4096,
+      "max_iterations": 20,
+      "max_tool_iterations": 20
     }
   },
   "providers": {
@@ -300,8 +303,10 @@ picoclaw onboard
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `max_tool_iterations` | `20` | Max tool calls per main agent loop |
-| `agents.subagents.max_iterations` | 20 | Max tool calls per subagent (global subagent limit) |
+| `max_iterations` | `20` | Max total LLM loop iterations per main agent run |
+| `max_tool_iterations` | `20` | Max iterations that may include tool calls in main agent loop |
+| `agents.subagents.max_iterations` | 20 | Max total LLM loop iterations per subagent run |
+| `agents.subagents.max_tool_iterations` | 20 | Max iterations that may include tool calls in subagent loop |
 | `agents.subagents.model` | `glm-4.7` | Model used by subagents by default |
 | `agents.subagents.max_tokens` | 4096 | Max tokens for subagents (global subagent limit) |
 | `max_tokens` | 8192 | Max tokens for main agent |
@@ -1154,8 +1159,9 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `provider` | `""` (auto-detect) | Force a specific provider: `openrouter`, `zhipu`, `anthropic`, `openai`, `gemini`, `groq`, etc. |
 | `model` | `glm-4.7` | Model to use (provider-specific) |
 | `max_tokens` | `8192` | Max tokens for main agent responses |
+| `max_iterations` | `20` | Max total LLM loop iterations for main agent |
 | `temperature` | `0.7` | LLM temperature (0.0-2.0) |
-| `max_tool_iterations` | `20` | Max tool calls per main agent loop |
+| `max_tool_iterations` | `20` | Max iterations that may include tool calls for main agent |
 | `max_concurrent_subagents` | `2` | Max number of subagents that can run simultaneously |
 | `llm_timeout` | `120` | LLM API timeout in seconds |
 | `llm_max_retries` | `2` | Max retry attempts after initial failed LLM call |
@@ -1181,11 +1187,13 @@ Retry semantics (exact):
 |--------|---------|-------------|
 | `agents.subagents.model` | `glm-4.7` | Global default model for subagents |
 | `agents.subagents.max_tokens` | `4096` | Global token limit for subagent responses |
-| `agents.subagents.max_iterations` | `20` | Global hard limit for subagent loop iterations |
+| `agents.subagents.max_iterations` | `20` | Global max total LLM loop iterations for subagents |
+| `agents.subagents.max_tool_iterations` | `20` | Global max tool-call iterations for subagents |
 | `agents.subagents.max_concurrent_subagents` | `2` | Global subagent concurrency limit |
 | `agents.<name>.model` | inherits `agents.subagents.model` | Per-named-agent model override |
 | `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` | Per-named-agent token override |
 | `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` | Per-named-agent iteration override |
+| `agents.<name>.max_tool_iterations` | inherits `agents.subagents.max_tool_iterations` | Per-named-agent tool-iteration override |
 | `agents.<name>.max_concurrent_subagents` | inherits `agents.subagents.max_concurrent_subagents` | Per-named-agent concurrency override |
 
 #### Gateway
@@ -1288,6 +1296,7 @@ Each provider supports these options:
       "workspace": "~/.picoclaw/workspace",
       "model": "glm-4.7",
       "max_tokens": 8192,
+      "max_iterations": 20,
       "temperature": 0.7,
       "max_tool_iterations": 20
     }
@@ -1321,6 +1330,7 @@ picoclaw agent -m "Hello"
       "provider": "",
       "model": "anthropic/claude-opus-4-5",
       "max_tokens": 8192,
+      "max_iterations": 20,
       "temperature": 0.7,
       "max_tool_iterations": 20,
       "max_concurrent_subagents": 2,
@@ -1336,9 +1346,12 @@ picoclaw agent -m "Hello"
     "subagents": {
       "model": "glm-4.7",
       "max_tokens": 4096,
-      "max_iterations": 20
+      "max_iterations": 20,
+      "max_tool_iterations": 20
     },
     "example_named_agent": {
+      "max_iterations": 20,
+      "max_tool_iterations": 20,
       "max_concurrent_subagents": 1
     }
   },

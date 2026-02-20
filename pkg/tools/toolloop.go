@@ -22,6 +22,7 @@ type ToolLoopConfig struct {
 	Model                   string
 	Tools                   *ToolRegistry
 	MaxIterations           int
+	MaxToolIterations       int
 	RunID                   string
 	PullInjectedMessages    func() []string
 	LLMOptions              map[string]any
@@ -39,6 +40,7 @@ type ToolLoopResult struct {
 // This is the core agent logic that can be reused by both main agent and subagents.
 func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []providers.Message, channel, chatID string) (*ToolLoopResult, error) {
 	iteration := 0
+	toolIteration := 0
 	var finalContent string
 	completed := false
 
@@ -120,11 +122,16 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		}
 		logger.InfoCF("toolloop", "LLM requested tool calls",
 			map[string]any{
-				"run_id":    config.RunID,
-				"tools":     toolNames,
-				"count":     len(response.ToolCalls),
-				"iteration": iteration,
+				"run_id":         config.RunID,
+				"tools":          toolNames,
+				"count":          len(response.ToolCalls),
+				"iteration":      iteration,
+				"tool_iteration": toolIteration + 1,
 			})
+		toolIteration++
+		if config.MaxToolIterations > 0 && toolIteration > config.MaxToolIterations {
+			return nil, fmt.Errorf("tool loop reached max tool iterations (%d) without final response", config.MaxToolIterations)
+		}
 
 		// 6. Build assistant message with tool calls
 		assistantMsg := providers.Message{

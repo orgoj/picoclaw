@@ -174,6 +174,14 @@ func TestDefaultConfig_MaxToolIterations(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_MaxIterations(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Agents.Defaults.MaxIterations == 0 {
+		t.Error("MaxIterations should not be zero")
+	}
+}
+
 // TestDefaultConfig_Temperature verifies temperature has default value
 func TestDefaultConfig_Temperature(t *testing.T) {
 	cfg := DefaultConfig()
@@ -340,6 +348,9 @@ func TestConfig_Complete(t *testing.T) {
 	if cfg.Agents.Defaults.MaxToolIterations == 0 {
 		t.Error("MaxToolIterations should not be zero")
 	}
+	if cfg.Agents.Defaults.MaxIterations == 0 {
+		t.Error("MaxIterations should not be zero")
+	}
 	if cfg.Gateway.Host != "0.0.0.0" {
 		t.Error("Gateway host should have default value")
 	}
@@ -363,7 +374,8 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 		"subagents": {
 			"model": "subagent-model",
 			"max_tokens": 2048,
-			"max_iterations": 10,
+			"max_iterations": 12,
+			"max_tool_iterations": 10,
 			"history_message_threshold": 50
 		},
 		"analyst": {
@@ -447,7 +459,8 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	cfg.Agents.Subagents = SubagentsConfig{
 		Model:                   "subagent-model",
 		MaxTokens:               2048,
-		MaxIterations:           10,
+		MaxIterations:           11,
+		MaxToolIterations:       10,
 		HistoryMessageThreshold: 30,
 	}
 
@@ -466,6 +479,9 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	if resolved.MaxIterations != cfg.Agents.Subagents.MaxIterations {
 		t.Errorf("Expected analyst max_iterations from subagents, got %d", resolved.MaxIterations)
 	}
+	if resolved.MaxToolIterations != cfg.Agents.Subagents.MaxToolIterations {
+		t.Errorf("Expected analyst max_tool_iterations from subagents, got %d", resolved.MaxToolIterations)
+	}
 
 	// Test 2: Empty name - should use subagents config
 	resolved = cfg.Agents.ResolveAgentConfig("")
@@ -475,8 +491,11 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	if resolved.Model != "subagent-model" {
 		t.Errorf("Expected subagent model 'subagent-model', got %q", resolved.Model)
 	}
-	if resolved.MaxIterations != 10 {
-		t.Errorf("Expected subagent max_iterations 10, got %d", resolved.MaxIterations)
+	if resolved.MaxIterations != 11 {
+		t.Errorf("Expected subagent max_iterations 11, got %d", resolved.MaxIterations)
+	}
+	if resolved.MaxToolIterations != 10 {
+		t.Errorf("Expected subagent max_tool_iterations 10, got %d", resolved.MaxToolIterations)
 	}
 	if resolved.HistoryMessageThreshold != 30 {
 		t.Errorf("Expected subagent history_threshold 30, got %d", resolved.HistoryMessageThreshold)
@@ -500,7 +519,8 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 		Subagents: SubagentsConfig{
 			Model:                   "subagents-model",
 			MaxTokens:               2000,
-			MaxIterations:           15,
+			MaxIterations:           25,
+			MaxToolIterations:       15,
 			Temperature:             0.5,
 			HistoryMessageThreshold: 20,
 		},
@@ -509,7 +529,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 				Model:                   "named-model",
 				MaxTokens:               3000,
 				HistoryMessageThreshold: 30,
-				// MaxIterations and Temperature not set - should inherit from subagents
+				// Iteration limits and Temperature not set - should inherit from subagents
 			},
 		},
 	}
@@ -538,8 +558,11 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 		t.Errorf("Named: expected history_threshold 30 (from named), got %d", named.HistoryMessageThreshold)
 	}
 	// These should come from subagents when named values are not set
-	if named.MaxIterations != 15 {
-		t.Errorf("Named: expected max_iterations 15 (from subagents), got %d", named.MaxIterations)
+	if named.MaxIterations != 25 {
+		t.Errorf("Named: expected max_iterations 25 (from subagents), got %d", named.MaxIterations)
+	}
+	if named.MaxToolIterations != 15 {
+		t.Errorf("Named: expected max_tool_iterations 15 (from subagents), got %d", named.MaxToolIterations)
 	}
 	if named.Temperature != 0.5 {
 		t.Errorf("Named: expected temperature 0.5 (from subagents), got %f", named.Temperature)

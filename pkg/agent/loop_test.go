@@ -44,6 +44,7 @@ func TestRecordLastChannel(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -89,6 +90,7 @@ func TestRecordLastChatID(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -134,6 +136,7 @@ func TestNewAgentLoop_StateInitialized(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -170,6 +173,7 @@ func TestToolRegistry_ToolRegistration(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -216,6 +220,7 @@ func TestToolContext_Updates(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -247,6 +252,7 @@ func TestToolRegistry_GetDefinitions(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -290,6 +296,7 @@ func TestIdleMetricsTracking(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -342,6 +349,7 @@ func TestAgentLoop_GetStartupInfo(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -429,6 +437,7 @@ func TestAgentLoop_Stop(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -588,6 +597,7 @@ func TestAgentLoop_EmptyDirectResponseRetriesAndContinues(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 3,
+				MaxIterations:     3,
 			},
 		},
 	}
@@ -628,6 +638,7 @@ func TestInjectUrgent_PreemptsActiveRunAndKeepsUrgentMessage(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -702,6 +713,7 @@ func TestProcessSystemMessage_BuffersCompletionToOriginSession(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -753,6 +765,7 @@ func TestToolResult_SilentToolDoesNotSendUserMessage(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}
@@ -795,6 +808,7 @@ func TestToolResult_UserFacingToolDoesSendMessage(t *testing.T) {
 				Model:             "test-model",
 				MaxTokens:         4096,
 				MaxToolIterations: 10,
+				MaxIterations:     10,
 			},
 		},
 	}

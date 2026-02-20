@@ -39,7 +39,8 @@ type AgentLoop struct {
 	workspace               string
 	model                   string
 	contextWindow           int     // Maximum context window size in tokens
-	maxIterations           int     // Max tool iterations for main agent
+	maxIterations           int     // Max LLM loop iterations for main agent
+	maxToolIterations       int     // Max iterations that include tool calls for main agent
 	maxTokens               int     // Max tokens for LLM responses
 	temperature             float64 // LLM temperature
 	llmTimeout              int     // LLM API timeout in seconds
@@ -234,7 +235,8 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		workspace:               workspace,
 		model:                   cfg.Agents.Defaults.Model,
 		contextWindow:           contextWindow,
-		maxIterations:           cfg.Agents.Defaults.MaxToolIterations,
+		maxIterations:           cfg.Agents.Defaults.MaxIterations,
+		maxToolIterations:       cfg.Agents.Defaults.MaxToolIterations,
 		maxTokens:               cfg.Agents.Defaults.MaxTokens,
 		temperature:             cfg.Agents.Defaults.Temperature,
 		llmTimeout:              cfg.Agents.Defaults.LLMTimeout,
@@ -1120,6 +1122,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 // Returns the final content, iteration count, and any error.
 func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions, runID string) (string, int, bool, error) {
 	iteration := 0
+	toolIteration := 0
 	var finalContent string
 	sentUserViaTool := false
 
@@ -1313,12 +1316,17 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 		logger.InfoCF("agent", "LLM requested tool calls",
 			map[string]interface{}{
-				"run_id":      runID,
-				"session_key": opts.SessionKey,
-				"tools":       toolNames,
-				"count":       len(response.ToolCalls),
-				"iteration":   iteration,
+				"run_id":         runID,
+				"session_key":    opts.SessionKey,
+				"tools":          toolNames,
+				"count":          len(response.ToolCalls),
+				"iteration":      iteration,
+				"tool_iteration": toolIteration + 1,
 			})
+		toolIteration++
+		if al.maxToolIterations > 0 && toolIteration > al.maxToolIterations {
+			return "", iteration, sentUserViaTool, fmt.Errorf("agent loop reached max tool iterations (%d) without final response", al.maxToolIterations)
+		}
 
 		// Build assistant message with tool calls
 		assistantMsg := providers.Message{

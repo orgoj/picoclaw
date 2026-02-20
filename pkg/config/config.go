@@ -87,6 +87,7 @@ type SubagentsConfig struct {
 	Model                   string  `json:"model" env:"PICOCLAW_AGENTS_SUBAGENTS_MODEL"`
 	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOKENS"`
 	MaxIterations           int     `json:"max_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_ITERATIONS"`
+	MaxToolIterations       int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOOL_ITERATIONS"`
 	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_SUBAGENTS_TEMPERATURE"`
 	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_SUBAGENTS_HISTORY_MESSAGE_THRESHOLD"`
 	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_CONCURRENT_SUBAGENTS"`
@@ -98,6 +99,7 @@ type NamedAgentConfig struct {
 	Model                   string  `json:"model"`
 	MaxTokens               int     `json:"max_tokens"`
 	MaxIterations           int     `json:"max_iterations"`
+	MaxToolIterations       int     `json:"max_tool_iterations"`
 	Temperature             float64 `json:"temperature"`
 	HistoryMessageThreshold int     `json:"history_message_threshold"`
 	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents"`
@@ -161,6 +163,7 @@ type ResolvedAgentConfig struct {
 	Model                   string
 	MaxTokens               int
 	MaxIterations           int
+	MaxToolIterations       int
 	Temperature             float64
 	HistoryMessageThreshold int
 }
@@ -177,6 +180,7 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 		Model:                   a.Subagents.Model,
 		MaxTokens:               a.Subagents.MaxTokens,
 		MaxIterations:           a.Subagents.MaxIterations,
+		MaxToolIterations:       a.Subagents.MaxToolIterations,
 		Temperature:             a.Subagents.Temperature,
 		HistoryMessageThreshold: a.Subagents.HistoryMessageThreshold,
 	}
@@ -197,6 +201,9 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 		}
 		if named.MaxIterations > 0 {
 			result.MaxIterations = named.MaxIterations
+		}
+		if named.MaxToolIterations > 0 {
+			result.MaxToolIterations = named.MaxToolIterations
 		}
 		if named.Temperature > 0 {
 			result.Temperature = named.Temperature
@@ -232,6 +239,7 @@ type AgentDefaults struct {
 	Provider                string   `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
 	Model                   string   `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
 	MaxTokens               int      `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	MaxIterations           int      `json:"max_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_ITERATIONS"`
 	ContextWindow           int      `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
 	Temperature             float64  `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
 	MaxToolIterations       int      `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
@@ -445,6 +453,7 @@ func DefaultConfig() *Config {
 				Provider:                "",
 				Model:                   "glm-4.7",
 				MaxTokens:               8192,
+				MaxIterations:           20,
 				ContextWindow:           131072, // 128K tokens default context window
 				Temperature:             0.7,
 				MaxToolIterations:       20,
@@ -463,6 +472,7 @@ func DefaultConfig() *Config {
 				Model:                   "glm-4.7",
 				MaxTokens:               4096,
 				MaxIterations:           20,
+				MaxToolIterations:       20,
 				Temperature:             0.7,
 				HistoryMessageThreshold: 100,
 				MaxConcurrentSubagents:  2,
@@ -810,6 +820,8 @@ func (c *Config) FormatConfigForLog() string {
 	sb.WriteString("### Config\n")
 	sb.WriteString(fmt.Sprintf("- Model: %s\n", c.Agents.Defaults.Model))
 	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Defaults.MaxTokens))
+	sb.WriteString(fmt.Sprintf("- max_iterations: %d\n", c.Agents.Defaults.MaxIterations))
+	sb.WriteString(fmt.Sprintf("- max_tool_iterations: %d\n", c.Agents.Defaults.MaxToolIterations))
 	sb.WriteString(fmt.Sprintf("- context_window: %d\n", c.Agents.Defaults.ContextWindow))
 	sb.WriteString(fmt.Sprintf("- history_threshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
 	if c.Agents.Defaults.Temperature > 0 {
@@ -824,6 +836,7 @@ func (c *Config) FormatConfigForLog() string {
 	sb.WriteString("\n### Subagent Config\n")
 	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Subagents.MaxTokens))
 	sb.WriteString(fmt.Sprintf("- max_iterations: %d\n", c.Agents.Subagents.MaxIterations))
+	sb.WriteString(fmt.Sprintf("- max_tool_iterations: %d\n", c.Agents.Subagents.MaxToolIterations))
 
 	return sb.String()
 }

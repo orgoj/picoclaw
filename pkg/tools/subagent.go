@@ -284,6 +284,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	resolvedCfg := sm.cfg.Agents.ResolveAgentConfig(task.Name)
 	model := resolvedCfg.Model
 	maxIter := resolvedCfg.MaxIterations
+	maxToolIter := resolvedCfg.MaxToolIterations
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
@@ -298,11 +299,12 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	scopedCtx = WithWorkingDirectory(scopedCtx, sm.workspace, task.Directory)
 
 	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
-		Provider:      sm.provider,
-		Model:         model,
-		Tools:         tools,
-		MaxIterations: maxIter,
-		RunID:         task.ID,
+		Provider:          sm.provider,
+		Model:             model,
+		Tools:             tools,
+		MaxIterations:     maxIter,
+		MaxToolIterations: maxToolIter,
+		RunID:             task.ID,
 		PullInjectedMessages: func() []string {
 			return sm.drainPendingMessages(task.ID)
 		},
@@ -717,6 +719,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	resolvedCfg := sm.cfg.Agents.ResolveAgentConfig(name)
 	model := resolvedCfg.Model
 	maxIter := resolvedCfg.MaxIterations
+	maxToolIter := resolvedCfg.MaxToolIterations
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
@@ -733,6 +736,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		Model:                   model,
 		Tools:                   tools,
 		MaxIterations:           maxIter,
+		MaxToolIterations:       maxToolIter,
 		RunID:                   fmt.Sprintf("sync-%s", name),
 		ContextLimit:            contextLimit,
 		HistoryMessageThreshold: msgThreshold,
