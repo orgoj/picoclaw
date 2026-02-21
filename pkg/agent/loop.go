@@ -53,6 +53,7 @@ type AgentLoop struct {
 	llmRetryMaxElapsed      int     // Max total wait time spent retrying a single LLM call (seconds)
 	memoryThreshold         float64 // Threshold for memory summarization (0.0-1.0)
 	historyMessageThreshold int     // Number of messages before triggering summarization
+	summaryKeepLastMessages int     // Number of recent messages to keep after summarization
 	sessions                *session.SessionManager
 	state                   *state.Manager
 	contextBuilder          *ContextBuilder
@@ -249,6 +250,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		llmRetryMaxElapsed:      maxInt(cfg.Agents.Defaults.LLMRetryMaxElapsed, 0),
 		memoryThreshold:         cfg.Agents.Defaults.MemoryThreshold,
 		historyMessageThreshold: cfg.Agents.Defaults.HistoryMessageThreshold,
+		summaryKeepLastMessages: maxInt(cfg.Agents.Defaults.SummaryKeepLastMessages, 1),
 		idleEnabled:             cfg.Idle.Enabled,
 		idleTimeout: func() time.Duration {
 			minutes := cfg.Idle.TimeoutMinutes
@@ -1156,6 +1158,11 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 		// Build tool definitions
 		providerToolDefs := al.tools.ToProviderDefs()
+		tokenEstimate := al.estimateTokens(messages)
+		contextUsagePct := 0.0
+		if al.contextWindow > 0 {
+			contextUsagePct = (float64(tokenEstimate) / float64(al.contextWindow)) * 100.0
+		}
 
 		// Log LLM request details
 		logger.DebugCF("agent", "LLM request",
@@ -1169,6 +1176,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"max_tokens":        al.maxTokens,
 				"temperature":       al.temperature,
 				"system_prompt_len": len(messages[0].Content),
+				"token_estimate":    tokenEstimate,
+				"context_window":    al.contextWindow,
+				"context_usage_pct": contextUsagePct,
 			})
 
 		// Keep full payload in audit JSON for observability/forensics.
@@ -1606,12 +1616,14 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 	history := al.sessions.GetHistory(sessionKey)
 	summary := al.sessions.GetSummary(sessionKey)
 
-	// Keep last 4 messages for continuity
-	if len(history) <= 4 {
+	keepLast := maxInt(al.summaryKeepLastMessages, 1)
+
+	// Keep last N messages for continuity
+	if len(history) <= keepLast {
 		return
 	}
 
-	toSummarize := history[:len(history)-4]
+	toSummarize := history[:len(history)-keepLast]
 
 	// Oversized Message Guard
 	// Skip messages larger than 50% of context window to prevent summarizer overflow
@@ -1701,7 +1713,7 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 
 	if finalSummary != "" {
 		al.sessions.SetSummary(sessionKey, finalSummary)
-		al.sessions.TruncateHistory(sessionKey, 4)
+		al.sessions.TruncateHistory(sessionKey, keepLast)
 		al.sessions.Save(sessionKey)
 	}
 }

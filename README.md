@@ -277,7 +277,8 @@ picoclaw onboard
       "llm_rate_limit_backoff_seconds": 10,
       "llm_rate_limit_max_backoff_seconds": 30,
       "llm_retry_max_elapsed_seconds": 60,
-      "history_message_threshold": 100
+      "history_message_threshold": 100,
+      "summary_keep_last_messages": 4
     },
     "subagents": {
       "model": "glm-4.7",
@@ -334,6 +335,7 @@ picoclaw onboard
 | `llm_rate_limit_max_backoff_seconds` | 30 | Max backoff (seconds) for rate-limit errors |
 | `llm_retry_max_elapsed_seconds` | 60 | Max total retry wait time per LLM call (0 = unlimited) |
 | `history_message_threshold` | 100 | Number of messages before triggering summarization |
+| `summary_keep_last_messages` | 4 | How many recent messages stay in raw history after summarization (rest is compacted into summary) |
 | `tools.spawn.enabled` | `true` | Enable async subagent delegation tool (`spawn`) |
 | `tools.subagent.enabled` | `true` | Enable sync delegation tool (`subagent`) |
 
@@ -1191,6 +1193,7 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `llm_rate_limit_max_backoff_seconds` | `30` | Max backoff (seconds) for rate-limit errors |
 | `llm_retry_max_elapsed_seconds` | `60` | Max total retry wait time per LLM call (0 = unlimited) |
 | `history_message_threshold` | `100` | Number of messages before triggering summarization |
+| `summary_keep_last_messages` | `4` | Number of most-recent messages preserved in history after summarization |
 
 Retry semantics (exact):
 - Total attempts = `1 + llm_max_retries` (initial call + retries).
@@ -1210,10 +1213,10 @@ Retry semantics (exact):
 | `agents.subagents.max_iterations` | `20` | Global max total LLM loop iterations for subagents |
 | `agents.subagents.max_tool_iterations` | `20` | Global max tool-call iterations for subagents |
 | `agents.subagents.max_concurrent_subagents` | `2` | Global subagent concurrency limit |
-| `agents.<name>.model` | inherits `agents.subagents.model` | Per-named-agent model override |
-| `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` | Per-named-agent token override |
-| `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` | Per-named-agent iteration override |
-| `agents.<name>.max_tool_iterations` | inherits `agents.subagents.max_tool_iterations` | Per-named-agent tool-iteration override |
+| `agents.<name>.model` | inherits `agents.subagents.model` (fallback `agents.defaults.model`) | Per-named-agent model override |
+| `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` (fallback `agents.defaults.max_tokens`) | Per-named-agent token override |
+| `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` (fallback `agents.defaults.max_iterations`) | Per-named-agent iteration override |
+| `agents.<name>.max_tool_iterations` | inherits `agents.subagents.max_tool_iterations` (fallback `agents.defaults.max_tool_iterations`) | Per-named-agent tool-iteration override |
 | `agents.<name>.max_concurrent_subagents` | inherits `agents.subagents.max_concurrent_subagents` | Per-named-agent concurrency override |
 
 #### Gateway
@@ -1361,7 +1364,8 @@ picoclaw agent -m "Hello"
       "llm_rate_limit_backoff_seconds": 10,
       "llm_rate_limit_max_backoff_seconds": 30,
       "llm_retry_max_elapsed_seconds": 60,
-      "history_message_threshold": 100
+      "history_message_threshold": 100,
+      "summary_keep_last_messages": 4
     },
     "subagents": {
       "model": "glm-4.7",

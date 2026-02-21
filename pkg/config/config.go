@@ -169,20 +169,40 @@ type ResolvedAgentConfig struct {
 }
 
 // ResolveAgentConfig returns the merged configuration for a given agent name.
-// Priority: named_agent > subagents
+// Priority: named_agent > subagents > defaults.
 //
-// If name is empty "", returns subagents config.
-// If name exists in NamedAgents, returns that named config merged with subagents.
-// If name doesn't exist, returns subagents config.
+// If name is empty "", returns subagents merged on defaults.
+// If name exists in NamedAgents, returns that named config merged with subagents/defaults.
+// If name doesn't exist, returns subagents merged on defaults.
 func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
-	// Start with subagents baseline for deterministic subagent behavior.
+	// Start with defaults baseline.
 	result := ResolvedAgentConfig{
-		Model:                   a.Subagents.Model,
-		MaxTokens:               a.Subagents.MaxTokens,
-		MaxIterations:           a.Subagents.MaxIterations,
-		MaxToolIterations:       a.Subagents.MaxToolIterations,
-		Temperature:             a.Subagents.Temperature,
-		HistoryMessageThreshold: a.Subagents.HistoryMessageThreshold,
+		Model:                   a.Defaults.Model,
+		MaxTokens:               a.Defaults.MaxTokens,
+		MaxIterations:           a.Defaults.MaxIterations,
+		MaxToolIterations:       a.Defaults.MaxToolIterations,
+		Temperature:             a.Defaults.Temperature,
+		HistoryMessageThreshold: a.Defaults.HistoryMessageThreshold,
+	}
+
+	// Overlay subagents config where explicitly set.
+	if strings.TrimSpace(a.Subagents.Model) != "" {
+		result.Model = a.Subagents.Model
+	}
+	if a.Subagents.MaxTokens > 0 {
+		result.MaxTokens = a.Subagents.MaxTokens
+	}
+	if a.Subagents.MaxIterations > 0 {
+		result.MaxIterations = a.Subagents.MaxIterations
+	}
+	if a.Subagents.MaxToolIterations > 0 {
+		result.MaxToolIterations = a.Subagents.MaxToolIterations
+	}
+	if a.Subagents.Temperature > 0 {
+		result.Temperature = a.Subagents.Temperature
+	}
+	if a.Subagents.HistoryMessageThreshold > 0 {
+		result.HistoryMessageThreshold = a.Subagents.HistoryMessageThreshold
 	}
 
 	// If name is empty, this is an anonymous subagent.
@@ -192,7 +212,7 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 
 	// Check if this named agent exists
 	if named, ok := a.NamedAgents[name]; ok {
-		// Named agent config overrides subagents baseline.
+		// Named agent config overrides subagents/defaults baseline.
 		if strings.TrimSpace(named.Model) != "" {
 			result.Model = named.Model
 		}
@@ -253,6 +273,7 @@ type AgentDefaults struct {
 	LLMRetryMaxElapsed      int      `json:"llm_retry_max_elapsed_seconds" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_RETRY_MAX_ELAPSED_SECONDS"`
 	MemoryThreshold         float64  `json:"memory_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_MEMORY_THRESHOLD"`
 	HistoryMessageThreshold int      `json:"history_message_threshold" env:"PICOCLAW_AGENTS_DEFAULTS_HISTORY_MESSAGE_THRESHOLD"`
+	SummaryKeepLastMessages int      `json:"summary_keep_last_messages" env:"PICOCLAW_AGENTS_DEFAULTS_SUMMARY_KEEP_LAST_MESSAGES"`
 }
 
 type ChannelsConfig struct {
@@ -467,6 +488,7 @@ func DefaultConfig() *Config {
 				LLMRetryMaxElapsed:      60,
 				MemoryThreshold:         0.8,
 				HistoryMessageThreshold: 100,
+				SummaryKeepLastMessages: 4,
 			},
 			Subagents: SubagentsConfig{
 				Model:                   "glm-4.7",
@@ -803,6 +825,7 @@ func (c *Config) Summary() string {
 	sb.WriteString(fmt.Sprintf("- MaxTokens: %d\n", c.Agents.Defaults.MaxTokens))
 	sb.WriteString(fmt.Sprintf("- ContextWindow: %d\n", c.Agents.Defaults.ContextWindow))
 	sb.WriteString(fmt.Sprintf("- HistoryThreshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
+	sb.WriteString(fmt.Sprintf("- SummaryKeepLast: %d\n", c.Agents.Defaults.SummaryKeepLastMessages))
 	return sb.String()
 }
 
@@ -824,6 +847,7 @@ func (c *Config) FormatConfigForLog() string {
 	sb.WriteString(fmt.Sprintf("- max_tool_iterations: %d\n", c.Agents.Defaults.MaxToolIterations))
 	sb.WriteString(fmt.Sprintf("- context_window: %d\n", c.Agents.Defaults.ContextWindow))
 	sb.WriteString(fmt.Sprintf("- history_threshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
+	sb.WriteString(fmt.Sprintf("- summary_keep_last_messages: %d\n", c.Agents.Defaults.SummaryKeepLastMessages))
 	if c.Agents.Defaults.Temperature > 0 {
 		sb.WriteString(fmt.Sprintf("- temperature: %.2f\n", c.Agents.Defaults.Temperature))
 	}

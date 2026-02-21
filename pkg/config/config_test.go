@@ -182,6 +182,13 @@ func TestDefaultConfig_MaxIterations(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_SummaryKeepLastMessages(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Agents.Defaults.SummaryKeepLastMessages != 4 {
+		t.Errorf("Expected SummaryKeepLastMessages default 4, got %d", cfg.Agents.Defaults.SummaryKeepLastMessages)
+	}
+}
+
 // TestDefaultConfig_Temperature verifies temperature has default value
 func TestDefaultConfig_Temperature(t *testing.T) {
 	cfg := DefaultConfig()
@@ -566,6 +573,40 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	}
 	if named.Temperature != 0.5 {
 		t.Errorf("Named: expected temperature 0.5 (from subagents), got %f", named.Temperature)
+	}
+}
+
+func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t *testing.T) {
+	cfg := &AgentsConfig{
+		Defaults: AgentDefaults{
+			Model:                   "defaults-model",
+			MaxTokens:               9000,
+			MaxIterations:           42,
+			MaxToolIterations:       21,
+			Temperature:             0.6,
+			HistoryMessageThreshold: 250,
+		},
+		Subagents: SubagentsConfig{
+			// intentionally sparse; should not erase defaults
+			Model: "subagents-model",
+		},
+	}
+
+	resolved := cfg.ResolveAgentConfig("")
+	if resolved.Model != "subagents-model" {
+		t.Errorf("Expected model from subagents, got %q", resolved.Model)
+	}
+	if resolved.MaxTokens != 9000 {
+		t.Errorf("Expected max_tokens from defaults, got %d", resolved.MaxTokens)
+	}
+	if resolved.MaxIterations != 42 {
+		t.Errorf("Expected max_iterations from defaults, got %d", resolved.MaxIterations)
+	}
+	if resolved.MaxToolIterations != 21 {
+		t.Errorf("Expected max_tool_iterations from defaults, got %d", resolved.MaxToolIterations)
+	}
+	if resolved.HistoryMessageThreshold != 250 {
+		t.Errorf("Expected history_message_threshold from defaults, got %d", resolved.HistoryMessageThreshold)
 	}
 }
 
