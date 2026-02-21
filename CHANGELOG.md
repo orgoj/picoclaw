@@ -8,6 +8,7 @@
 - Dashboard all-history mode now includes tailed runtime console lines from `logging.dir/agent.log`, so history view reflects operator-visible console flow beyond per-session chat history.
 - Dashboard default all-history aggregation now maximizes coverage with bounded caps: session list fetch (`1000`), `agent.log` tail (`5000`), and render limit (`3000`) for responsiveness.
 - Dashboard filter/selection state is now visibly explicit: history header shows active scope pills (`ALL`, `SESSION`, `AGENT`) and selected rows in Sessions/Agents tables use stronger highlight cues.
+- LLM transient retry detection now matches timeout errors case-insensitively and includes `context deadline exceeded` / `Client.Timeout exceeded` forms, so temporary provider stalls are retried instead of failing on first timeout.
 
 ### Added
 - New Admin API endpoint: `/api/v1/history/agent-log?tail=N` returning recent `agent.log` lines for dashboard all-history aggregation.

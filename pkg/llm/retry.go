@@ -130,15 +130,18 @@ func normalizeRetryConfig(c RetryConfig) RetryConfig {
 }
 
 func isRetryableError(errStr string) bool {
-	return strings.Contains(errStr, "unexpected EOF") ||
-		strings.Contains(errStr, "connection reset") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "temporary failure") ||
-		strings.Contains(errStr, "status=5") ||
-		strings.Contains(errStr, "500") ||
-		strings.Contains(errStr, "502") ||
-		strings.Contains(errStr, "503") ||
-		strings.Contains(errStr, "504")
+	lowerErr := strings.ToLower(errStr)
+	return strings.Contains(lowerErr, "unexpected eof") ||
+		strings.Contains(lowerErr, "connection reset") ||
+		strings.Contains(lowerErr, "timeout") ||
+		strings.Contains(lowerErr, "context deadline exceeded") ||
+		strings.Contains(lowerErr, "client.timeout exceeded") ||
+		strings.Contains(lowerErr, "temporary failure") ||
+		strings.Contains(lowerErr, "status=5") ||
+		strings.Contains(lowerErr, "500") ||
+		strings.Contains(lowerErr, "502") ||
+		strings.Contains(lowerErr, "503") ||
+		strings.Contains(lowerErr, "504")
 }
 
 func isRateLimitError(errStr string) bool {
