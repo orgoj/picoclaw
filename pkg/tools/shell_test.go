@@ -260,3 +260,41 @@ func TestShellTool_GuardCommand_BlocksAbsolutePathOutsideWorkspace(t *testing.T)
 		t.Fatalf("Expected path restriction error, got: %s", guardErr)
 	}
 }
+
+func TestShellTool_GuardCommand_DenyPathPatterns_BlockJSONL(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "projects", "fitness-redesign")
+	if err := os.MkdirAll(filepath.Join(projectDir, ".beads"), 0755); err != nil {
+		t.Fatalf("Failed to create project dir: %v", err)
+	}
+
+	tool := NewExecTool(workspace, false, "**/.beads/*.jsonl", "**/.beads/*.db")
+	command := "cd " + projectDir + " && cat .beads/issues.jsonl | jq -r '.id' | wc -l"
+
+	guardErr := tool.guardCommand(command, workspace)
+	if guardErr == "" {
+		t.Fatal("Expected deny_path_patterns to block .beads/issues.jsonl")
+	}
+	if !strings.Contains(guardErr, "path matches denied pattern") {
+		t.Fatalf("Expected deny_path_patterns error, got: %s", guardErr)
+	}
+}
+
+func TestShellTool_GuardCommand_DenyPathPatterns_BlockDB(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "projects", "fitness-redesign")
+	if err := os.MkdirAll(filepath.Join(projectDir, ".beads"), 0755); err != nil {
+		t.Fatalf("Failed to create project dir: %v", err)
+	}
+
+	tool := NewExecTool(workspace, false, "**/.beads/*.jsonl", "**/.beads/*.db")
+	command := "cd " + projectDir + " && sqlite3 .beads/beads.db \"SELECT 1;\""
+
+	guardErr := tool.guardCommand(command, workspace)
+	if guardErr == "" {
+		t.Fatal("Expected deny_path_patterns to block .beads/beads.db")
+	}
+	if !strings.Contains(guardErr, "path matches denied pattern") {
+		t.Fatalf("Expected deny_path_patterns error, got: %s", guardErr)
+	}
+}

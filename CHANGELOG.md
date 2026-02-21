@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.28 - 2026-02-21
+
+### Fixed
+- `exec` safety guard now enforces `agents.defaults.deny_path_patterns` in addition to existing dangerous-command/path-traversal checks.
+- Denied-path matching for `exec` now covers both absolute and relative path arguments (including `cd ... &&` command flows), so sensitive targets like `.beads/*.jsonl` and `.beads/*.db` are blocked even when `restrict_to_workspace` is `false`.
+- `cron` scheduled commands now run through an `exec` instance configured with the same runtime safety settings (`restrict_to_workspace` and `deny_path_patterns`), removing policy drift versus interactive `exec`.
+
+### Added
+- New `exec` guard tests for deny-pattern blocking:
+  - `.beads/issues.jsonl`
+  - `.beads/beads.db`
+- New `cron` regression test ensuring scheduled command execution respects deny-pattern blocking for `.beads/issues.jsonl`.
+
 ## v0.1.27 - 2026-02-20
 
 ### Changed

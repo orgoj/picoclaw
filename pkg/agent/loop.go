@@ -110,7 +110,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	registry.Register(tools.NewAppendFileTool(workspace, restrict, denyPathPatterns...))
 
 	// Shell execution
-	registry.Register(tools.NewExecTool(workspace, restrict))
+	registry.Register(tools.NewExecTool(workspace, restrict, denyPathPatterns...))
 
 	// Web search - initialize ZAI client if enabled
 	var zaiSearchClient *mcp.Client

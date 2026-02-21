@@ -27,15 +27,19 @@ var freeTextFlagValuePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`-m\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s]+)`),
 }
 
+var shellPathTokenPattern = regexp.MustCompile(`(?:^|[\s|&;()<>])([A-Za-z]:\\[^\s"'` + "`" + `|&;()<>]+|~[^\s"'` + "`" + `|&;()<>]+|[^\s"'` + "`" + `|&;()<>]*\/[^\s"'` + "`" + `|&;()<>]+|[.][^\s"'` + "`" + `|&;()<>]*|[.][.][^\s"'` + "`" + `|&;()<>]*)`)
+var commandCDPattern = regexp.MustCompile(`(?:^|&&|;|\|\|)\s*cd\s+((?:"[^"]+"|'[^']+'|[^\s;&|]+))`)
+
 type ExecTool struct {
 	workingDir          string
 	timeout             time.Duration
 	denyPatterns        []*regexp.Regexp
 	allowPatterns       []*regexp.Regexp
 	restrictToWorkspace bool
+	denyPathPatterns    []string
 }
 
-func NewExecTool(workingDir string, restrict bool) *ExecTool {
+func NewExecTool(workingDir string, restrict bool, denyPathPatterns ...string) *ExecTool {
 	denyPatterns := []*regexp.Regexp{
 		regexp.MustCompile(`\brm\s+-[rf]{1,2}\s+/`), // Block rm -rf /
 		regexp.MustCompile(`\brm\s+-[rf]{1,2}\s+\$HOME\b`),
@@ -55,6 +59,7 @@ func NewExecTool(workingDir string, restrict bool) *ExecTool {
 		denyPatterns:        denyPatterns,
 		allowPatterns:       nil,
 		restrictToWorkspace: restrict,
+		denyPathPatterns:    append([]string{}, denyPathPatterns...),
 	}
 }
 
@@ -197,6 +202,10 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 		}
 	}
 
+	if denyErr := t.guardDeniedPaths(command, cwd); denyErr != "" {
+		return denyErr
+	}
+
 	if t.restrictToWorkspace {
 		// Only block explicit path traversal with ..
 		if strings.Contains(cmd, "..\\") || strings.Contains(cmd, "../") {
@@ -263,6 +272,113 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 	}
 
 	return ""
+}
+
+func (t *ExecTool) guardDeniedPaths(command, cwd string) string {
+	if len(t.denyPathPatterns) == 0 {
+		return ""
+	}
+
+	effectiveCWD := inferCommandWorkingDir(command, cwd, t.workingDir)
+	workspacePath := ""
+	if t.workingDir != "" {
+		if absWorkspace, err := filepath.Abs(t.workingDir); err == nil {
+			workspacePath = absWorkspace
+		}
+	}
+
+	matches := shellPathTokenPattern.FindAllStringSubmatchIndex(command, -1)
+	for _, match := range matches {
+		if len(match) < 4 {
+			continue
+		}
+		start := match[2]
+		end := match[3]
+		if isWithinFreeTextFlagValue(command, start) {
+			continue
+		}
+
+		rawPath := strings.TrimSpace(command[start:end])
+		rawPath = strings.Trim(rawPath, `"'`)
+		rawPath = strings.TrimRight(rawPath, ",")
+		if rawPath == "" || rawPath == "." || rawPath == ".." || strings.Contains(rawPath, "://") {
+			continue
+		}
+
+		candidates := []string{rawPath}
+		if !strings.HasPrefix(rawPath, "./") && !strings.HasPrefix(rawPath, "/") && !strings.HasPrefix(rawPath, "~") && !strings.HasPrefix(rawPath, `\`) {
+			candidates = append(candidates, "./"+rawPath)
+		}
+
+		if strings.HasPrefix(rawPath, "~") {
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				homeRel := strings.TrimPrefix(rawPath, "~")
+				expanded := filepath.Join(homeDir, strings.TrimPrefix(homeRel, string(filepath.Separator)))
+				candidates = append(candidates, expanded)
+			}
+		}
+
+		if effectiveCWD != "" {
+			if absPath, err := filepath.Abs(filepath.Join(effectiveCWD, rawPath)); err == nil {
+				candidates = append(candidates, absPath)
+			}
+		}
+
+		for _, candidate := range candidates {
+			matched, pattern := isPathDenied(candidate, workspacePath, t.denyPathPatterns)
+			if matched {
+				logger.WarnCF("exec", "Command blocked by deny_path_patterns", map[string]interface{}{
+					"command": command,
+					"path":    candidate,
+					"pattern": pattern,
+				})
+				return fmt.Sprintf("Command blocked by safety guard (path matches denied pattern %q)", pattern)
+			}
+		}
+	}
+
+	return ""
+}
+
+func inferCommandWorkingDir(command, cwd, fallbackWorkspace string) string {
+	current := strings.TrimSpace(cwd)
+	if current == "" {
+		current = strings.TrimSpace(fallbackWorkspace)
+	}
+	if current == "" {
+		if wd, err := os.Getwd(); err == nil {
+			current = wd
+		}
+	}
+
+	if current != "" {
+		if absCurrent, err := filepath.Abs(current); err == nil {
+			current = absCurrent
+		}
+	}
+
+	cdMatches := commandCDPattern.FindAllStringSubmatch(command, -1)
+	for _, match := range cdMatches {
+		if len(match) < 2 {
+			continue
+		}
+		target := strings.TrimSpace(match[1])
+		target = strings.Trim(target, `"'`)
+		if target == "" || target == "-" {
+			continue
+		}
+
+		if filepath.IsAbs(target) {
+			current = filepath.Clean(target)
+			continue
+		}
+		if current == "" {
+			continue
+		}
+		current = filepath.Clean(filepath.Join(current, target))
+	}
+
+	return current
 }
 
 func isWithinFreeTextFlagValue(command string, pathStart int) bool {
