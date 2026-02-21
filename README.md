@@ -465,7 +465,7 @@ picoclaw gateway
 | `<prefix>help` | Show available control commands |
 | `<prefix>models` | Show configured model/provider |
 | `<prefix>channels` | Show channel status |
-| `<prefix>inject MESSAGE` | Immediate priority inject (active-run inject, otherwise queue bypass immediate processing) |
+| `<prefix>inject MESSAGE` | Immediate context inject (appends into active-run context, otherwise queue bypass immediate processing) |
 | `<prefix>first MESSAGE` | Enqueue message at inbound queue head |
 | `<prefix>kill TASK_ID` | Cancel running subagent task |
 | `<prefix>delete` | Delete last queued message in the same session/sender |

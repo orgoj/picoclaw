@@ -31,6 +31,21 @@ All paths are relative to: `/home/michael/projects/picoclaw/picoclaw/nanobotnb/.
 
 ## Workflow
 
+### Acute Incident Mode (Default for urgent reports)
+If the user reports an urgent live issue (e.g., "stuck", "zaseklo", "urgent", "akutní"), run a fast triage first and keep scope narrow:
+1. Start with `logs/agent.log` and `logs/debug.log` only.
+2. Focus on the last relevant 200-400 lines around the reported timestamp/event.
+3. Return a first diagnosis immediately (what failed, where, and if the process is still progressing).
+4. Do **not** expand into memory/history/session deep-dive unless:
+   - the user explicitly asks, or
+   - `agent.log`/`debug.log` is insufficient to explain the incident.
+
+Use this quick triage pattern:
+```bash
+tail -n 300 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/agent.log
+tail -n 300 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/debug.log
+```
+
 ### Step 1: Error Discovery
 Search for errors in logs to find root causes:
 ```bash

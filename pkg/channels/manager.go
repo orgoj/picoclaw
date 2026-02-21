@@ -458,7 +458,7 @@ func (m *Manager) handleHelpControl(msg bus.InboundMessage) bool {
 		fmt.Sprintf("%sstatus - Immediate runtime status", prefix),
 		fmt.Sprintf("%smodels - Show configured model/provider", prefix),
 		fmt.Sprintf("%schannels - Show channel status", prefix),
-		fmt.Sprintf("%sinject MESSAGE - Immediate priority inject", prefix),
+		fmt.Sprintf("%sinject MESSAGE - Immediate context inject", prefix),
 		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head", prefix),
 		fmt.Sprintf("%sdelete - Delete last queued message in this session", prefix),
 		fmt.Sprintf("%s%sMESSAGE - Append to previous queued message in this session", prefix, prefix),
@@ -696,7 +696,7 @@ func (m *Manager) handleInjectControl(msg bus.InboundMessage, body string) bool 
 	}
 
 	content := fmt.Sprintf(
-		"<urgent_message priority=\"high\" source=\"channel:%sinject\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.",
+		"<inject_message source=\"channel:%sinject\">\n%s\n</inject_message>",
 		prefix,
 		body,
 	)
@@ -707,7 +707,7 @@ func (m *Manager) handleInjectControl(msg bus.InboundMessage, body string) bool 
 			"channel":     msg.Channel,
 			"chat_id":     msg.ChatID,
 		})
-		m.sendControlReply(msg, "Injected into active run (preempting current cycle).")
+		m.sendControlReply(msg, "Injected into active run context.")
 		return true
 	}
 

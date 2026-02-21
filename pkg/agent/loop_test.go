@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -491,6 +492,62 @@ func (m *blockingMockProvider) GetDefaultModel() string {
 	return "mock-model"
 }
 
+type urgentContinuationProvider struct {
+	mu       sync.Mutex
+	calls    int
+	release  chan struct{}
+	secondIn []providers.Message
+}
+
+func (m *urgentContinuationProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, opts map[string]interface{}) (*providers.LLMResponse, error) {
+	m.mu.Lock()
+	m.calls++
+	call := m.calls
+	m.mu.Unlock()
+
+	if call == 1 {
+		select {
+		case <-m.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		return &providers.LLMResponse{
+			Content:   "initial response",
+			ToolCalls: []providers.ToolCall{},
+		}, nil
+	}
+
+	if call == 2 {
+		m.mu.Lock()
+		m.secondIn = append([]providers.Message(nil), messages...)
+		m.mu.Unlock()
+		return &providers.LLMResponse{
+			Content:   "urgent handled",
+			ToolCalls: []providers.ToolCall{},
+		}, nil
+	}
+
+	return &providers.LLMResponse{
+		Content:   "done",
+		ToolCalls: []providers.ToolCall{},
+	}, nil
+}
+
+func (m *urgentContinuationProvider) GetDefaultModel() string {
+	return "mock-model"
+}
+
+func (m *urgentContinuationProvider) secondCallSaw(substr string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, msg := range m.secondIn {
+		if strings.Contains(msg.Content, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 type sequenceMockProvider struct {
 	responses []string
 	index     int
@@ -624,7 +681,7 @@ func TestAgentLoop_EmptyDirectResponseRetriesAndContinues(t *testing.T) {
 	}
 }
 
-func TestInjectUrgent_PreemptsActiveRunAndKeepsUrgentMessage(t *testing.T) {
+func TestInjectUrgent_AppendsToActiveRunAndTriggersContinuationCall(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "agent-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -644,7 +701,7 @@ func TestInjectUrgent_PreemptsActiveRunAndKeepsUrgentMessage(t *testing.T) {
 	}
 
 	msgBus := bus.NewMessageBus()
-	provider := &blockingMockProvider{entered: make(chan struct{}, 1)}
+	provider := &urgentContinuationProvider{release: make(chan struct{})}
 	al := NewAgentLoop(cfg, msgBus, provider)
 
 	msg := bus.InboundMessage{
@@ -667,35 +724,29 @@ func TestInjectUrgent_PreemptsActiveRunAndKeepsUrgentMessage(t *testing.T) {
 		}{resp: resp, err: err}
 	}()
 
-	select {
-	case <-provider.entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for active run")
-	}
+	time.Sleep(100 * time.Millisecond)
 
 	injected := al.InjectUrgent("telegram:1", "wake up")
 	if !injected {
 		t.Fatal("expected inject to target active run")
 	}
 
+	close(provider.release)
+
 	select {
 	case result := <-done:
 		if result.err != nil {
-			t.Fatalf("expected preempted run to finish without error, got %v", result.err)
+			t.Fatalf("expected run to finish without error, got %v", result.err)
 		}
-		if result.resp != "" {
-			t.Fatalf("expected empty response for preempted run, got %q", result.resp)
+		if result.resp != "urgent handled" {
+			t.Fatalf("expected urgent continuation response, got %q", result.resp)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for preempted run to exit")
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for run to complete")
 	}
 
-	urgent := al.drainUrgentMessages("telegram:1")
-	if len(urgent) != 1 {
-		t.Fatalf("expected one queued urgent message, got %d", len(urgent))
-	}
-	if !strings.Contains(urgent[0], "wake up") {
-		t.Fatalf("queued urgent message mismatch: %q", urgent[0])
+	if !provider.secondCallSaw("wake up") {
+		t.Fatal("expected second LLM call context to include injected urgent content")
 	}
 }
 

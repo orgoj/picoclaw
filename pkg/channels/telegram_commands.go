@@ -68,7 +68,7 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 		fmt.Sprintf("%shelp - Show control help (all channels)", prefix),
 		fmt.Sprintf("%smodels - Show configured model/provider (all channels)", prefix),
 		fmt.Sprintf("%schannels - Show channel status (all channels)", prefix),
-		fmt.Sprintf("%sinject MESSAGE - Immediate priority inject (all channels)", prefix),
+		fmt.Sprintf("%sinject MESSAGE - Immediate context inject (all channels)", prefix),
 		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head (all channels)", prefix),
 		fmt.Sprintf("%sdelete - Delete last queued message in this session (all channels)", prefix),
 		fmt.Sprintf("%s%s MESSAGE - Append MESSAGE to previous queued message", prefix, prefix),
@@ -430,7 +430,7 @@ func (c *cmd) Inject(ctx context.Context, message telego.Message) error {
 
 	sessionKey := fmt.Sprintf("telegram:%d", message.Chat.ID)
 	content := fmt.Sprintf(
-		"<urgent_message priority=\"high\" source=\"telegram:/inject\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.",
+		"<inject_message source=\"telegram:/inject\">\n%s\n</inject_message>",
 		body,
 	)
 
@@ -441,7 +441,7 @@ func (c *cmd) Inject(ctx context.Context, message telego.Message) error {
 		})
 		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
-			Text:   "Injected into active run (preempting current cycle).",
+			Text:   "Injected into active run context.",
 			ReplyParameters: &telego.ReplyParameters{
 				MessageID: message.MessageID,
 			},

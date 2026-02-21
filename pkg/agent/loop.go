@@ -9,7 +9,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -74,7 +73,6 @@ type AgentLoop struct {
 	urgentBySession         map[string][]string
 	activeRunsBySession     map[string]int
 	runCancelBySession      map[string]context.CancelFunc
-	preemptedBySession      map[string]bool
 }
 
 type idleMetrics struct {
@@ -270,7 +268,6 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		urgentBySession:     make(map[string][]string),
 		activeRunsBySession: make(map[string]int),
 		runCancelBySession:  make(map[string]context.CancelFunc),
-		preemptedBySession:  make(map[string]bool),
 	}
 }
 
@@ -969,7 +966,7 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 	al.sessions.Save(sessionKey)
 
 	// Always queue urgent completion context for main-agent session.
-	// If a run is active, it is preempted so completion is processed next turn.
+	// If a run is active, completion context is appended and picked up in-run.
 	if al.InjectUrgent(sessionKey, notification) {
 		audit.Record("subagent_completion_injected_active_run", map[string]interface{}{
 			"session_key": sessionKey,
@@ -1041,17 +1038,6 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	// 3. Run LLM iteration loop
 	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(runCtx, messages, opts, runID)
 	if err != nil {
-		if errors.Is(err, context.Canceled) && al.consumeInjectPreempt(opts.SessionKey) {
-			logger.WarnCF("agent", "Active run preempted by urgent inject", map[string]interface{}{
-				"run_id":      runID,
-				"session_key": opts.SessionKey,
-			})
-			audit.Record("agent_run_preempted_inject", map[string]interface{}{
-				"run_id":      runID,
-				"session_key": opts.SessionKey,
-			})
-			return "", nil
-		}
 		audit.Record("agent_run_error", map[string]interface{}{
 			"run_id":      runID,
 			"session_key": opts.SessionKey,
@@ -1217,6 +1203,20 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Check if no tool calls - we're done
 		if len(response.ToolCalls) == 0 {
 			finalContent = response.Content
+			// If urgent content arrived while this direct response was being generated,
+			// keep iterating so the urgent instruction is handled in the same run.
+			if al.hasUrgentMessages(opts.SessionKey) && iteration < al.maxIterations {
+				messages = append(messages, providers.Message{
+					Role:    "assistant",
+					Content: finalContent,
+				})
+				logger.WarnCF("agent", "Urgent message pending, continuing iteration in active run", map[string]interface{}{
+					"run_id":      runID,
+					"session_key": opts.SessionKey,
+					"iteration":   iteration,
+				})
+				continue
+			}
 			if strings.TrimSpace(finalContent) == "" {
 				logger.WarnCF("agent", "LLM returned empty direct response, requesting retry",
 					map[string]interface{}{
@@ -1375,7 +1375,7 @@ func (al *AgentLoop) nextRunID(sessionKey string) string {
 }
 
 // InjectUrgent queues urgent content for a session.
-// Returns true when an active run was preempted, false when queued for next run.
+// Returns true when a run is currently active for the session.
 func (al *AgentLoop) InjectUrgent(sessionKey, content string) bool {
 	sessionKey = strings.TrimSpace(sessionKey)
 	content = strings.TrimSpace(content)
@@ -1387,14 +1387,7 @@ func (al *AgentLoop) InjectUrgent(sessionKey, content string) bool {
 	defer al.urgentMu.Unlock()
 
 	al.urgentBySession[sessionKey] = append(al.urgentBySession[sessionKey], content)
-	if al.activeRunsBySession[sessionKey] <= 0 {
-		return false
-	}
-	if cancel := al.runCancelBySession[sessionKey]; cancel != nil {
-		al.preemptedBySession[sessionKey] = true
-		cancel()
-	}
-	return true
+	return al.activeRunsBySession[sessionKey] > 0
 }
 
 func (al *AgentLoop) drainUrgentMessages(sessionKey string) []string {
@@ -1457,18 +1450,14 @@ func (al *AgentLoop) markSessionRunCancelDone(sessionKey string) {
 	delete(al.runCancelBySession, sessionKey)
 }
 
-func (al *AgentLoop) consumeInjectPreempt(sessionKey string) bool {
+func (al *AgentLoop) hasUrgentMessages(sessionKey string) bool {
 	sessionKey = strings.TrimSpace(sessionKey)
 	if sessionKey == "" {
 		return false
 	}
 	al.urgentMu.Lock()
 	defer al.urgentMu.Unlock()
-	if !al.preemptedBySession[sessionKey] {
-		return false
-	}
-	delete(al.preemptedBySession, sessionKey)
-	return true
+	return len(al.urgentBySession[sessionKey]) > 0
 }
 
 func maxInt(v, min int) int {

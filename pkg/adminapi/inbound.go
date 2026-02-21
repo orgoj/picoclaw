@@ -287,7 +287,7 @@ func (a *inboundAPI) handleMainMessage(w http.ResponseWriter, r *http.Request) {
 
 	content := req.Content
 	if req.Urgent {
-		content = fmt.Sprintf("<urgent_message priority=\"high\" source=\"api:/api/v1/main/message\">\n%s\n</urgent_message>\nRespond immediately to this urgent instruction before less urgent tasks.", req.Content)
+		content = fmt.Sprintf("<inject_message source=\"api:/api/v1/main/message\">\n%s\n</inject_message>", req.Content)
 		if a.injector != nil && a.injector.InjectUrgent(req.SessionKey, content) {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"ok":          true,
