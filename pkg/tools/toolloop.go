@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/sipeed/picoclaw/pkg/llm"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -29,6 +30,8 @@ type ToolLoopConfig struct {
 	LLMOptions              map[string]any
 	LLMRetry                llm.RetryConfig
 	ContextLimit            int // Max total chars in message history. 0 = no limit.
+	MemoryThreshold         float64
+	SummaryKeepLastMessages int // Minimum recent non-system messages to retain budget for.
 	HistoryMessageThreshold int // Max number of messages before trimming. 0 = no limit.
 }
 
@@ -66,14 +69,34 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 			}
 		}
 
+		effectiveContextLimit := config.ContextLimit
+		if effectiveContextLimit > 0 {
+			threshold := config.MemoryThreshold
+			if threshold <= 0 || threshold > 1 {
+				threshold = 1
+			}
+			effectiveContextLimit = int(float64(effectiveContextLimit) * threshold)
+			if effectiveContextLimit < 1 {
+				effectiveContextLimit = 1
+			}
+		}
+
+		effectiveHistoryThreshold := config.HistoryMessageThreshold
+		if config.SummaryKeepLastMessages > 0 {
+			minMessages := config.SummaryKeepLastMessages + 2 // include system + initial user
+			if effectiveHistoryThreshold > 0 && effectiveHistoryThreshold < minMessages {
+				effectiveHistoryThreshold = minMessages
+			}
+		}
+
 		// Trim by message count if threshold configured
-		if config.HistoryMessageThreshold > 0 {
-			messages = trimMessagesByCount(messages, config.HistoryMessageThreshold)
+		if effectiveHistoryThreshold > 0 {
+			messages = trimMessagesByCount(messages, effectiveHistoryThreshold)
 		}
 
 		// Trim by character count if limit configured
-		if config.ContextLimit > 0 {
-			messages = trimMessages(messages, config.ContextLimit)
+		if effectiveContextLimit > 0 {
+			messages = trimMessages(messages, effectiveContextLimit)
 		}
 
 		logger.DebugCF("toolloop", "LLM iteration",
@@ -91,6 +114,28 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 
 		// 2. Use LLM options from config (required)
 		llmOpts := config.LLMOptions
+
+		tokenEstimate := estimateTokens(messages)
+		contextWindowTokens := 0
+		contextUsagePct := 0.0
+		if effectiveContextLimit > 0 {
+			contextWindowTokens = effectiveContextLimit / 3
+			if contextWindowTokens > 0 {
+				contextUsagePct = (float64(tokenEstimate) / float64(contextWindowTokens)) * 100
+			}
+		}
+		logger.DebugCF("toolloop", "LLM request", map[string]any{
+			"run_id":            config.RunID,
+			"iteration":         iteration,
+			"model":             config.Model,
+			"messages_count":    len(messages),
+			"tools_count":       len(providerToolDefs),
+			"max_tokens":        llmOptionInt(llmOpts, "max_tokens"),
+			"temperature":       llmOptionFloat(llmOpts, "temperature"),
+			"token_estimate":    tokenEstimate,
+			"context_window":    contextWindowTokens,
+			"context_usage_pct": contextUsagePct,
+		})
 
 		// 3. Call LLM
 		response, err := llm.CallWithRetry(ctx, llm.CallConfig{
@@ -362,4 +407,54 @@ func trimMessagesByCount(messages []providers.Message, maxMessages int) []provid
 		})
 
 	return result
+}
+
+func estimateTokens(messages []providers.Message) int {
+	total := 0
+	for _, m := range messages {
+		total += utf8.RuneCountInString(m.Content) / 3
+	}
+	return total
+}
+
+func llmOptionInt(opts map[string]any, key string) int {
+	if opts == nil {
+		return 0
+	}
+	v, ok := opts[key]
+	if !ok {
+		return 0
+	}
+	switch t := v.(type) {
+	case int:
+		return t
+	case int64:
+		return int(t)
+	case float64:
+		return int(t)
+	default:
+		return 0
+	}
+}
+
+func llmOptionFloat(opts map[string]any, key string) float64 {
+	if opts == nil {
+		return 0
+	}
+	v, ok := opts[key]
+	if !ok {
+		return 0
+	}
+	switch t := v.(type) {
+	case float64:
+		return t
+	case float32:
+		return float64(t)
+	case int:
+		return float64(t)
+	case int64:
+		return float64(t)
+	default:
+		return 0
+	}
 }

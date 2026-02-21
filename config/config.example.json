@@ -30,6 +30,8 @@
       "max_tool_iterations": 20,
       "max_concurrent_subagents": 2,
       "temperature": 0.7,
+      "memory_threshold": 0.8,
+      "summary_keep_last_messages": 4,
       "history_message_threshold": 100
     },
     "example_named_agent": {
@@ -39,6 +41,8 @@
       "max_tool_iterations": 20,
       "max_concurrent_subagents": 1,
       "temperature": 0.7,
+      "memory_threshold": 0.8,
+      "summary_keep_last_messages": 4,
       "history_message_threshold": 100
     }
   },

@@ -284,7 +284,9 @@ picoclaw onboard
       "model": "glm-4.7",
       "max_tokens": 4096,
       "max_iterations": 20,
-      "max_tool_iterations": 20
+      "max_tool_iterations": 20,
+      "memory_threshold": 0.8,
+      "summary_keep_last_messages": 4
     }
   },
   "providers": {
@@ -323,6 +325,8 @@ picoclaw onboard
 | `agents.subagents.max_tool_iterations` | 20 | Max iterations that may include tool calls in subagent loop |
 | `agents.subagents.model` | `glm-4.7` | Model used by subagents by default |
 | `agents.subagents.max_tokens` | 4096 | Max tokens for subagents (global subagent limit) |
+| `agents.subagents.memory_threshold` | 0.8 | Subagent context trim threshold as a fraction of its context budget |
+| `agents.subagents.summary_keep_last_messages` | 4 | Minimum recent message budget retained by subagent loop trimming |
 | `max_tokens` | 8192 | Max tokens for main agent |
 | `max_concurrent_subagents` | 2 | Max number of subagents that can run simultaneously |
 | `agents.subagents.max_concurrent_subagents` | 2 | Global subagent concurrency limit |
@@ -1212,11 +1216,15 @@ Retry semantics (exact):
 | `agents.subagents.max_tokens` | `4096` | Global token limit for subagent responses |
 | `agents.subagents.max_iterations` | `20` | Global max total LLM loop iterations for subagents |
 | `agents.subagents.max_tool_iterations` | `20` | Global max tool-call iterations for subagents |
+| `agents.subagents.memory_threshold` | `0.8` | Subagent context trim threshold (fraction of context budget, 0-1) |
+| `agents.subagents.summary_keep_last_messages` | `4` | Minimum recent-message retention budget for subagent loop trimming |
 | `agents.subagents.max_concurrent_subagents` | `2` | Global subagent concurrency limit |
 | `agents.<name>.model` | inherits `agents.subagents.model` (fallback `agents.defaults.model`) | Per-named-agent model override |
 | `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` (fallback `agents.defaults.max_tokens`) | Per-named-agent token override |
 | `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` (fallback `agents.defaults.max_iterations`) | Per-named-agent iteration override |
 | `agents.<name>.max_tool_iterations` | inherits `agents.subagents.max_tool_iterations` (fallback `agents.defaults.max_tool_iterations`) | Per-named-agent tool-iteration override |
+| `agents.<name>.memory_threshold` | inherits `agents.subagents.memory_threshold` (fallback `agents.defaults.memory_threshold`) | Per-named-agent context-trim threshold override |
+| `agents.<name>.summary_keep_last_messages` | inherits `agents.subagents.summary_keep_last_messages` (fallback `agents.defaults.summary_keep_last_messages`) | Per-named-agent recent-message retention override |
 | `agents.<name>.max_concurrent_subagents` | inherits `agents.subagents.max_concurrent_subagents` | Per-named-agent concurrency override |
 
 #### Gateway
@@ -1371,12 +1379,16 @@ picoclaw agent -m "Hello"
       "model": "glm-4.7",
       "max_tokens": 4096,
       "max_iterations": 20,
-      "max_tool_iterations": 20
+      "max_tool_iterations": 20,
+      "memory_threshold": 0.8,
+      "summary_keep_last_messages": 4
     },
     "example_named_agent": {
       "max_iterations": 20,
       "max_tool_iterations": 20,
-      "max_concurrent_subagents": 1
+      "max_concurrent_subagents": 1,
+      "memory_threshold": 0.8,
+      "summary_keep_last_messages": 4
     }
   },
   "providers": {

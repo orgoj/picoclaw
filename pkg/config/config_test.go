@@ -187,6 +187,12 @@ func TestDefaultConfig_SummaryKeepLastMessages(t *testing.T) {
 	if cfg.Agents.Defaults.SummaryKeepLastMessages != 4 {
 		t.Errorf("Expected SummaryKeepLastMessages default 4, got %d", cfg.Agents.Defaults.SummaryKeepLastMessages)
 	}
+	if cfg.Agents.Subagents.SummaryKeepLastMessages != 4 {
+		t.Errorf("Expected Subagents SummaryKeepLastMessages default 4, got %d", cfg.Agents.Subagents.SummaryKeepLastMessages)
+	}
+	if cfg.Agents.Subagents.MemoryThreshold != 0.8 {
+		t.Errorf("Expected Subagents MemoryThreshold default 0.8, got %f", cfg.Agents.Subagents.MemoryThreshold)
+	}
 }
 
 // TestDefaultConfig_Temperature verifies temperature has default value
@@ -460,6 +466,8 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 		"analyst": {
 			Model:                   "named-model",
 			MaxTokens:               8192,
+			MemoryThreshold:         0.7,
+			SummaryKeepLastMessages: 12,
 			HistoryMessageThreshold: 50,
 		},
 	}
@@ -469,6 +477,8 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 		MaxIterations:           11,
 		MaxToolIterations:       10,
 		HistoryMessageThreshold: 30,
+		MemoryThreshold:         0.6,
+		SummaryKeepLastMessages: 9,
 	}
 
 	// Test 1: Named agent exists - should use named config merged with subagents
@@ -478,6 +488,12 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	}
 	if resolved.HistoryMessageThreshold != 50 {
 		t.Errorf("Expected analyst history_threshold 50, got %d", resolved.HistoryMessageThreshold)
+	}
+	if resolved.MemoryThreshold != 0.7 {
+		t.Errorf("Expected analyst memory_threshold 0.7, got %f", resolved.MemoryThreshold)
+	}
+	if resolved.SummaryKeepLastMessages != 12 {
+		t.Errorf("Expected analyst summary_keep_last_messages 12, got %d", resolved.SummaryKeepLastMessages)
 	}
 	if resolved.Model != "named-model" {
 		t.Errorf("Expected analyst model 'named-model', got %q", resolved.Model)
@@ -507,6 +523,12 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	if resolved.HistoryMessageThreshold != 30 {
 		t.Errorf("Expected subagent history_threshold 30, got %d", resolved.HistoryMessageThreshold)
 	}
+	if resolved.MemoryThreshold != 0.6 {
+		t.Errorf("Expected subagent memory_threshold 0.6, got %f", resolved.MemoryThreshold)
+	}
+	if resolved.SummaryKeepLastMessages != 9 {
+		t.Errorf("Expected subagent summary_keep_last_messages 9, got %d", resolved.SummaryKeepLastMessages)
+	}
 
 	// Test 3: Unknown name - should use subagents baseline
 	resolved = cfg.Agents.ResolveAgentConfig("unknown")
@@ -521,6 +543,8 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 		Defaults: AgentDefaults{
 			Model:                   "defaults-model",
 			Temperature:             0.9,
+			MemoryThreshold:         0.8,
+			SummaryKeepLastMessages: 4,
 			HistoryMessageThreshold: 10,
 		},
 		Subagents: SubagentsConfig{
@@ -529,12 +553,16 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 			MaxIterations:           25,
 			MaxToolIterations:       15,
 			Temperature:             0.5,
+			MemoryThreshold:         0.6,
+			SummaryKeepLastMessages: 8,
 			HistoryMessageThreshold: 20,
 		},
 		NamedAgents: map[string]NamedAgentConfig{
 			"custom": {
 				Model:                   "named-model",
 				MaxTokens:               3000,
+				MemoryThreshold:         0.55,
+				SummaryKeepLastMessages: 12,
 				HistoryMessageThreshold: 30,
 				// Iteration limits and Temperature not set - should inherit from subagents
 			},
@@ -552,6 +580,12 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	if anon.Temperature != 0.5 {
 		t.Errorf("Anonymous: expected temperature 0.5 (from subagents), got %f", anon.Temperature)
 	}
+	if anon.MemoryThreshold != 0.6 {
+		t.Errorf("Anonymous: expected memory_threshold 0.6 (from subagents), got %f", anon.MemoryThreshold)
+	}
+	if anon.SummaryKeepLastMessages != 8 {
+		t.Errorf("Anonymous: expected summary_keep_last_messages 8 (from subagents), got %d", anon.SummaryKeepLastMessages)
+	}
 
 	// Named agent: named > subagents
 	named := cfg.ResolveAgentConfig("custom")
@@ -563,6 +597,12 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	}
 	if named.HistoryMessageThreshold != 30 {
 		t.Errorf("Named: expected history_threshold 30 (from named), got %d", named.HistoryMessageThreshold)
+	}
+	if named.MemoryThreshold != 0.55 {
+		t.Errorf("Named: expected memory_threshold 0.55 (from named), got %f", named.MemoryThreshold)
+	}
+	if named.SummaryKeepLastMessages != 12 {
+		t.Errorf("Named: expected summary_keep_last_messages 12 (from named), got %d", named.SummaryKeepLastMessages)
 	}
 	// These should come from subagents when named values are not set
 	if named.MaxIterations != 25 {
@@ -584,6 +624,8 @@ func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t 
 			MaxIterations:           42,
 			MaxToolIterations:       21,
 			Temperature:             0.6,
+			MemoryThreshold:         0.8,
+			SummaryKeepLastMessages: 14,
 			HistoryMessageThreshold: 250,
 		},
 		Subagents: SubagentsConfig{
@@ -607,6 +649,12 @@ func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t 
 	}
 	if resolved.HistoryMessageThreshold != 250 {
 		t.Errorf("Expected history_message_threshold from defaults, got %d", resolved.HistoryMessageThreshold)
+	}
+	if resolved.MemoryThreshold != 0.8 {
+		t.Errorf("Expected memory_threshold from defaults, got %f", resolved.MemoryThreshold)
+	}
+	if resolved.SummaryKeepLastMessages != 14 {
+		t.Errorf("Expected summary_keep_last_messages from defaults, got %d", resolved.SummaryKeepLastMessages)
 	}
 }
 

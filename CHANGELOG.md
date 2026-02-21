@@ -12,6 +12,8 @@
 - Subagent config resolution now consistently falls back `named > subagents > defaults` for loop/model knobs, so sparse subagent blocks inherit `agents.defaults.*` instead of zero-value behavior.
 - Session summarization history retention is now configurable via `agents.defaults.summary_keep_last_messages` (replacing hardcoded keep-last-4 behavior).
 - Debug `LLM request` logs now include estimated token usage and context-window utilization percent for runtime tuning.
+- Subagent config now applies `agents.subagents.memory_threshold` and `agents.subagents.summary_keep_last_messages` (with named-agent overrides), eliminating previously ignored fields.
+- Subagent toolloop debug logs now emit per-request context telemetry (`token_estimate`, `context_window`, `context_usage_pct`) for runtime tuning parity with main loop.
 
 ### Added
 - New Admin API endpoint: `/api/v1/history/agent-log?tail=N` returning recent `agent.log` lines for dashboard all-history aggregation.

@@ -289,6 +289,8 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
+	memoryThreshold := resolvedCfg.MemoryThreshold
+	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
 	contextLimit := subagentContextLimit(maxTok)
 
 	// Run tool loop with access to tools
@@ -310,6 +312,8 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 			return sm.drainPendingMessages(task.ID)
 		},
 		ContextLimit:            contextLimit,
+		MemoryThreshold:         memoryThreshold,
+		SummaryKeepLastMessages: keepLastMessages,
 		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,
@@ -732,6 +736,8 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
+	memoryThreshold := resolvedCfg.MemoryThreshold
+	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
 	contextLimit := subagentContextLimit(maxTok)
 
 	sm.mu.RLock()
@@ -748,6 +754,8 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		MaxToolIterations:       maxToolIter,
 		RunID:                   fmt.Sprintf("sync-%s", name),
 		ContextLimit:            contextLimit,
+		MemoryThreshold:         memoryThreshold,
+		SummaryKeepLastMessages: keepLastMessages,
 		HistoryMessageThreshold: msgThreshold,
 		LLMOptions: map[string]any{
 			"max_tokens":  maxTok,

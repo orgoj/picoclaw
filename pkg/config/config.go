@@ -89,6 +89,8 @@ type SubagentsConfig struct {
 	MaxIterations           int     `json:"max_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_ITERATIONS"`
 	MaxToolIterations       int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOOL_ITERATIONS"`
 	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_SUBAGENTS_TEMPERATURE"`
+	MemoryThreshold         float64 `json:"memory_threshold" env:"PICOCLAW_AGENTS_SUBAGENTS_MEMORY_THRESHOLD"`
+	SummaryKeepLastMessages int     `json:"summary_keep_last_messages" env:"PICOCLAW_AGENTS_SUBAGENTS_SUMMARY_KEEP_LAST_MESSAGES"`
 	HistoryMessageThreshold int     `json:"history_message_threshold" env:"PICOCLAW_AGENTS_SUBAGENTS_HISTORY_MESSAGE_THRESHOLD"`
 	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_CONCURRENT_SUBAGENTS"`
 }
@@ -101,6 +103,8 @@ type NamedAgentConfig struct {
 	MaxIterations           int     `json:"max_iterations"`
 	MaxToolIterations       int     `json:"max_tool_iterations"`
 	Temperature             float64 `json:"temperature"`
+	MemoryThreshold         float64 `json:"memory_threshold"`
+	SummaryKeepLastMessages int     `json:"summary_keep_last_messages"`
 	HistoryMessageThreshold int     `json:"history_message_threshold"`
 	MaxConcurrentSubagents  int     `json:"max_concurrent_subagents"`
 }
@@ -165,6 +169,8 @@ type ResolvedAgentConfig struct {
 	MaxIterations           int
 	MaxToolIterations       int
 	Temperature             float64
+	MemoryThreshold         float64
+	SummaryKeepLastMessages int
 	HistoryMessageThreshold int
 }
 
@@ -182,6 +188,8 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 		MaxIterations:           a.Defaults.MaxIterations,
 		MaxToolIterations:       a.Defaults.MaxToolIterations,
 		Temperature:             a.Defaults.Temperature,
+		MemoryThreshold:         a.Defaults.MemoryThreshold,
+		SummaryKeepLastMessages: a.Defaults.SummaryKeepLastMessages,
 		HistoryMessageThreshold: a.Defaults.HistoryMessageThreshold,
 	}
 
@@ -200,6 +208,12 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 	}
 	if a.Subagents.Temperature > 0 {
 		result.Temperature = a.Subagents.Temperature
+	}
+	if a.Subagents.MemoryThreshold > 0 {
+		result.MemoryThreshold = a.Subagents.MemoryThreshold
+	}
+	if a.Subagents.SummaryKeepLastMessages > 0 {
+		result.SummaryKeepLastMessages = a.Subagents.SummaryKeepLastMessages
 	}
 	if a.Subagents.HistoryMessageThreshold > 0 {
 		result.HistoryMessageThreshold = a.Subagents.HistoryMessageThreshold
@@ -227,6 +241,12 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 		}
 		if named.Temperature > 0 {
 			result.Temperature = named.Temperature
+		}
+		if named.MemoryThreshold > 0 {
+			result.MemoryThreshold = named.MemoryThreshold
+		}
+		if named.SummaryKeepLastMessages > 0 {
+			result.SummaryKeepLastMessages = named.SummaryKeepLastMessages
 		}
 		if named.HistoryMessageThreshold > 0 {
 			result.HistoryMessageThreshold = named.HistoryMessageThreshold
@@ -496,6 +516,8 @@ func DefaultConfig() *Config {
 				MaxIterations:           20,
 				MaxToolIterations:       20,
 				Temperature:             0.7,
+				MemoryThreshold:         0.8,
+				SummaryKeepLastMessages: 4,
 				HistoryMessageThreshold: 100,
 				MaxConcurrentSubagents:  2,
 			},
@@ -858,9 +880,13 @@ func (c *Config) FormatConfigForLog() string {
 
 	// Subagent config
 	sb.WriteString("\n### Subagent Config\n")
+	sb.WriteString(fmt.Sprintf("- model: %s\n", c.Agents.Subagents.Model))
 	sb.WriteString(fmt.Sprintf("- max_tokens: %d\n", c.Agents.Subagents.MaxTokens))
 	sb.WriteString(fmt.Sprintf("- max_iterations: %d\n", c.Agents.Subagents.MaxIterations))
 	sb.WriteString(fmt.Sprintf("- max_tool_iterations: %d\n", c.Agents.Subagents.MaxToolIterations))
+	sb.WriteString(fmt.Sprintf("- memory_threshold: %.2f\n", c.Agents.Subagents.MemoryThreshold))
+	sb.WriteString(fmt.Sprintf("- summary_keep_last_messages: %d\n", c.Agents.Subagents.SummaryKeepLastMessages))
+	sb.WriteString(fmt.Sprintf("- history_threshold: %d\n", c.Agents.Subagents.HistoryMessageThreshold))
 
 	return sb.String()
 }
