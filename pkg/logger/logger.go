@@ -38,7 +38,8 @@ var (
 )
 
 type Logger struct {
-	file *os.File
+	file      *os.File
+	debugFile *os.File
 }
 
 type LogEntry struct {
@@ -97,6 +98,35 @@ func DisableFileLogging() {
 	}
 }
 
+func EnableDebugFileLogging(filePath string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open debug log file: %w", err)
+	}
+
+	if logger.debugFile != nil {
+		logger.debugFile.Close()
+	}
+
+	logger.debugFile = file
+	log.Println("Debug file logging enabled:", filePath)
+	return nil
+}
+
+func DisableDebugFileLogging() {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if logger.debugFile != nil {
+		logger.debugFile.Close()
+		logger.debugFile = nil
+		log.Println("Debug file logging disabled")
+	}
+}
+
 func logMessage(level LogLevel, component string, message string, fields map[string]interface{}) {
 	if level < currentLevel {
 		return
@@ -140,6 +170,9 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 	)
 
 	log.Println(logLine)
+	if logger.debugFile != nil {
+		logger.debugFile.WriteString(logLine + "\n")
+	}
 
 	if level == FATAL {
 		os.Exit(1)

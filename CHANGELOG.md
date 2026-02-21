@@ -21,6 +21,10 @@
   - history detail pane showing `Session`, `Index`, `Role`, and detected `Agent`
   - color cues for history rows by role/tone plus per-agent name color hint
 
+### Fixed
+- Subagent completion events are now guaranteed to reach main-agent session context in all cases: completion is always persisted as `system` history and also queued as urgent context for the next main-agent run when no run is active.
+- Debug-level runtime diagnostics are now mirrored to `debug.log` (in `logging.dir`) in addition to console output, while structured JSON logs continue in `agent.log`.
+
 ## v0.1.28 - 2026-02-21
 
 ### Fixed

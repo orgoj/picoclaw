@@ -1253,7 +1253,7 @@ The idle prompt includes runtime idle context metadata:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `enabled` | `false` | Enable file logging |
-| `dir` | `~/.picoclaw/workspace/logs` | Directory for runtime logs (`agent.log`, `heartbeat.log`, `audit.jsonl`) |
+| `dir` | `~/.picoclaw/workspace/logs` | Directory for runtime logs (`agent.log`, `debug.log` when level is debug, `heartbeat.log`, `audit.jsonl`) |
 | `level` | `info` | Console/file log level: `debug`, `info`, `warn`, `error` |
 
 Run `picoclaw gateway --debug` (or `-d`) for detailed runtime diagnostics.

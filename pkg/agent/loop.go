@@ -962,22 +962,23 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 	notification := fmt.Sprintf("📢 Subagent %s completed:\n\n%s", msg.SenderID, content)
 	sessionKey := fmt.Sprintf("%s:%s", originChannel, originChatID)
 
-	// If main agent run is active, inject immediately into that run.
+	// Always persist in session history so completion is never dropped.
+	al.sessions.AddMessage(sessionKey, "system", notification)
+	al.sessions.Save(sessionKey)
+
+	// Always queue urgent completion context for main-agent session.
+	// If a run is active, it is preempted so completion is processed next turn.
 	if al.InjectUrgent(sessionKey, notification) {
 		audit.Record("subagent_completion_injected_active_run", map[string]interface{}{
 			"session_key": sessionKey,
 			"sender_id":   msg.SenderID,
 		})
-		return "", nil
+	} else {
+		audit.Record("subagent_completion_queued_next_run", map[string]interface{}{
+			"session_key": sessionKey,
+			"sender_id":   msg.SenderID,
+		})
 	}
-
-	// Otherwise persist in session history so next turn sees it.
-	al.sessions.AddMessage(sessionKey, "system", notification)
-	al.sessions.Save(sessionKey)
-	audit.Record("subagent_completion_buffered_session", map[string]interface{}{
-		"session_key": sessionKey,
-		"sender_id":   msg.SenderID,
-	})
 	return "", nil
 }
 
@@ -1376,8 +1377,8 @@ func (al *AgentLoop) nextRunID(sessionKey string) string {
 	return fmt.Sprintf("%s-%06d", base, n)
 }
 
-// InjectUrgent queues urgent content directly into a currently running session.
-// Returns true if injected into an active run, false when session is not active.
+// InjectUrgent queues urgent content for a session.
+// Returns true when an active run was preempted, false when queued for next run.
 func (al *AgentLoop) InjectUrgent(sessionKey, content string) bool {
 	sessionKey = strings.TrimSpace(sessionKey)
 	content = strings.TrimSpace(content)
@@ -1388,10 +1389,10 @@ func (al *AgentLoop) InjectUrgent(sessionKey, content string) bool {
 	al.urgentMu.Lock()
 	defer al.urgentMu.Unlock()
 
+	al.urgentBySession[sessionKey] = append(al.urgentBySession[sessionKey], content)
 	if al.activeRunsBySession[sessionKey] <= 0 {
 		return false
 	}
-	al.urgentBySession[sessionKey] = append(al.urgentBySession[sessionKey], content)
 	if cancel := al.runCancelBySession[sessionKey]; cancel != nil {
 		al.preemptedBySession[sessionKey] = true
 		cancel()

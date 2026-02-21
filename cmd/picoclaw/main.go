@@ -391,18 +391,11 @@ func setupLogging(cfg *config.Config) {
 
 	logDir := cfg.LoggingDirPath()
 	logPath := filepath.Join(logDir, "agent.log")
+	debugPath := filepath.Join(logDir, "debug.log")
 
-	// Rotate existing log file before opening new one
-	if _, err := os.Stat(logPath); err == nil {
-		timestamp := time.Now().Format("20060102-150405")
-		ext := filepath.Ext(logPath)
-		base := strings.TrimSuffix(logPath, ext)
-		archivePath := fmt.Sprintf("%s-%s%s", base, timestamp, ext)
-		if err := os.Rename(logPath, archivePath); err != nil {
-			fmt.Printf("Warning: could not rotate log file: %v\n", err)
-		} else {
-			fmt.Printf("Archived previous log to %s\n", archivePath)
-		}
+	rotateLogFile(logPath)
+	if logger.GetLevel() == logger.DEBUG {
+		rotateLogFile(debugPath)
 	}
 
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -412,6 +405,13 @@ func setupLogging(cfg *config.Config) {
 
 	if err := logger.EnableFileLogging(logPath); err != nil {
 		fmt.Printf("Warning: could not enable file logging at %s: %v\n", logPath, err)
+	}
+	if logger.GetLevel() == logger.DEBUG {
+		if err := logger.EnableDebugFileLogging(debugPath); err != nil {
+			fmt.Printf("Warning: could not enable debug file logging at %s: %v\n", debugPath, err)
+		}
+	} else {
+		logger.DisableDebugFileLogging()
 	}
 	if err := audit.Enable(logDir); err != nil {
 		fmt.Printf("Warning: could not enable audit logging at %s: %v\n", logDir, err)
@@ -426,6 +426,20 @@ func setupLogging(cfg *config.Config) {
 		"arch":       runtime.GOARCH,
 		"log_dir":    logDir,
 	})
+}
+
+func rotateLogFile(path string) {
+	if _, err := os.Stat(path); err == nil {
+		timestamp := time.Now().Format("20060102-150405")
+		ext := filepath.Ext(path)
+		base := strings.TrimSuffix(path, ext)
+		archivePath := fmt.Sprintf("%s-%s%s", base, timestamp, ext)
+		if err := os.Rename(path, archivePath); err != nil {
+			fmt.Printf("Warning: could not rotate log file: %v\n", err)
+		} else {
+			fmt.Printf("Archived previous log to %s\n", archivePath)
+		}
+	}
 }
 
 func applyConfiguredLogLevel(cfg *config.Config) {

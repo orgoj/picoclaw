@@ -748,6 +748,14 @@ func TestProcessSystemMessage_BuffersCompletionToOriginSession(t *testing.T) {
 	if !strings.Contains(last.Content, "Subagent subagent:subagent-1 completed") {
 		t.Fatalf("unexpected system notification content: %q", last.Content)
 	}
+
+	urgent := al.drainUrgentMessages("telegram:123")
+	if len(urgent) != 1 {
+		t.Fatalf("expected one queued urgent completion message, got %d", len(urgent))
+	}
+	if !strings.Contains(urgent[0], "Subagent subagent:subagent-1 completed") {
+		t.Fatalf("unexpected urgent completion content: %q", urgent[0])
+	}
 }
 
 // TestToolResult_SilentToolDoesNotSendUserMessage verifies silent tools don't trigger outbound
