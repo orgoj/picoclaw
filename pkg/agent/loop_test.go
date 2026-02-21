@@ -809,6 +809,23 @@ func TestProcessSystemMessage_TriggersImmediateRunForOriginSession(t *testing.T)
 	if out.Channel != "telegram" || out.ChatID != "123" {
 		t.Fatalf("unexpected outbound target: channel=%s chat_id=%s", out.Channel, out.ChatID)
 	}
+
+	history = al.sessions.GetHistory("telegram:123")
+	foundTrigger := false
+	for _, msg := range history {
+		if msg.Role != "user" {
+			continue
+		}
+		if strings.Contains(msg.Content, "source=\"system:subagent_completion_trigger\"") &&
+			strings.Contains(msg.Content, "agent_id=\"subagent-1\"") &&
+			strings.Contains(msg.Content, "label=\"X\"") {
+			foundTrigger = true
+			break
+		}
+	}
+	if !foundTrigger {
+		t.Fatal("expected injected completion trigger with agent_id and label metadata")
+	}
 }
 
 // TestToolResult_SilentToolDoesNotSendUserMessage verifies silent tools don't trigger outbound

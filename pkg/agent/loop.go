@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"strings"
@@ -927,13 +928,23 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 		content = content[idx+8:] // Extract just the result part
 	}
 
+	// Extract subagent identity metadata for follow-up trigger context.
+	subagentID := strings.TrimPrefix(msg.SenderID, "subagent:")
+	subagentLabel := extractTaskLabelFromCompletion(msg.Content)
+
 	// Extract directory from subagent task if available
 	var directory string
 	if strings.HasPrefix(msg.SenderID, "subagent:") {
 		taskID := strings.TrimPrefix(msg.SenderID, "subagent:")
 		if task, ok := al.subagentManager.GetTask(taskID); ok {
 			directory = task.Directory
+			if task.Label != "" {
+				subagentLabel = task.Label
+			}
 		}
+	}
+	if metaID := strings.TrimSpace(msg.Metadata["subagent_id"]); metaID != "" {
+		subagentID = metaID
 	}
 
 	// Skip internal channels - only log, don't send to user
@@ -980,8 +991,13 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 
 		// No active run: trigger immediate processing so completion context is handled now,
 		// not delayed until next user message.
-		go func(sessionKey, channel, chatID string) {
-			trigger := "<inject_message source=\"system:subagent_completion_trigger\"></inject_message>"
+		go func(sessionKey, channel, chatID, senderID, subagentID, subagentLabel string) {
+			trigger := fmt.Sprintf(
+				"<inject_message source=\"system:subagent_completion_trigger\" sender_id=\"%s\" agent_id=\"%s\" label=\"%s\">Subagent completion trigger.</inject_message>",
+				html.EscapeString(senderID),
+				html.EscapeString(subagentID),
+				html.EscapeString(subagentLabel),
+			)
 			resp, err := al.runAgentLoop(context.Background(), processOptions{
 				SessionKey:      sessionKey,
 				Channel:         channel,
@@ -1006,9 +1022,25 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 				"chat_id":      chatID,
 				"response_len": len(resp),
 			})
-		}(sessionKey, originChannel, originChatID)
+		}(sessionKey, originChannel, originChatID, msg.SenderID, subagentID, subagentLabel)
 	}
 	return "", nil
+}
+
+func extractTaskLabelFromCompletion(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "Task '") {
+			continue
+		}
+		rest := strings.TrimPrefix(line, "Task '")
+		idx := strings.Index(rest, "'")
+		if idx <= 0 {
+			continue
+		}
+		return rest[:idx]
+	}
+	return ""
 }
 
 // runAgentLoop is the core message processing logic.

@@ -7,6 +7,7 @@
 - Inject confirmation text now reflects in-context active-run injection (no preemption wording) across channel controls and Telegram `/inject`.
 - Inject payload content is now neutral by default: runtime wraps with `<inject_message ...>` and no longer auto-appends urgency instructions.
 - Subagent completion for sessions without an active run now triggers immediate same-session LLM processing (no wait for next user message), while still persisting completion into session history.
+- Subagent completion immediate trigger payload now carries explicit identity metadata in `<inject_message ...>` attributes: `sender_id`, `agent_id`, and `label`, so console/history views can attribute which subagent finished.
 - Subagent toolloop context window now honors `agents.defaults.context_window` instead of deriving window from `max_tokens`, so runtime context telemetry and trimming align with configured default window.
 - Dashboard message textarea (`Message` panel) now has responsive max-height bounds so it no longer grows past mobile viewport edges.
 - Dashboard runtime inspector now renders actual new lines in summary/config panes (no literal `\n` text artifacts).
@@ -22,6 +23,7 @@
 
 ### Added
 - New Admin API endpoint: `/api/v1/history/agent-log?tail=N` returning recent `agent.log` lines for dashboard all-history aggregation.
+- New hybrid memory optimization command: `make memopt`, backed by `scripts/memopt-workspace.sh` for whole-workspace scope (`memory/**` + `agents/*/memory/**`) with `dry-run/apply` and optional `LLM=1` pass over `MEMORY.md` files.
 
 ## v0.1.29 - 2026-02-21
 
