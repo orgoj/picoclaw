@@ -977,6 +977,36 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 			"session_key": sessionKey,
 			"sender_id":   msg.SenderID,
 		})
+
+		// No active run: trigger immediate processing so completion context is handled now,
+		// not delayed until next user message.
+		go func(sessionKey, channel, chatID string) {
+			trigger := "<inject_message source=\"system:subagent_completion_trigger\"></inject_message>"
+			resp, err := al.runAgentLoop(context.Background(), processOptions{
+				SessionKey:      sessionKey,
+				Channel:         channel,
+				ChatID:          chatID,
+				UserMessage:     trigger,
+				DefaultResponse: "I've completed processing but have no response to give.",
+				EnableSummary:   true,
+				SendResponse:    true,
+			})
+			if err != nil {
+				logger.ErrorCF("agent", "Immediate completion processing failed", map[string]interface{}{
+					"session_key": sessionKey,
+					"channel":     channel,
+					"chat_id":     chatID,
+					"error":       err.Error(),
+				})
+				return
+			}
+			audit.Record("subagent_completion_immediate_run_done", map[string]interface{}{
+				"session_key":  sessionKey,
+				"channel":      channel,
+				"chat_id":      chatID,
+				"response_len": len(resp),
+			})
+		}(sessionKey, originChannel, originChatID)
 	}
 	return "", nil
 }

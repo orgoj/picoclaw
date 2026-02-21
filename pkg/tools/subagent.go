@@ -70,6 +70,15 @@ func subagentContextLimit(maxTokens int) int {
 	return maxTokens * 20
 }
 
+func subagentResolvedContextLimit(defaultContextWindow, maxTokens int) int {
+	if defaultContextWindow > 0 {
+		// ToolLoop tracks context in chars and converts to token estimate using /3.
+		// Multiply by 3 so logged context_window aligns with configured token window.
+		return defaultContextWindow * 3
+	}
+	return subagentContextLimit(maxTokens)
+}
+
 // SetTools sets the tool registry for subagent execution.
 // If not set, subagent will have access to the provided tools.
 func (sm *SubagentManager) SetTools(tools *ToolRegistry) {
@@ -291,7 +300,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	temperature := resolvedCfg.Temperature
 	memoryThreshold := resolvedCfg.MemoryThreshold
 	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
-	contextLimit := subagentContextLimit(maxTok)
+	contextLimit := subagentResolvedContextLimit(sm.cfg.Agents.Defaults.ContextWindow, maxTok)
 
 	// Run tool loop with access to tools
 	sm.mu.RLock()
@@ -738,7 +747,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	temperature := resolvedCfg.Temperature
 	memoryThreshold := resolvedCfg.MemoryThreshold
 	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
-	contextLimit := subagentContextLimit(maxTok)
+	contextLimit := subagentResolvedContextLimit(sm.cfg.Agents.Defaults.ContextWindow, maxTok)
 
 	sm.mu.RLock()
 	tools := sm.tools

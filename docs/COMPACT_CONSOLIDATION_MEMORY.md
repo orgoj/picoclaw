@@ -2,6 +2,21 @@
 
 Dokument popisuje presne runtime chovani aktualni implementace.
 
+## Update 2026-02-21 (inject/subagent completion)
+
+- `inject` payload je neutralni:
+  - `<inject_message source=\"...\"> ... </inject_message>`
+  - runtime nepridava automaticke "urgent/priority/respond now" instrukce.
+- Active-run `inject` uz nedela preempt/cancel.
+  - Zprava se prilepi do aktivniho kontextu a zpracuje v nasledujici LLM iteraci stejneho runu.
+- Pri dokoncení subagenta (`system` completion):
+  - notifikace se vzdy ulozi do history jako `system` zprava,
+  - kdyz bezi aktivni run, completion se injectne do toho runu,
+  - kdyz run nebezi, gateway okamzite spusti stejnou session pres LLM (bez cekani na dalsi user message).
+- Subagent toolloop context window:
+  - primarne bere `agents.defaults.context_window`,
+  - fallback na odhad z `max_tokens` je jen pri nevyplnenem default context window.
+
 ## 1) Jak se sklada context pro hlavni LLM call
 
 Vstupni flow je v `runAgentLoop(...)` v `pkg/agent/loop.go`.

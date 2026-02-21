@@ -131,3 +131,17 @@ func TestSpawn_RespectsNamedConcurrencyLimit(t *testing.T) {
 		t.Fatal("expected named concurrency limit error, got nil")
 	}
 }
+
+func TestSubagentResolvedContextLimit_UsesDefaultsContextWindow(t *testing.T) {
+	got := subagentResolvedContextLimit(200000, 1024)
+	if got != 600000 {
+		t.Fatalf("expected context limit 600000 chars, got %d", got)
+	}
+}
+
+func TestSubagentResolvedContextLimit_FallsBackToMaxTokens(t *testing.T) {
+	got := subagentResolvedContextLimit(0, 1024)
+	if got != 20480 {
+		t.Fatalf("expected fallback context limit 20480 chars, got %d", got)
+	}
+}

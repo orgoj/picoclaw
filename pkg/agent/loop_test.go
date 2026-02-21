@@ -750,7 +750,7 @@ func TestInjectUrgent_AppendsToActiveRunAndTriggersContinuationCall(t *testing.T
 	}
 }
 
-func TestProcessSystemMessage_BuffersCompletionToOriginSession(t *testing.T) {
+func TestProcessSystemMessage_TriggersImmediateRunForOriginSession(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "agent-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -800,12 +800,14 @@ func TestProcessSystemMessage_BuffersCompletionToOriginSession(t *testing.T) {
 		t.Fatalf("unexpected system notification content: %q", last.Content)
 	}
 
-	urgent := al.drainUrgentMessages("telegram:123")
-	if len(urgent) != 1 {
-		t.Fatalf("expected one queued urgent completion message, got %d", len(urgent))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, ok := msgBus.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected immediate outbound response for origin session")
 	}
-	if !strings.Contains(urgent[0], "Subagent subagent:subagent-1 completed") {
-		t.Fatalf("unexpected urgent completion content: %q", urgent[0])
+	if out.Channel != "telegram" || out.ChatID != "123" {
+		t.Fatalf("unexpected outbound target: channel=%s chat_id=%s", out.Channel, out.ChatID)
 	}
 }
 

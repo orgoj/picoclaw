@@ -6,6 +6,8 @@
 - Active-run urgent inject no longer cancels/preempts the current session run; urgent content is now appended into the active context and handled via a follow-up LLM iteration in the same run.
 - Inject confirmation text now reflects in-context active-run injection (no preemption wording) across channel controls and Telegram `/inject`.
 - Inject payload content is now neutral by default: runtime wraps with `<inject_message ...>` and no longer auto-appends urgency instructions.
+- Subagent completion for sessions without an active run now triggers immediate same-session LLM processing (no wait for next user message), while still persisting completion into session history.
+- Subagent toolloop context window now honors `agents.defaults.context_window` instead of deriving window from `max_tokens`, so runtime context telemetry and trimming align with configured default window.
 - Dashboard message textarea (`Message` panel) now has responsive max-height bounds so it no longer grows past mobile viewport edges.
 - Dashboard runtime inspector now renders actual new lines in summary/config panes (no literal `\n` text artifacts).
 - Dashboard all-history mode now includes tailed runtime console lines from `logging.dir/agent.log`, so history view reflects operator-visible console flow beyond per-session chat history.
