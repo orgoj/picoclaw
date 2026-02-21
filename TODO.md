@@ -2,9 +2,15 @@
 
 ## FIX
 
+- WEBUI: `KILL` pro subagenta nefunguje přes `/api/v1/main/message` (`+kill <id>` se neparsuje jako control command)
+  - přidat přímý endpoint `DELETE /api/v1/subagents/{id}` -> `subagentMgr.Cancel(id)`
+  - Web UI tlačítko `KILL` přepnout na tento endpoint (ne přes queue message)
+  - po cancel okamžitě refresh subagent listu a vizuální status
+
 ### WEBUI
 
-- (none)
+- filter na hisotry abych mohl skyt rychle debug a info
+- ta history je spatna - to musi byt casove jak to slo za sebou a ne napred session a pak agent.log 
 
 ## Memory tooling (future)
 
@@ -36,3 +42,9 @@
   - subagent runtime ma mit stejne konfigurovatelne limity jako main agent (timeout/retries/backoff/context apod.)
   - zavest jeden resolver/runtime profil pro main i subagent beh
   - `config/config.example.json` drzet 1:1 se skutecnym runtime chovanim po dodelani parity
+
+## IDEAS
+
+- komunikace primo s agentem
+  - injekce message agentovi
+  - moznost ho spustit primo na chanell a komunikovat s nim, nejake `+agent_chat PROMPT` by ho pustilo  a vse co pise davalo na chanell, a konec kdyz skonci a nebo `+kill`

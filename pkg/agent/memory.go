@@ -131,22 +131,37 @@ func (ms *MemoryStore) GetRecentDailyNotes(days int) string {
 // GetMemoryContext returns formatted memory context for the agent prompt.
 // Includes long-term memory and recent daily notes.
 func (ms *MemoryStore) GetMemoryContext() string {
+	context, _ := ms.GetMemoryContextWithStats()
+	return context
+}
+
+// GetMemoryContextWithStats returns formatted memory context and section sizes.
+// Includes long-term memory and recent daily notes.
+func (ms *MemoryStore) GetMemoryContextWithStats() (string, map[string]int) {
+	stats := map[string]int{
+		"long_term_chars":    0,
+		"recent_notes_chars": 0,
+		"total_chars":        0,
+	}
+
 	var parts []string
 
 	// Long-term memory
 	longTerm := ms.ReadLongTerm()
+	stats["long_term_chars"] = len(longTerm)
 	if longTerm != "" {
 		parts = append(parts, "## Long-term Memory\n\n"+longTerm)
 	}
 
 	// Recent daily notes (last 3 days)
 	recentNotes := ms.GetRecentDailyNotes(3)
+	stats["recent_notes_chars"] = len(recentNotes)
 	if recentNotes != "" {
 		parts = append(parts, "## Recent Daily Notes\n\n"+recentNotes)
 	}
 
 	if len(parts) == 0 {
-		return ""
+		return "", stats
 	}
 
 	// Join parts with separator
@@ -157,5 +172,7 @@ func (ms *MemoryStore) GetMemoryContext() string {
 		}
 		result += part
 	}
-	return fmt.Sprintf("# Memory\n\n%s", result)
+	context := fmt.Sprintf("# Memory\n\n%s", result)
+	stats["total_chars"] = len(context)
+	return context, stats
 }

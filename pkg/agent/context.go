@@ -24,6 +24,18 @@ type ContextBuilder struct {
 	knownAgents  []tools.AgentInfo
 }
 
+type systemPromptBuildStats struct {
+	IdentityChars       int
+	ToolsSectionChars   int
+	BootstrapTotalChars int
+	BootstrapByFile     map[string]int
+	SkillsChars         int
+	NamedAgentsChars    int
+	MemoryChars         int
+	MemoryLongTermChars int
+	MemoryRecentChars   int
+}
+
 func getGlobalConfigDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -85,6 +97,43 @@ Your workspace is at: %s
 
 3. **Memory** - When remembering something, write to %s/memory/MEMORY.md`,
 		now, runtime, workspacePath, workspacePath, workspacePath, workspacePath, toolsSection, workspacePath)
+}
+
+func (cb *ContextBuilder) getIdentityWithStats() (string, int) {
+	now := time.Now().Format("2006-01-02 15:04 (Monday)")
+	workspacePath, _ := filepath.Abs(filepath.Join(cb.workspace))
+	runtime := fmt.Sprintf("%s %s, Go %s", runtime.GOOS, runtime.GOARCH, runtime.Version())
+
+	// Build tools section dynamically
+	toolsSection := cb.buildToolsSection()
+	prompt := fmt.Sprintf(`# picoclaw 🦞
+
+You are picoclaw, a helpful AI assistant.
+
+## Current Time
+%s
+
+## Runtime
+%s
+
+## Workspace
+Your workspace is at: %s
+- Memory: %s/memory/MEMORY.md
+- Daily Notes: %s/memory/YYYYMM/YYYYMMDD.md
+- Skills: %s/skills/{skill-name}/SKILL.md
+
+%s
+
+## Important Rules
+
+1. **ALWAYS use tools** - When you need to perform an action (schedule reminders, send messages, execute commands, etc.), you MUST call the appropriate tool. Do NOT just say you'll do it or pretend to do it.
+
+2. **Be helpful and accurate** - When using tools, briefly explain what you're doing.
+
+3. **Memory** - When remembering something, write to %s/memory/MEMORY.md`,
+		now, runtime, workspacePath, workspacePath, workspacePath, workspacePath, toolsSection, workspacePath)
+
+	return prompt, len(toolsSection)
 }
 
 func (cb *ContextBuilder) refreshNamedAgents() []tools.AgentInfo {
@@ -160,44 +209,70 @@ func (cb *ContextBuilder) buildToolsSection() string {
 }
 
 func (cb *ContextBuilder) BuildSystemPrompt() string {
+	systemPrompt, _ := cb.buildSystemPromptWithStats()
+	return systemPrompt
+}
+
+func (cb *ContextBuilder) buildSystemPromptWithStats() (string, systemPromptBuildStats) {
 	parts := []string{}
+	stats := systemPromptBuildStats{
+		BootstrapByFile: make(map[string]int),
+	}
 
 	// Core identity section
-	parts = append(parts, cb.getIdentity())
+	identity, toolsSectionChars := cb.getIdentityWithStats()
+	parts = append(parts, identity)
+	stats.IdentityChars = len(identity)
+	stats.ToolsSectionChars = toolsSectionChars
 
 	// Bootstrap files
-	bootstrapContent := cb.LoadBootstrapFiles()
+	bootstrapContent, bootstrapSizes := cb.LoadBootstrapFilesDetailed()
 	if bootstrapContent != "" {
 		parts = append(parts, bootstrapContent)
+		stats.BootstrapTotalChars = len(bootstrapContent)
+		for k, v := range bootstrapSizes {
+			stats.BootstrapByFile[k] = v
+		}
 	}
 
 	// Skills - show summary, AI can read full content with read_file tool
 	skillsSummary := cb.skillsLoader.BuildSkillsSummary()
 	if skillsSummary != "" {
-		parts = append(parts, fmt.Sprintf(`# Skills
+		skillsBlock := fmt.Sprintf(`# Skills
 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 
-%s`, skillsSummary))
+%s`, skillsSummary)
+		parts = append(parts, skillsBlock)
+		stats.SkillsChars = len(skillsBlock)
 	}
 
 	// Named agents available for delegation
 	agentsSummary := cb.buildNamedAgentsSummary()
 	if agentsSummary != "" {
 		parts = append(parts, agentsSummary)
+		stats.NamedAgentsChars = len(agentsSummary)
 	}
 
 	// Memory context
-	memoryContext := cb.memory.GetMemoryContext()
+	memoryContext, memoryStats := cb.memory.GetMemoryContextWithStats()
 	if memoryContext != "" {
 		parts = append(parts, "# Memory\n\n"+memoryContext)
+		stats.MemoryChars = len("# Memory\n\n" + memoryContext)
 	}
+	stats.MemoryLongTermChars = memoryStats["long_term_chars"]
+	stats.MemoryRecentChars = memoryStats["recent_notes_chars"]
 
 	// Join with "---" separator
-	return strings.Join(parts, "\n\n---\n\n")
+	return strings.Join(parts, "\n\n---\n\n"), stats
 }
 
 func (cb *ContextBuilder) LoadBootstrapFiles() string {
+	content, _ := cb.LoadBootstrapFilesDetailed()
+	return content
+}
+
+func (cb *ContextBuilder) LoadBootstrapFilesDetailed() (string, map[string]int) {
 	bootstrapFiles := []string{
 		"AGENTS.md",
 		"SOUL.md",
@@ -206,20 +281,22 @@ func (cb *ContextBuilder) LoadBootstrapFiles() string {
 	}
 
 	var result string
+	sizes := make(map[string]int, len(bootstrapFiles))
 	for _, filename := range bootstrapFiles {
 		filePath := filepath.Join(cb.workspace, filename)
 		if data, err := os.ReadFile(filePath); err == nil {
 			result += fmt.Sprintf("## %s\n\n%s\n\n", filename, string(data))
+			sizes[filename] = len(data)
 		}
 	}
 
-	return result
+	return result, sizes
 }
 
 func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary string, currentMessage string, media []string, channel, chatID string) []providers.Message {
 	messages := []providers.Message{}
 
-	systemPrompt := cb.BuildSystemPrompt()
+	systemPrompt, stats := cb.buildSystemPromptWithStats()
 
 	// Add Current Session info if provided
 	if channel != "" && chatID != "" {
@@ -229,9 +306,21 @@ func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary str
 	// Log system prompt summary for debugging (debug mode only)
 	logger.DebugCF("agent", "System prompt built",
 		map[string]interface{}{
-			"total_chars":   len(systemPrompt),
-			"total_lines":   strings.Count(systemPrompt, "\n") + 1,
-			"section_count": strings.Count(systemPrompt, "\n\n---\n\n") + 1,
+			"total_chars":              len(systemPrompt),
+			"total_lines":              strings.Count(systemPrompt, "\n") + 1,
+			"section_count":            strings.Count(systemPrompt, "\n\n---\n\n") + 1,
+			"identity_chars":           stats.IdentityChars,
+			"tools_section_chars":      stats.ToolsSectionChars,
+			"bootstrap_total_chars":    stats.BootstrapTotalChars,
+			"bootstrap_agents_chars":   stats.BootstrapByFile["AGENTS.md"],
+			"bootstrap_soul_chars":     stats.BootstrapByFile["SOUL.md"],
+			"bootstrap_user_chars":     stats.BootstrapByFile["USER.md"],
+			"bootstrap_identity_chars": stats.BootstrapByFile["IDENTITY.md"],
+			"skills_chars":             stats.SkillsChars,
+			"named_agents_chars":       stats.NamedAgentsChars,
+			"memory_total_chars":       stats.MemoryChars,
+			"memory_long_term_chars":   stats.MemoryLongTermChars,
+			"memory_recent_chars":      stats.MemoryRecentChars,
 		})
 
 	if summary != "" {
