@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.29 - 2026-02-21
+
+### Changed
+- Dashboard history view is now one-line operator style with click-to-expand full message detail instead of a long wrapped text block.
+- Dashboard message composer now uses dedicated mode buttons (`Queue`, `Inject`, `Force First`, `Append`, `Delete Last`) instead of a mode select dropdown.
+- Dashboard filter semantics are now explicit:
+  - top-bar `Clear all filters` resets both session and subagent filters
+  - selecting a subagent clears any active session filter
+  - clear state defaults to aggregated all-session history
+- Dashboard mobile UX now uses panel tabs (`Agents`, `Sessions`, `Queue`, `Message`) so only one right-side panel is visible at once.
+
+### Fixed
+- Subagent ordering in dashboard/API responses is now stable and deterministic (newest started first with tie-breakers), preventing random row flicker/reordering between refreshes.
+- Dashboard all-history scope now refreshes across known sessions, rather than silently sticking to a single previously selected session after filter clear.
+
+### Added
+- New dashboard user-visible controls/fields:
+  - top-bar action: `Clear all filters`
+  - history detail pane showing `Session`, `Index`, `Role`, and detected `Agent`
+  - color cues for history rows by role/tone plus per-agent name color hint
+
 ## v0.1.28 - 2026-02-21
 
 ### Fixed

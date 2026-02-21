@@ -33,24 +33,24 @@ const dashboardHTML = `<!doctype html>
     :root {
       --bg:#f8fafc; --bg2:#eef2ff; --panel:#ffffff; --border:#cbd5e1;
       --muted:#475569; --text:#0f172a; --acc:#16a34a; --warn:#d97706; --bad:#dc2626;
-      --input:#f8fafc; --head:#0f172a;
+      --input:#f8fafc; --head:#0f172a; --info:#0284c7;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg:#0b1220; --bg2:#0f172a; --panel:#111827; --border:#334155;
         --muted:#94a3b8; --text:#e5e7eb; --acc:#22c55e; --warn:#f59e0b; --bad:#ef4444;
-        --input:#0b1220; --head:#cbd5e1;
+        --input:#0b1220; --head:#cbd5e1; --info:#38bdf8;
       }
     }
     body[data-theme="light"] {
       --bg:#f8fafc; --bg2:#eef2ff; --panel:#ffffff; --border:#cbd5e1;
       --muted:#475569; --text:#0f172a; --acc:#16a34a; --warn:#d97706; --bad:#dc2626;
-      --input:#f8fafc; --head:#0f172a;
+      --input:#f8fafc; --head:#0f172a; --info:#0284c7;
     }
     body[data-theme="dark"] {
       --bg:#0b1220; --bg2:#0f172a; --panel:#111827; --border:#334155;
       --muted:#94a3b8; --text:#e5e7eb; --acc:#22c55e; --warn:#f59e0b; --bad:#ef4444;
-      --input:#0b1220; --head:#cbd5e1;
+      --input:#0b1220; --head:#cbd5e1; --info:#38bdf8;
     }
     body {
       margin:0;
@@ -64,12 +64,20 @@ const dashboardHTML = `<!doctype html>
       overflow:hidden;
     }
     .toolbar {
-      display:flex; gap:10px; align-items:center; justify-content:flex-end;
-      padding:8px 14px; border-bottom:1px solid var(--border);
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-end;
+      padding:8px 14px;
+      border-bottom:1px solid var(--border);
       background:color-mix(in srgb, var(--panel) 90%, transparent);
-      position:sticky; top:0; z-index:1;
+      position:sticky;
+      top:0;
+      z-index:2;
+      flex-wrap:wrap;
     }
     .toolbar .grow { flex:1; }
+    .toolbar select { width:auto; }
     .modal {
       position:fixed; inset:0; background:rgba(0,0,0,0.45);
       display:none; align-items:center; justify-content:center; z-index:20;
@@ -120,9 +128,24 @@ const dashboardHTML = `<!doctype html>
     }
     h2 { margin:0 0 8px; font-size:14px; color:var(--head); }
     input,textarea,button { font:inherit; }
-    input,textarea,select { width:100%; background:var(--input); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; box-sizing:border-box; }
-    textarea { min-height:80px; resize:vertical; }
-    button { background:var(--input); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; }
+    input,textarea,select {
+      width:100%;
+      background:var(--input);
+      color:var(--text);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:8px;
+      box-sizing:border-box;
+    }
+    textarea { min-height:72px; resize:vertical; }
+    button {
+      background:var(--input);
+      color:var(--text);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:6px 10px;
+      cursor:pointer;
+    }
     button:hover { border-color:var(--muted); }
     .row { display:flex; gap:8px; align-items:center; margin:6px 0; }
     .grow { flex:1; }
@@ -141,6 +164,87 @@ const dashboardHTML = `<!doctype html>
       border:1px solid var(--border); border-radius:8px; padding:8px; margin:0;
       overflow:auto; flex:1; min-height:0;
     }
+    .leftCol { min-height:0; }
+    .historyMeta { margin-bottom:8px; }
+    .historyList {
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--input);
+    }
+    .historyRow {
+      padding:6px 8px;
+      border-top:1px solid var(--border);
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+    .historyRow:first-child { border-top:none; }
+    .historyRow:hover { background: color-mix(in srgb, var(--input) 75%, var(--border)); }
+    .historyRow.selected { background: color-mix(in srgb, var(--info) 14%, var(--input)); }
+    .historyRow .idx {
+      color:var(--muted);
+      min-width:54px;
+      font-size:11px;
+    }
+    .historyRow .session {
+      color:var(--info);
+      font-size:11px;
+      white-space:nowrap;
+      max-width:180px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .historyRow .role {
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:0 6px;
+      font-size:11px;
+      line-height:18px;
+      white-space:nowrap;
+      background:var(--panel);
+    }
+    .historyRow .preview {
+      flex:1;
+      min-width:0;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-size:12px;
+    }
+    .historyRow.role-user .role { color:#0ea5e9; border-color: color-mix(in srgb, #0ea5e9 30%, var(--border)); }
+    .historyRow.role-assistant .role { color:#22c55e; border-color: color-mix(in srgb, #22c55e 30%, var(--border)); }
+    .historyRow.role-system .role { color:#a855f7; border-color: color-mix(in srgb, #a855f7 30%, var(--border)); }
+    .historyRow.role-tool .role { color:#f97316; border-color: color-mix(in srgb, #f97316 30%, var(--border)); }
+    .historyRow.tone-error { box-shadow: inset 3px 0 0 var(--bad); }
+    .historyRow.tone-warn { box-shadow: inset 3px 0 0 var(--warn); }
+    .historyRow.tone-info { box-shadow: inset 3px 0 0 var(--info); }
+    .historyAgent {
+      font-size:11px;
+      white-space:nowrap;
+      max-width:140px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .historyDetail {
+      margin-top:8px;
+      min-height:120px;
+      max-height:42%;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--input);
+      padding:8px;
+      box-sizing:border-box;
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-size:12px;
+    }
+    .historyDetail .label { color:var(--muted); }
     .rightCol {
       display:flex;
       flex-direction:column;
@@ -157,8 +261,12 @@ const dashboardHTML = `<!doctype html>
       flex:0 0 8px;
     }
     .rowSplitter:hover { filter:brightness(1.15); }
-    .leftCol { min-height:0; }
-    .historyMeta { margin-bottom:8px; }
+    .mobilePanelTabs { display:none; }
+    .modeButtons { display:flex; flex-wrap:wrap; gap:6px; }
+    .modeBtn.active {
+      border-color:var(--info);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 55%, transparent);
+    }
     @media (max-width: 980px) {
       body { overflow:auto; height:auto; }
       .app {
@@ -168,18 +276,31 @@ const dashboardHTML = `<!doctype html>
       }
       .splitter { display:none; }
       .rowSplitter { display:none; }
-      .rightCol { gap:8px; }
-      .rightCard, .card { min-height:320px; }
+      .leftCol { min-height:56vh; }
+      .historyDetail { max-height:34vh; min-height:100px; }
+      .mobilePanelTabs {
+        display:flex;
+        gap:6px;
+        margin-bottom:6px;
+        overflow:auto;
+      }
+      .mobilePanelTabs button {
+        white-space:nowrap;
+        flex:0 0 auto;
+      }
+      .rightCol.mobile-mode .rightCard { display:none; min-height:260px; }
+      .rightCol.mobile-mode .rightCard.active { display:flex; }
     }
   </style>
 </head>
 <body>
   <div class="toolbar">
     <span class="grow small">PicoClaw Dashboard</span>
+    <button id="clearAllBtn" type="button">Clear all filters</button>
     <span id="sseState" class="small warn">SSE connecting...</span>
     <button id="showRuntimeBtn">Runtime info</button>
     <label class="small" for="themeMode">Theme</label>
-    <select id="themeMode" style="width:auto">
+    <select id="themeMode">
       <option value="system">System</option>
       <option value="light">Light</option>
       <option value="dark">Dark</option>
@@ -202,52 +323,56 @@ const dashboardHTML = `<!doctype html>
     <section class="card leftCol">
       <h2>History</h2>
       <div id="historyMeta" class="small historyMeta"></div>
-      <pre id="historyBox"></pre>
+      <div id="historyList" class="historyList"></div>
+      <div id="historyDetail" class="historyDetail small">Click any row to expand full message.</div>
     </section>
 
     <div id="colSplitter" class="splitter" title="Drag to resize"></div>
 
-    <div class="rightCol">
-      <section class="card rightCard">
+    <div class="rightCol" id="rightCol">
+      <div class="mobilePanelTabs" id="mobilePanelTabs">
+        <button type="button" class="mobilePanelBtn" data-panel="agents">Agents</button>
+        <button type="button" class="mobilePanelBtn" data-panel="sessions">Sessions</button>
+        <button type="button" class="mobilePanelBtn" data-panel="queue">Queue</button>
+        <button type="button" class="mobilePanelBtn" data-panel="message">Message</button>
+      </div>
+
+      <section class="card rightCard" data-panel="agents">
         <h2>Agents</h2>
-        <div class="row">
-          <div class="small grow">Click agent to filter history</div>
-          <button id="clearAgentBtn" type="button">Clear filter</button>
-        </div>
+        <div class="small">Click agent to filter history (clears session filter)</div>
         <div class="tableWrap"><table id="subagentTable"></table></div>
       </section>
       <div class="rowSplitter" title="Drag to resize"></div>
 
-      <section class="card rightCard">
+      <section class="card rightCard" data-panel="sessions">
         <h2>Sessions</h2>
-        <div class="small">Click session to switch history stream</div>
+        <div class="small">Click session to focus one session stream</div>
         <div class="tableWrap"><table id="sessionTable"></table></div>
       </section>
       <div class="rowSplitter" title="Drag to resize"></div>
 
-      <section class="card rightCard">
+      <section class="card rightCard" data-panel="queue">
         <h2>Queue</h2>
         <div class="small">Editable inbound queue</div>
         <div class="tableWrap"><table id="inboundTable"></table></div>
       </section>
       <div class="rowSplitter" title="Drag to resize"></div>
 
-      <section class="card rightCard">
+      <section class="card rightCard" data-panel="message">
         <h2>Message</h2>
         <div class="row"><input id="sessionKey" class="grow" placeholder="session_key (e.g. telegram:7221629441)"></div>
         <div class="row"><textarea id="content" placeholder="Type message..."></textarea></div>
-        <div class="row">
-          <label class="small" for="messageMode">Mode</label>
-          <select id="messageMode" style="width:auto">
-            <option value="normal">Queue</option>
-            <option value="inject">Inject</option>
-            <option value="first">Force First</option>
-            <option value="append">Append</option>
-            <option value="delete">Delete Last</option>
-          </select>
-          <button id="sendBtn">Send</button>
+        <div class="modeButtons" id="modeButtons">
+          <button type="button" class="modeBtn" data-mode="normal">Queue</button>
+          <button type="button" class="modeBtn" data-mode="inject">Inject</button>
+          <button type="button" class="modeBtn" data-mode="first">Force First</button>
+          <button type="button" class="modeBtn" data-mode="append">Append</button>
+          <button type="button" class="modeBtn" data-mode="delete">Delete Last</button>
         </div>
-        <div id="commandHint" class="small"></div>
+        <div class="row">
+          <button id="sendBtn">Send</button>
+          <div id="commandHint" class="small grow"></div>
+        </div>
         <div id="sendOut" class="small"></div>
       </section>
     </div>
@@ -261,66 +386,29 @@ const dashboardJS = `
 const $ = (id) => document.getElementById(id);
 let es = null;
 let reconnectTimer = null;
+let allHistoryRefreshTimer = null;
+
 const state = {
   selectedSession: "",
+  streamSession: "",
   selectedAgentID: "",
   selectedAgentName: "",
-  history: [],
+  expandedHistoryKey: "",
+  historyBySession: {},
   sessions: [],
   subagents: [],
   historyLimit: 1000,
   controlPrefix: "+",
   hasKillControl: true,
+  messageMode: "normal",
+  mobilePanel: "message",
 };
 
 async function jfetch(url, opts={}) {
   const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opts });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || ("HTTP "+r.status));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
   return j;
-}
-
-async function sendMessage() {
-  const btn = $("sendBtn");
-  try {
-    setButtonBusy(btn, true, "Sending...");
-    const mode = (($("messageMode") && $("messageMode").value) || "normal").trim();
-    const input = $("content").value;
-    let content = "";
-    if (mode === "normal") {
-      content = input;
-    } else if (mode === "inject") {
-      if (!String(input).trim()) throw new Error("MESSAGE required for inject");
-      content = state.controlPrefix + "inject " + input;
-    } else if (mode === "first") {
-      if (!String(input).trim()) throw new Error("MESSAGE required for force first");
-      content = state.controlPrefix + "first " + input;
-    } else if (mode === "append") {
-      if (!String(input).trim()) throw new Error("MESSAGE required for append");
-      content = state.controlPrefix + state.controlPrefix + input;
-    } else if (mode === "delete") {
-      if (!window.confirm("Delete last queued message for this session?")) return;
-      content = state.controlPrefix + "delete";
-    } else {
-      throw new Error("Unknown mode: " + mode);
-    }
-    const res = await sendMainContent(content);
-    setSendOut(describeMainResponse(mode, res), false);
-    if (mode !== "delete") $("content").value = "";
-  } catch (e) {
-    setSendOut("ERROR: "+e.message, true);
-  } finally {
-    setButtonBusy(btn, false, "Send");
-  }
-}
-
-async function sendMainContent(content) {
-  const sessionKey = $("sessionKey").value.trim();
-  if (!sessionKey) throw new Error("session_key is required");
-  return jfetch("/api/v1/main/message", {
-    method:"POST",
-    body: JSON.stringify({ session_key: sessionKey, content }),
-  });
 }
 
 function escapeHTML(v) {
@@ -328,6 +416,183 @@ function escapeHTML(v) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function escapeAttr(v) {
+  return String(v || "").replace(/"/g, "&quot;");
+}
+
+function fmtTs(v) {
+  const n = Number(v || 0);
+  if (!n) return "";
+  const d = new Date(n);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString();
+}
+
+function setSessionHistory(sessionKey, items) {
+  if (!sessionKey) return;
+  state.historyBySession[sessionKey] = Array.isArray(items) ? items : [];
+}
+
+function getSessionHistory(sessionKey) {
+  if (!sessionKey) return [];
+  return Array.isArray(state.historyBySession[sessionKey]) ? state.historyBySession[sessionKey] : [];
+}
+
+function shortText(v, maxLen) {
+  const text = String(v || "").replace(/\\s+/g, " ").trim();
+  if (!text) return "(empty)";
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + "…";
+}
+
+function detectTone(content) {
+  const c = String(content || "").toLowerCase();
+  if (c.includes("error") || c.includes("failed") || c.includes("panic")) return "error";
+  if (c.includes("warn") || c.includes("timeout")) return "warn";
+  if (c.includes("info") || c.includes("status")) return "info";
+  return "";
+}
+
+function detectAgentName(content) {
+  const text = String(content || "");
+  const patterns = [
+    /Agent:\\s*([^\\n\\r]+)/i,
+    /subagent[:\\s-]+([a-zA-Z0-9_.-]+)/i,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m && m[1]) return m[1].trim().slice(0, 48);
+  }
+  return "";
+}
+
+function colorForName(name) {
+  if (!name) return "";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  const hue = Math.abs(hash) % 360;
+  return "hsl(" + hue + " 72% 48%)";
+}
+
+function roleClass(role) {
+  const r = String(role || "").toLowerCase();
+  if (!r) return "role-unknown";
+  return "role-" + r.replace(/[^a-z0-9_-]/g, "");
+}
+
+function historyEntryMatchesAgent(entry) {
+  if (!state.selectedAgentID && !state.selectedAgentName) return true;
+  const c = (String(entry.role || "") + "\\n" + String(entry.content || "")).toLowerCase();
+  if (state.selectedAgentID) {
+    const id = state.selectedAgentID.toLowerCase();
+    if (c.includes(id) || c.includes("subagent:" + id) || c.includes("subagent-" + id)) return true;
+  }
+  if (state.selectedAgentName && c.includes(state.selectedAgentName.toLowerCase())) return true;
+  return false;
+}
+
+function collectHistoryEntries() {
+  const keys = [];
+  if (state.selectedSession) {
+    keys.push(state.selectedSession);
+  } else {
+    for (const row of state.sessions) {
+      const key = row && row.key ? String(row.key) : "";
+      if (key) keys.push(key);
+    }
+    if (state.streamSession && keys.indexOf(state.streamSession) < 0) keys.push(state.streamSession);
+  }
+
+  const out = [];
+  for (const key of keys) {
+    const list = getSessionHistory(key);
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i] || {};
+      const content = String(m.content || "");
+      out.push({
+        historyKey: key + "#" + i,
+        sessionKey: key,
+        index: i,
+        role: String(m.role || ""),
+        content,
+        tone: detectTone(content),
+        agentName: detectAgentName(content),
+      });
+    }
+  }
+  return out;
+}
+
+function renderHistoryDetail(entry) {
+  const detail = $("historyDetail");
+  if (!detail) return;
+  if (!entry) {
+    detail.innerHTML = "Click any row to expand full message.";
+    return;
+  }
+  const role = escapeHTML(entry.role || "(none)");
+  const session = escapeHTML(entry.sessionKey || "(none)");
+  const agent = entry.agentName ? escapeHTML(entry.agentName) : "(none)";
+  detail.innerHTML =
+    "<div><span class='label'>Session:</span> " + session + "</div>" +
+    "<div><span class='label'>Index:</span> " + entry.index + "</div>" +
+    "<div><span class='label'>Role:</span> " + role + "</div>" +
+    "<div><span class='label'>Agent:</span> " + agent + "</div>" +
+    "<hr style='border:0;border-top:1px solid var(--border);margin:8px 0'>" +
+    "<div>" + escapeHTML(entry.content || "") + "</div>";
+}
+
+function renderHistory() {
+  const list = $("historyList");
+  if (!list) return;
+  const nearBottom = (list.scrollHeight - (list.scrollTop + list.clientHeight)) <= 40;
+
+  const all = collectHistoryEntries();
+  const filtered = all.filter(historyEntryMatchesAgent);
+  const shown = filtered.length > state.historyLimit ? filtered.slice(filtered.length - state.historyLimit) : filtered;
+  const base = Math.max(0, filtered.length - shown.length);
+
+  if (shown.length === 0) {
+    list.innerHTML = "<div class='small' style='padding:8px'>No history matches current filter.</div>";
+    state.expandedHistoryKey = "";
+    renderHistoryDetail(null);
+  } else {
+    let html = "";
+    for (let i = 0; i < shown.length; i++) {
+      const row = shown[i];
+      const selected = state.expandedHistoryKey === row.historyKey ? " selected" : "";
+      const toneCls = row.tone ? (" tone-" + row.tone) : "";
+      const roleCls = roleClass(row.role);
+      const idx = "[" + (base + i) + "]";
+      const sessionPart = state.selectedSession ? "" : ("<span class='session'>" + escapeHTML(row.sessionKey) + "</span>");
+      let agentPart = "";
+      if (row.agentName) {
+        const color = colorForName(row.agentName);
+        agentPart = "<span class='historyAgent' style='color:" + escapeAttr(color) + "'>" + escapeHTML(row.agentName) + "</span>";
+      }
+      html += "<div class='historyRow " + roleCls + toneCls + selected + "' data-hk='" + escapeAttr(row.historyKey) + "'>";
+      html += "<span class='idx'>" + idx + "</span>";
+      html += sessionPart;
+      html += "<span class='role'>" + escapeHTML(row.role || "unknown") + "</span>";
+      html += agentPart;
+      html += "<span class='preview'>" + escapeHTML(shortText(row.content, 280)) + "</span>";
+      html += "</div>";
+    }
+    list.innerHTML = html;
+    const expanded = shown.find((r) => r.historyKey === state.expandedHistoryKey) || null;
+    renderHistoryDetail(expanded);
+  }
+
+  if (nearBottom) list.scrollTop = list.scrollHeight;
+
+  const meta = $("historyMeta");
+  if (meta) {
+    const scope = state.selectedSession ? ("session=" + state.selectedSession) : "session=ALL";
+    const agent = (state.selectedAgentID || state.selectedAgentName) ? ", agent=" + (state.selectedAgentName || state.selectedAgentID) : "";
+    meta.textContent = "showing " + shown.length + " / " + filtered.length + " messages (limit " + state.historyLimit + "), " + scope + agent;
+  }
 }
 
 function renderInbound(items) {
@@ -339,77 +604,41 @@ function renderInbound(items) {
     const id = it.id;
     const m = it.message || {};
     html += "<tr>";
-    html += "<td>"+i+"</td>";
-    html += "<td>"+escapeHTML(id)+"</td>";
-    html += "<td>"+escapeHTML(m.session_key||"")+"</td>";
-    html += "<td><textarea id='e_"+id+"' style='min-height:54px'>"+escapeHTML(m.content||"")+"</textarea></td>";
+    html += "<td>" + i + "</td>";
+    html += "<td>" + escapeHTML(id) + "</td>";
+    html += "<td>" + escapeHTML(m.session_key || "") + "</td>";
+    html += "<td><textarea id='e_" + id + "' style='min-height:54px'>" + escapeHTML(m.content || "") + "</textarea></td>";
     html += "<td>";
-    html += "<button onclick='moveItem(\""+id+"\",0,this,event)'>top</button> ";
-    if (i > 0) html += "<button onclick='moveItem(\""+id+"\","+(i-1)+",this,event)'>up</button> ";
-    if (i < rows.length - 1) html += "<button onclick='moveItem(\""+id+"\","+(i+1)+",this,event)'>down</button> ";
-    html += "<button onclick='moveItem(\""+id+"\","+(rows.length - 1)+",this,event)'>bottom</button> ";
-    html += "<button onclick='patchItem(\""+id+"\",this,event)'>save</button> ";
-    html += "<button onclick='delItem(\""+id+"\",this,event)'>del</button>";
+    html += "<button onclick='moveItem(\"" + id + "\",0,this,event)'>top</button> ";
+    if (i > 0) html += "<button onclick='moveItem(\"" + id + "\"," + (i - 1) + ",this,event)'>up</button> ";
+    if (i < rows.length - 1) html += "<button onclick='moveItem(\"" + id + "\"," + (i + 1) + ",this,event)'>down</button> ";
+    html += "<button onclick='moveItem(\"" + id + "\"," + (rows.length - 1) + ",this,event)'>bottom</button> ";
+    html += "<button onclick='patchItem(\"" + id + "\",this,event)'>save</button> ";
+    html += "<button onclick='delItem(\"" + id + "\",this,event)'>del</button>";
     html += "</td></tr>";
   }
   t.innerHTML = html;
 }
 
-function matchSelectedAgent(m) {
-  if (!state.selectedAgentID && !state.selectedAgentName) return true;
-  const content = String((m && m.content) || "").toLowerCase();
-  const role = String((m && m.role) || "").toLowerCase();
-  const c = role + "\n" + content;
-  if (state.selectedAgentID) {
-    const id = state.selectedAgentID.toLowerCase();
-    if (c.includes(id) || c.includes("subagent:"+id) || c.includes("subagent-"+id)) return true;
-  }
-  if (state.selectedAgentName && c.includes(state.selectedAgentName.toLowerCase())) return true;
-  return false;
-}
-
-function renderHistory(items) {
-  const box = $("historyBox");
-  const all = (items || []);
-  const filtered = all.filter(matchSelectedAgent);
-  const shown = filtered.length > state.historyLimit ? filtered.slice(filtered.length - state.historyLimit) : filtered;
-  const base = Math.max(0, filtered.length - shown.length);
-  const nearBottom = (box.scrollHeight - (box.scrollTop + box.clientHeight)) <= 40;
-  const activeAgentFilter = !!(state.selectedAgentID || state.selectedAgentName);
-  if (shown.length === 0 && activeAgentFilter) {
-    box.textContent = "No messages for selected agent in this session yet.";
-  } else {
-    box.textContent = shown.map((m,i) => "["+(base+i)+"] "+m.role+": "+(m.content||"")).join("\n\n");
-  }
-  if (nearBottom || !activeAgentFilter) box.scrollTop = box.scrollHeight;
-  const meta = $("historyMeta");
-  if (meta) {
-    let tag = state.selectedSession ? "session="+state.selectedSession : "session=(none)";
-    if (state.selectedAgentID || state.selectedAgentName) tag += ", agent="+(state.selectedAgentName || state.selectedAgentID);
-    meta.textContent = "showing " + shown.length + " / " + filtered.length + " messages (limit " + state.historyLimit + "), " + tag;
-  }
-}
-
 function renderSubagents(items) {
   const t = $("subagentTable");
-  const ordered = (items || []).slice().reverse();
+  const rows = (items || []);
   let html = "<tr><th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th></tr>";
-  for (const it of ordered) {
+  for (const it of rows) {
     const running = it.status === "running" || it.status === "pending";
     const cls = running ? "agent-running" : "agent-stopped";
     const selected = state.selectedAgentID === it.id ? " selected" : "";
-    html += "<tr class='clickable "+cls+selected+"' onclick='selectAgent(\""+it.id+"\",\""+escapeAttr(it.name||"")+"\")'>";
-    html += "<td>"+escapeHTML(it.id)+"</td>";
-    html += "<td>"+escapeHTML(it.status)+"</td>";
-    html += "<td>"+escapeHTML(it.name||"")+"</td>";
-    html += "<td>"+escapeHTML(it.label||"")+"</td>";
-    html += "<td>"+(it.pending||0)+"</td>";
+    html += "<tr class='clickable " + cls + selected + "' onclick='selectAgent(\"" + it.id + "\",\"" + escapeAttr(it.name || "") + "\")'>";
+    html += "<td>" + escapeHTML(it.id) + "</td>";
+    html += "<td>" + escapeHTML(it.status) + "</td>";
+    html += "<td>" + escapeHTML(it.name || "") + "</td>";
+    html += "<td>" + escapeHTML(it.label || "") + "</td>";
+    html += "<td>" + (it.pending || 0) + "</td>";
     html += "<td>";
     if (running && state.hasKillControl) {
-      html += "<button onclick='killSubagent(\""+it.id+"\",this,event)'>KILL</button>";
+      html += "<button onclick='killSubagent(\"" + it.id + "\",this,event)'>KILL</button>";
     }
-    html += "</td>";
-    html += "</tr>";
+    html += "</td></tr>";
   }
   t.innerHTML = html;
 }
@@ -419,11 +648,12 @@ function renderSessions(items) {
   const rows = (items || []);
   let html = "<tr><th>Session</th><th>Msgs</th><th>Updated</th></tr>";
   for (const it of rows) {
-    const selected = state.selectedSession === it.key ? " selected" : "";
-    html += "<tr class='clickable"+selected+"' onclick='selectSession(\""+escapeAttr(it.key||"")+"\")'>";
-    html += "<td>"+escapeHTML(it.key||"")+"</td>";
-    html += "<td>"+(it.messages||0)+"</td>";
-    html += "<td>"+fmtTs(it.updated)+"</td>";
+    const key = it && it.key ? String(it.key) : "";
+    const selected = state.selectedSession === key ? " selected" : "";
+    html += "<tr class='clickable" + selected + "' onclick='selectSession(\"" + escapeAttr(key) + "\")'>";
+    html += "<td>" + escapeHTML(key) + "</td>";
+    html += "<td>" + (it.messages || 0) + "</td>";
+    html += "<td>" + fmtTs(it.updated) + "</td>";
     html += "</tr>";
   }
   t.innerHTML = html;
@@ -434,17 +664,17 @@ async function refreshInbound() {
     const res = await jfetch("/api/v1/inbound");
     renderInbound(res.items || []);
   } catch (e) {
-    $("inboundTable").innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
+    $("inboundTable").innerHTML = "<tr><td class='bad'>" + e.message + "</td></tr>";
   }
 }
 
 async function patchItem(id, btn, ev) {
   if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
-  const el = $("e_"+id);
+  const el = $("e_" + id);
   const content = el ? el.value : "";
   try {
     setButtonBusy(btn, true, "saving...");
-    await jfetch("/api/v1/inbound/"+id, { method:"PATCH", body: JSON.stringify({ content }) });
+    await jfetch("/api/v1/inbound/" + id, { method: "PATCH", body: JSON.stringify({ content }) });
     await refreshInbound();
     setSendOut("Queue item saved.", false);
   } catch (e) {
@@ -459,7 +689,7 @@ async function delItem(id, btn, ev) {
   if (!window.confirm("Delete this queued item?")) return;
   try {
     setButtonBusy(btn, true, "deleting...");
-    await jfetch("/api/v1/inbound/"+id, { method:"DELETE" });
+    await jfetch("/api/v1/inbound/" + id, { method: "DELETE" });
     await refreshInbound();
     setSendOut("Queue item deleted.", false);
   } catch (e) {
@@ -474,7 +704,7 @@ async function moveItem(id, index, btn, ev) {
   const old = btn && btn.textContent ? btn.textContent : "move";
   try {
     setButtonBusy(btn, true, "moving...");
-    await jfetch("/api/v1/inbound/"+id+"/move", { method:"POST", body: JSON.stringify({ index }) });
+    await jfetch("/api/v1/inbound/" + id + "/move", { method: "POST", body: JSON.stringify({ index }) });
     await refreshInbound();
   } catch (e) {
     setSendOut("ERROR: " + e.message, true);
@@ -498,18 +728,46 @@ async function killSubagent(id, btn, ev) {
   }
 }
 
+async function refreshHistoryForSession(sessionKey, shouldRender) {
+  if (!sessionKey) return;
+  const res = await jfetch("/api/v1/history?session_key=" + encodeURIComponent(sessionKey));
+  setSessionHistory(sessionKey, res.items || []);
+  if (shouldRender) renderHistory();
+}
+
+async function refreshAllHistories() {
+  const keys = [];
+  for (const s of state.sessions) {
+    const key = s && s.key ? String(s.key) : "";
+    if (key) keys.push(key);
+  }
+  if (keys.length === 0) {
+    renderHistory();
+    return;
+  }
+  await Promise.all(keys.map((key) => refreshHistoryForSession(key, false).catch(() => null)));
+  renderHistory();
+}
+
+function scheduleRefreshAllHistories() {
+  if (state.selectedSession) return;
+  if (allHistoryRefreshTimer) clearTimeout(allHistoryRefreshTimer);
+  allHistoryRefreshTimer = setTimeout(() => {
+    allHistoryRefreshTimer = null;
+    refreshAllHistories().catch((e) => setSendOut("ERROR: " + e.message, true));
+  }, 250);
+}
+
 async function refreshHistory() {
-  const key = state.selectedSession || $("sessionKey").value.trim();
-  const box = $("historyBox");
-  if (!key) { box.textContent = "session_key required"; return; }
   try {
-    const res = await jfetch("/api/v1/history?session_key="+encodeURIComponent(key));
-    state.selectedSession = key;
-    $("sessionKey").value = key;
-    state.history = res.items || [];
-    renderHistory(state.history);
+    if (state.selectedSession) {
+      await refreshHistoryForSession(state.selectedSession, true);
+      return;
+    }
+    await refreshAllHistories();
   } catch (e) {
-    box.textContent = "ERROR: "+e.message;
+    const list = $("historyList");
+    if (list) list.innerHTML = "<div class='small bad' style='padding:8px'>ERROR: " + escapeHTML(e.message) + "</div>";
   }
 }
 
@@ -519,7 +777,7 @@ async function refreshSubagents() {
     state.subagents = res.items || [];
     renderSubagents(state.subagents);
   } catch (e) {
-    $("subagentTable").innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
+    $("subagentTable").innerHTML = "<tr><td class='bad'>" + e.message + "</td></tr>";
   }
 }
 
@@ -528,17 +786,24 @@ async function refreshSessions() {
     const res = await jfetch("/api/v1/sessions?limit=200");
     state.sessions = res.items || [];
     renderSessions(state.sessions);
-    if (!state.selectedSession && state.sessions.length > 0) {
-      state.selectedSession = state.sessions[0].key || "";
-      $("sessionKey").value = state.selectedSession;
-      connectEvents();
+    if (!state.streamSession && state.sessions.length > 0) {
+      state.streamSession = state.sessions[0].key || "";
     }
+    if (state.streamSession && !$("sessionKey").value.trim()) {
+      $("sessionKey").value = state.streamSession;
+    }
+    if (state.selectedSession) {
+      await refreshHistoryForSession(state.selectedSession, true);
+    } else {
+      await refreshAllHistories();
+    }
+    if (state.streamSession) connectEvents(state.streamSession);
   } catch (e) {
-    $("sessionTable").innerHTML = "<tr><td class='bad'>"+e.message+"</td></tr>";
+    $("sessionTable").innerHTML = "<tr><td class='bad'>" + e.message + "</td></tr>";
   }
 }
 
-function connectEvents() {
+function connectEvents(forceKey) {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -547,13 +812,13 @@ function connectEvents() {
     es.close();
     es = null;
   }
-  const key = state.selectedSession || $("sessionKey").value.trim();
+  const key = forceKey || state.streamSession || $("sessionKey").value.trim();
   if (!key) return;
-  state.selectedSession = key;
-  $("sessionKey").value = key;
+  state.streamSession = key;
+  if (!$("sessionKey").value.trim()) $("sessionKey").value = key;
 
   setSSEStatus("SSE connecting...", "warn");
-  es = new EventSource("/api/v1/events?session_key="+encodeURIComponent(key));
+  es = new EventSource("/api/v1/events?session_key=" + encodeURIComponent(key));
   es.onopen = () => {
     setSSEStatus("SSE connected", "ok");
     renderSessions(state.sessions);
@@ -562,65 +827,227 @@ function connectEvents() {
     try {
       const data = JSON.parse(ev.data);
       renderInbound(data.inbound || []);
-      state.history = data.history || [];
-      renderHistory(state.history);
+      const snapshotKey = String(data.session_key || state.streamSession || "");
+      if (snapshotKey) setSessionHistory(snapshotKey, data.history || []);
+      if (state.selectedSession === snapshotKey || !state.selectedSession) {
+        renderHistory();
+      }
       state.subagents = data.subagents || [];
       renderSubagents(state.subagents);
       if (Array.isArray(data.sessions)) {
         state.sessions = data.sessions;
         renderSessions(state.sessions);
+        if (!state.selectedSession) scheduleRefreshAllHistories();
       }
       refreshRuntime(true);
     } catch (e) {
-      $("sendOut").textContent = "SSE parse error: "+e.message;
+      setSendOut("SSE parse error: " + e.message, true);
     }
   });
   es.onerror = () => {
     setSSEStatus("SSE disconnected, retrying...", "warn");
-    // Native EventSource reconnects automatically, but some gateways close streams
-    // permanently. If closed, rebuild connection explicitly.
     if (es && es.readyState === EventSource.CLOSED) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(() => connectEvents(), 1200);
+      reconnectTimer = setTimeout(() => connectEvents(state.streamSession), 1200);
     }
   };
 }
 
-function selectSession(key) {
+async function selectSession(key) {
   state.selectedSession = key || "";
+  state.streamSession = state.selectedSession || state.streamSession;
   state.selectedAgentID = "";
   state.selectedAgentName = "";
-  $("sessionKey").value = state.selectedSession;
+  state.expandedHistoryKey = "";
+  if (state.selectedSession) $("sessionKey").value = state.selectedSession;
   renderSubagents(state.subagents);
   renderSessions(state.sessions);
-  connectEvents();
-  refreshHistory();
+  connectEvents(state.streamSession);
+  await refreshHistory();
 }
 
-function selectAgent(id, name) {
+async function selectAgent(id, name) {
   state.selectedAgentID = id || "";
   state.selectedAgentName = name || "";
+  state.selectedSession = "";
+  state.expandedHistoryKey = "";
   renderSubagents(state.subagents);
-  renderHistory(state.history);
+  renderSessions(state.sessions);
+  await refreshHistory();
 }
 
-function clearAgentFilter() {
+async function clearAllFilters() {
+  state.selectedSession = "";
   state.selectedAgentID = "";
   state.selectedAgentName = "";
+  state.expandedHistoryKey = "";
   renderSubagents(state.subagents);
-  renderHistory(state.history);
+  renderSessions(state.sessions);
+  await refreshHistory();
 }
 
-function fmtTs(v) {
-  const n = Number(v || 0);
-  if (!n) return "";
-  const d = new Date(n);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleString();
+function setMessageMode(mode) {
+  const m = String(mode || "normal");
+  const allowed = ["normal", "inject", "first", "append", "delete"];
+  state.messageMode = allowed.indexOf(m) >= 0 ? m : "normal";
+  updateMessageModeUI();
 }
 
-function escapeAttr(v) {
-  return String(v || "").replace(/"/g, "&quot;");
+async function sendMainContent(content) {
+  const sessionKey = $("sessionKey").value.trim();
+  if (!sessionKey) throw new Error("session_key is required");
+  state.streamSession = sessionKey;
+  return jfetch("/api/v1/main/message", {
+    method: "POST",
+    body: JSON.stringify({ session_key: sessionKey, content }),
+  });
+}
+
+async function sendMessage() {
+  const btn = $("sendBtn");
+  try {
+    setButtonBusy(btn, true, "Sending...");
+    const mode = state.messageMode || "normal";
+    const input = $("content").value;
+    let content = "";
+    if (mode === "normal") {
+      content = input;
+    } else if (mode === "inject") {
+      if (!String(input).trim()) throw new Error("MESSAGE required for inject");
+      content = state.controlPrefix + "inject " + input;
+    } else if (mode === "first") {
+      if (!String(input).trim()) throw new Error("MESSAGE required for force first");
+      content = state.controlPrefix + "first " + input;
+    } else if (mode === "append") {
+      if (!String(input).trim()) throw new Error("MESSAGE required for append");
+      content = state.controlPrefix + state.controlPrefix + input;
+    } else if (mode === "delete") {
+      if (!window.confirm("Delete last queued message for this session?")) return;
+      content = state.controlPrefix + "delete";
+    } else {
+      throw new Error("Unknown mode: " + mode);
+    }
+
+    const res = await sendMainContent(content);
+    setSendOut(describeMainResponse(mode, res), false);
+    if (mode !== "delete") $("content").value = "";
+    connectEvents(state.streamSession);
+  } catch (e) {
+    setSendOut("ERROR: " + e.message, true);
+  } finally {
+    setButtonBusy(btn, false, "Send");
+  }
+}
+
+function updateMessageModeUI() {
+  const content = $("content");
+  const hint = $("commandHint");
+  if (!content || !hint) return;
+  const p = state.controlPrefix || "+";
+  const mode = state.messageMode || "normal";
+  let text = "";
+  if (mode === "normal") {
+    text = "Queue normal message";
+    content.placeholder = "Type message...";
+    content.disabled = false;
+  } else if (mode === "inject") {
+    text = "Control command: " + p + "inject MESSAGE";
+    content.placeholder = "MESSAGE for inject";
+    content.disabled = false;
+  } else if (mode === "first") {
+    text = "Control command: " + p + "first MESSAGE";
+    content.placeholder = "MESSAGE for force-first";
+    content.disabled = false;
+  } else if (mode === "append") {
+    text = "Control command: " + p + p + "MESSAGE";
+    content.placeholder = "MESSAGE to append to last queued message";
+    content.disabled = false;
+  } else if (mode === "delete") {
+    text = "Control command: " + p + "delete";
+    content.placeholder = "No message body needed for delete";
+    content.disabled = true;
+  }
+  hint.textContent = text;
+
+  const modeButtons = document.querySelectorAll(".modeBtn");
+  for (const b of modeButtons) {
+    const active = b.getAttribute("data-mode") === mode;
+    b.classList.toggle("active", active);
+  }
+}
+
+function setButtonBusy(btn, busy, label) {
+  if (!btn) return;
+  btn.disabled = !!busy;
+  if (typeof label === "string") btn.textContent = label;
+}
+
+function setSendOut(text, isError) {
+  const out = $("sendOut");
+  if (!out) return;
+  out.textContent = String(text || "");
+  out.className = "small " + (isError ? "bad" : "ok");
+}
+
+function describeMainResponse(mode, res) {
+  const r = res || {};
+  if (r.injected) return "Injected into active run.";
+  if (r.queued) return "Queued. Queue ID: " + (r.id || "(unknown)");
+  if (mode === "delete") return "Delete command sent.";
+  if (mode === "kill") return "Kill command sent.";
+  return "Sent.";
+}
+
+function initHistoryListEvents() {
+  const list = $("historyList");
+  if (!list) return;
+  list.addEventListener("click", (ev) => {
+    const row = ev.target && ev.target.closest ? ev.target.closest(".historyRow") : null;
+    if (!row) return;
+    state.expandedHistoryKey = row.getAttribute("data-hk") || "";
+    renderHistory();
+  });
+}
+
+function initModeButtons() {
+  const modeButtons = document.querySelectorAll(".modeBtn");
+  for (const b of modeButtons) {
+    b.addEventListener("click", () => {
+      setMessageMode(b.getAttribute("data-mode") || "normal");
+    });
+  }
+}
+
+function applyMobilePanels() {
+  const rightCol = $("rightCol");
+  if (!rightCol) return;
+  const mobile = window.matchMedia && window.matchMedia("(max-width: 980px)").matches;
+  rightCol.classList.toggle("mobile-mode", !!mobile);
+  const cards = rightCol.querySelectorAll(".rightCard");
+  for (const card of cards) {
+    const panel = card.getAttribute("data-panel");
+    const active = !mobile || panel === state.mobilePanel;
+    card.classList.toggle("active", !!active);
+  }
+  const buttons = document.querySelectorAll(".mobilePanelBtn");
+  for (const b of buttons) {
+    b.classList.toggle("active", b.getAttribute("data-panel") === state.mobilePanel);
+  }
+}
+
+function initMobilePanels() {
+  const saved = localStorage.getItem("pc_dashboard_mobile_panel");
+  if (saved) state.mobilePanel = saved;
+  const buttons = document.querySelectorAll(".mobilePanelBtn");
+  for (const b of buttons) {
+    b.addEventListener("click", () => {
+      state.mobilePanel = b.getAttribute("data-panel") || "message";
+      localStorage.setItem("pc_dashboard_mobile_panel", state.mobilePanel);
+      applyMobilePanels();
+    });
+  }
+  window.addEventListener("resize", applyMobilePanels);
+  applyMobilePanels();
 }
 
 function initSplitter() {
@@ -656,6 +1083,7 @@ function initSplitter() {
 function initRightRowSplitters() {
   const container = document.querySelector(".rightCol");
   if (!container) return;
+  if (window.matchMedia && window.matchMedia("(max-width: 980px)").matches) return;
   const cards = Array.from(container.querySelectorAll(".rightCard"));
   if (cards.length !== 4) return;
 
@@ -769,7 +1197,7 @@ function buildRuntimeSummary(rt) {
   lines.push("- subagent running: " + (sub.running_count || 0));
   lines.push("- subagent recent: " + (sub.recent_count || 0));
   lines.push("- subagent msg queue: " + (sub.queue_count || 0));
-  return lines.join("\n");
+  return lines.join("\\n");
 }
 
 async function refreshRuntime(silent) {
@@ -788,66 +1216,12 @@ async function refreshRuntime(silent) {
       available: !!cfg.available,
       error: cfg.error || "",
     };
-    $("runtimeConfigBox").textContent = "Config Meta\n" + fmtObj(top) + "\n\nSanitized Config\n" + fmtObj(cfg.sanitized || {});
+    $("runtimeConfigBox").textContent = "Config Meta\\n" + fmtObj(top) + "\\n\\nSanitized Config\\n" + fmtObj(cfg.sanitized || {});
     updateMessageModeUI();
     renderSubagents(state.subagents);
   } catch (e) {
     if (!silent) $("runtimeSummaryBox").textContent = "ERROR: " + e.message;
   }
-}
-
-function updateMessageModeUI() {
-  const modeEl = $("messageMode");
-  const content = $("content");
-  const hint = $("commandHint");
-  if (!modeEl || !content || !hint) return;
-  const mode = modeEl.value || "normal";
-  const p = state.controlPrefix || "+";
-  let text = "";
-  if (mode === "normal") {
-    text = "Queue normal message";
-    content.placeholder = "Type message...";
-    content.disabled = false;
-  } else if (mode === "inject") {
-    text = "Control command: " + p + "inject MESSAGE";
-    content.placeholder = "MESSAGE for inject";
-    content.disabled = false;
-  } else if (mode === "first") {
-    text = "Control command: " + p + "first MESSAGE";
-    content.placeholder = "MESSAGE for force-first";
-    content.disabled = false;
-  } else if (mode === "append") {
-    text = "Control command: " + p + p + "MESSAGE";
-    content.placeholder = "MESSAGE to append to last queued message";
-    content.disabled = false;
-  } else if (mode === "delete") {
-    text = "Control command: " + p + "delete";
-    content.placeholder = "No message body needed for delete";
-    content.disabled = true;
-  }
-  hint.textContent = text;
-}
-
-function setButtonBusy(btn, busy, label) {
-  if (!btn) return;
-  btn.disabled = !!busy;
-  if (typeof label === "string") btn.textContent = label;
-}
-
-function setSendOut(text, isError) {
-  const out = $("sendOut");
-  if (!out) return;
-  out.textContent = String(text || "");
-  out.className = "small " + (isError ? "bad" : "ok");
-}
-
-function describeMainResponse(mode, res) {
-  const r = res || {};
-  if (r.injected) return "Injected into active run.";
-  if (r.queued) return "Queued. Queue ID: " + (r.id || "(unknown)");
-  if (mode === "delete") return "Delete command sent.";
-  if (mode === "kill") return "Kill command sent.";
-  return "Sent.";
 }
 
 function showRuntime() {
@@ -900,8 +1274,7 @@ function initTheme() {
 
 const sendBtn = $("sendBtn");
 if (sendBtn) sendBtn.addEventListener("click", sendMessage);
-const messageMode = $("messageMode");
-if (messageMode) messageMode.addEventListener("change", updateMessageModeUI);
+
 const contentBox = $("content");
 if (contentBox) {
   contentBox.addEventListener("keydown", (ev) => {
@@ -911,12 +1284,19 @@ if (contentBox) {
     }
   });
 }
-const refreshInboundBtn = $("refreshInbound");
-if (refreshInboundBtn) refreshInboundBtn.addEventListener("click", refreshInbound);
+
 const sessionKey = $("sessionKey");
-if (sessionKey) sessionKey.addEventListener("change", () => selectSession(sessionKey.value.trim()));
-const clearAgentBtn = $("clearAgentBtn");
-if (clearAgentBtn) clearAgentBtn.addEventListener("click", clearAgentFilter);
+if (sessionKey) {
+  sessionKey.addEventListener("change", async () => {
+    const key = sessionKey.value.trim();
+    if (!key) return;
+    state.streamSession = key;
+    await selectSession(key);
+  });
+}
+
+const clearAllBtn = $("clearAllBtn");
+if (clearAllBtn) clearAllBtn.addEventListener("click", () => { clearAllFilters(); });
 const showRuntimeBtn = $("showRuntimeBtn");
 if (showRuntimeBtn) showRuntimeBtn.addEventListener("click", showRuntime);
 const closeRuntimeBtn = $("closeRuntimeBtn");
@@ -933,17 +1313,17 @@ window.delItem = delItem;
 window.moveItem = moveItem;
 window.selectSession = selectSession;
 window.selectAgent = selectAgent;
-window.clearAgentFilter = clearAgentFilter;
 window.killSubagent = killSubagent;
 
 initTheme();
 initSplitter();
 initRightRowSplitters();
-updateMessageModeUI();
+initHistoryListEvents();
+initModeButtons();
+initMobilePanels();
+setMessageMode("normal");
 refreshInbound();
 refreshSubagents();
 refreshSessions();
-refreshHistory();
 refreshRuntime(true);
-connectEvents();
 `

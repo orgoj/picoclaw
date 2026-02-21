@@ -621,6 +621,25 @@ func (a *inboundAPI) listSubagentViews() []taskView {
 			Pending:   len(t.PendingMsgs),
 		})
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		li := out[i]
+		rj := out[j]
+		leftTS := li.Started
+		if leftTS == 0 {
+			leftTS = li.Created
+		}
+		rightTS := rj.Started
+		if rightTS == 0 {
+			rightTS = rj.Created
+		}
+		if leftTS != rightTS {
+			return leftTS > rightTS
+		}
+		if li.Created != rj.Created {
+			return li.Created > rj.Created
+		}
+		return li.ID < rj.ID
+	})
 	return out
 }
 

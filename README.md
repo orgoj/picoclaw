@@ -89,14 +89,16 @@
 >     - Right: stacked `Agents / Sessions / Queue / Message`.
 >     - Click filters: session and subagent.
 >     - Draggable splitters (horizontal + vertical), persisted in browser local storage.
->     - History view keeps latest 1000 messages with scroll.
->     - Message panel modes map to prefix controls (`inject/first/delete/append`) using active runtime prefix.
+>     - Top bar `Clear all filters` resets both session+agent filters to all-session history.
+>     - Selecting a subagent clears session selection (agent and session filters are mutually exclusive).
+>     - History view keeps latest 1000 messages in one-line rows; each row can be clicked to expand full content.
+>     - Message panel uses dedicated mode buttons (`Queue/Inject/Force First/Append/Delete Last`) mapped to prefix controls.
 >     - Agents table shows `KILL` action for running/pending tasks when control is enabled.
->     - Agents panel includes `Clear filter` to quickly return from subagent-only history view.
 >     - Queue table supports per-row reorder (`top/up/down/bottom`) and delete.
 >     - Destructive dashboard actions (`Delete Last`, queue `del`, `KILL`) require confirmation.
 >     - Action buttons use busy states to reduce accidental duplicate clicks.
 >     - History pane keeps manual reading position and no longer forces auto-scroll while user is inspecting older lines.
+>     - Mobile mode avoids long stacked scroll by showing one right-side panel tab at a time.
 > - **Startup/idle/autonomy behavior**
 >   - Startup prompt and preflight warning injection into autonomous idle flow.
 >   - Preflight skill-lint switched to warning-only with idle-session warning summary.
