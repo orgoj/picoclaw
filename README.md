@@ -203,6 +203,15 @@ make build-all
 
 # Build And Install
 make install
+
+# Hybrid memory optimization from binary (dry-run)
+picoclaw memopt --workspace ~/.picoclaw/workspace
+
+# Apply deterministic pass
+picoclaw memopt --workspace ~/.picoclaw/workspace --apply
+
+# Apply deterministic + optional LLM pass
+picoclaw memopt --workspace ~/.picoclaw/workspace --apply --llm
 ```
 
 ## 🐳 Docker Compose

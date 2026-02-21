@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.31 - 2026-02-21
+
+### Added
+- New runtime CLI command: `picoclaw memopt` for whole-workspace memory optimization directly from the installed binary (no Makefile required).
+- `picoclaw memopt` supports:
+  - `--workspace` override (default from config workspace),
+  - safe scoped processing limited to `workspace/memory/**` and `workspace/agents/*/memory/**`,
+  - default `--dry-run` behavior,
+  - `--apply` write mode,
+  - optional `--llm` pass over `MEMORY.md` files.
+- `--help` for `memopt` now works without requiring a valid config file.
+
 ## v0.1.30 - 2026-02-21
 
 ### Fixed
@@ -23,7 +35,6 @@
 
 ### Added
 - New Admin API endpoint: `/api/v1/history/agent-log?tail=N` returning recent `agent.log` lines for dashboard all-history aggregation.
-- New hybrid memory optimization command: `make memopt`, backed by `scripts/memopt-workspace.sh` for whole-workspace scope (`memory/**` + `agents/*/memory/**`) with `dry-run/apply` and optional `LLM=1` pass over `MEMORY.md` files.
 
 ## v0.1.29 - 2026-02-21
 
