@@ -28,7 +28,7 @@
   - upstream referencni commit: `58b5e21`
   - zatim low priority, pokud necilime na stare konfigurace
 
-## Config parity (high priority)
+## Config parity
 
 - [ ] sjednotit datovou strukturu `agents.defaults` a `agents.subagents` (plus `agents.<name>` override) do plne parity
   - subagent runtime ma mit stejne konfigurovatelne limity jako main agent (timeout/retries/backoff/context apod.)
