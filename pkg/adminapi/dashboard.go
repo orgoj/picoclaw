@@ -138,6 +138,11 @@ const dashboardHTML = `<!doctype html>
       box-sizing:border-box;
     }
     textarea { min-height:72px; resize:vertical; }
+    #content {
+      min-height:56px;
+      max-height:22vh;
+      max-height:22dvh;
+    }
     button {
       background:var(--input);
       color:var(--text);
@@ -155,9 +160,15 @@ const dashboardHTML = `<!doctype html>
     td,th { border-top:1px solid var(--border); padding:6px; text-align:left; vertical-align:top; }
     tr.clickable { cursor:pointer; }
     tr.clickable:hover { background: color-mix(in srgb, var(--input) 70%, var(--border)); }
-    tr.selected { background: color-mix(in srgb, var(--acc) 20%, var(--input)); }
+    tr.selected {
+      background: color-mix(in srgb, var(--info) 24%, var(--input));
+      box-shadow: inset 4px 0 0 var(--info);
+    }
+    tr.selected td:first-child { font-weight:700; }
     tr.agent-running { background: color-mix(in srgb, var(--acc) 15%, transparent); }
     tr.agent-stopped { background: color-mix(in srgb, var(--muted) 22%, transparent); }
+    tr.agent-running.selected { background: color-mix(in srgb, var(--acc) 20%, var(--info) 18%); }
+    tr.agent-stopped.selected { background: color-mix(in srgb, var(--muted) 20%, var(--info) 18%); }
     .ok { color:var(--acc); } .warn { color:var(--warn); } .bad { color:var(--bad); }
     pre {
       white-space:pre-wrap; word-break:break-word; background:var(--input);
@@ -165,6 +176,24 @@ const dashboardHTML = `<!doctype html>
       overflow:auto; flex:1; min-height:0;
     }
     .leftCol { min-height:0; }
+    .filterState {
+      margin-bottom:6px;
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .pill {
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:1px 8px;
+      font-size:11px;
+      line-height:18px;
+      background:var(--panel);
+    }
+    .pill.all { color:var(--info); border-color: color-mix(in srgb, var(--info) 35%, var(--border)); }
+    .pill.session { color:#0ea5e9; border-color: color-mix(in srgb, #0ea5e9 35%, var(--border)); }
+    .pill.agent { color:#22c55e; border-color: color-mix(in srgb, #22c55e 35%, var(--border)); }
     .historyMeta { margin-bottom:8px; }
     .historyList {
       flex:1;
@@ -220,6 +249,7 @@ const dashboardHTML = `<!doctype html>
     .historyRow.role-assistant .role { color:#22c55e; border-color: color-mix(in srgb, #22c55e 30%, var(--border)); }
     .historyRow.role-system .role { color:#a855f7; border-color: color-mix(in srgb, #a855f7 30%, var(--border)); }
     .historyRow.role-tool .role { color:#f97316; border-color: color-mix(in srgb, #f97316 30%, var(--border)); }
+    .historyRow.role-log .role { color:#f59e0b; border-color: color-mix(in srgb, #f59e0b 30%, var(--border)); }
     .historyRow.tone-error { box-shadow: inset 3px 0 0 var(--bad); }
     .historyRow.tone-warn { box-shadow: inset 3px 0 0 var(--warn); }
     .historyRow.tone-info { box-shadow: inset 3px 0 0 var(--info); }
@@ -278,6 +308,7 @@ const dashboardHTML = `<!doctype html>
       .rowSplitter { display:none; }
       .leftCol { min-height:56vh; }
       .historyDetail { max-height:34vh; min-height:100px; }
+      #content { max-height:18vh; max-height:18dvh; }
       .mobilePanelTabs {
         display:flex;
         gap:6px;
@@ -322,6 +353,7 @@ const dashboardHTML = `<!doctype html>
   <div class="app">
     <section class="card leftCol">
       <h2>History</h2>
+      <div id="filterState" class="filterState"></div>
       <div id="historyMeta" class="small historyMeta"></div>
       <div id="historyList" class="historyList"></div>
       <div id="historyDetail" class="historyDetail small">Click any row to expand full message.</div>
@@ -395,9 +427,12 @@ const state = {
   selectedAgentName: "",
   expandedHistoryKey: "",
   historyBySession: {},
+  agentLogLines: [],
   sessions: [],
   subagents: [],
-  historyLimit: 1000,
+  historyLimit: 3000,
+  sessionsFetchLimit: 1000,
+  agentLogTailLimit: 5000,
   controlPrefix: "+",
   hasKillControl: true,
   messageMode: "normal",
@@ -522,6 +557,20 @@ function collectHistoryEntries() {
       });
     }
   }
+  if (!state.selectedSession) {
+    for (let i = 0; i < state.agentLogLines.length; i++) {
+      const line = String(state.agentLogLines[i] || "");
+      out.push({
+        historyKey: "agent.log#" + i,
+        sessionKey: "agent.log",
+        index: i,
+        role: "log",
+        content: line,
+        tone: detectTone(line),
+        agentName: detectAgentName(line),
+      });
+    }
+  }
   return out;
 }
 
@@ -589,10 +638,34 @@ function renderHistory() {
 
   const meta = $("historyMeta");
   if (meta) {
-    const scope = state.selectedSession ? ("session=" + state.selectedSession) : "session=ALL";
+    const scope = state.selectedSession ? ("session=" + state.selectedSession) : "session=ALL(sessions+agent.log)";
     const agent = (state.selectedAgentID || state.selectedAgentName) ? ", agent=" + (state.selectedAgentName || state.selectedAgentID) : "";
     meta.textContent = "showing " + shown.length + " / " + filtered.length + " messages (limit " + state.historyLimit + "), " + scope + agent;
   }
+  updateFilterStateUI();
+}
+
+function updateFilterStateUI() {
+  const box = $("filterState");
+  if (!box) return;
+  const hasSession = !!state.selectedSession;
+  const hasAgent = !!(state.selectedAgentID || state.selectedAgentName);
+  if (!hasSession && !hasAgent) {
+    box.innerHTML = "<span class='pill all'>ALL sources</span><span class='small'>No filter selected</span>";
+    return;
+  }
+  let html = "";
+  if (hasSession) {
+    html += "<span class='pill session'>SESSION</span>";
+    html += "<span class='small'>" + escapeHTML(state.selectedSession) + "</span>";
+  } else {
+    html += "<span class='pill all'>ALL sources</span>";
+  }
+  if (hasAgent) {
+    html += "<span class='pill agent'>AGENT</span>";
+    html += "<span class='small'>" + escapeHTML(state.selectedAgentName || state.selectedAgentID) + "</span>";
+  }
+  box.innerHTML = html;
 }
 
 function renderInbound(items) {
@@ -735,6 +808,16 @@ async function refreshHistoryForSession(sessionKey, shouldRender) {
   if (shouldRender) renderHistory();
 }
 
+async function refreshAgentLogHistory(shouldRender) {
+  try {
+    const res = await jfetch("/api/v1/history/agent-log?tail=" + state.agentLogTailLimit);
+    state.agentLogLines = Array.isArray(res.lines) ? res.lines : [];
+  } catch (_) {
+    state.agentLogLines = [];
+  }
+  if (shouldRender) renderHistory();
+}
+
 async function refreshAllHistories() {
   const keys = [];
   for (const s of state.sessions) {
@@ -746,6 +829,7 @@ async function refreshAllHistories() {
     return;
   }
   await Promise.all(keys.map((key) => refreshHistoryForSession(key, false).catch(() => null)));
+  await refreshAgentLogHistory(false);
   renderHistory();
 }
 
@@ -783,7 +867,7 @@ async function refreshSubagents() {
 
 async function refreshSessions() {
   try {
-    const res = await jfetch("/api/v1/sessions?limit=200");
+    const res = await jfetch("/api/v1/sessions?limit=" + state.sessionsFetchLimit);
     state.sessions = res.items || [];
     renderSessions(state.sessions);
     if (!state.streamSession && state.sessions.length > 0) {
@@ -829,6 +913,7 @@ function connectEvents(forceKey) {
       renderInbound(data.inbound || []);
       const snapshotKey = String(data.session_key || state.streamSession || "");
       if (snapshotKey) setSessionHistory(snapshotKey, data.history || []);
+      if (!state.selectedSession) refreshAgentLogHistory(false).then(() => renderHistory());
       if (state.selectedSession === snapshotKey || !state.selectedSession) {
         renderHistory();
       }
@@ -1197,7 +1282,7 @@ function buildRuntimeSummary(rt) {
   lines.push("- subagent running: " + (sub.running_count || 0));
   lines.push("- subagent recent: " + (sub.recent_count || 0));
   lines.push("- subagent msg queue: " + (sub.queue_count || 0));
-  return lines.join("\\n");
+  return lines.join("\n");
 }
 
 async function refreshRuntime(silent) {
@@ -1216,7 +1301,7 @@ async function refreshRuntime(silent) {
       available: !!cfg.available,
       error: cfg.error || "",
     };
-    $("runtimeConfigBox").textContent = "Config Meta\\n" + fmtObj(top) + "\\n\\nSanitized Config\\n" + fmtObj(cfg.sanitized || {});
+    $("runtimeConfigBox").textContent = "Config Meta\n" + fmtObj(top) + "\n\nSanitized Config\n" + fmtObj(cfg.sanitized || {});
     updateMessageModeUI();
     renderSubagents(state.subagents);
   } catch (e) {

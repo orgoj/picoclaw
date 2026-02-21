@@ -1,10 +1,12 @@
 package adminapi
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -86,6 +88,7 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/inbound", api.handleInboundRoot)
 	r.HandleFunc("/api/v1/inbound/", api.handleInboundItem)
 	r.HandleFunc("/api/v1/history", api.handleHistory)
+	r.HandleFunc("/api/v1/history/agent-log", api.handleAgentLogHistory)
 	r.HandleFunc("/api/v1/sessions", api.handleSessions)
 	r.HandleFunc("/api/v1/main/message", api.handleMainMessage)
 	r.HandleFunc("/api/v1/subagents", api.handleSubagents)
@@ -209,6 +212,41 @@ func (a *inboundAPI) handleSessions(w http.ResponseWriter, r *http.Request) {
 	items := lp.ListSessions(limit)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
+	})
+}
+
+func (a *inboundAPI) handleAgentLogHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	if a.cfg == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "config unavailable"})
+		return
+	}
+	tail := 500
+	if raw := strings.TrimSpace(r.URL.Query().Get("tail")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			tail = n
+		}
+	}
+	if tail > 5000 {
+		tail = 5000
+	}
+
+	logPath := filepath.Join(a.cfg.LoggingDirPath(), "agent.log")
+	lines, err := readLastLines(logPath, tail)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"path":  logPath,
+			"lines": []string{},
+			"error": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":  logPath,
+		"lines": lines,
 	})
 }
 
@@ -641,6 +679,35 @@ func (a *inboundAPI) listSubagentViews() []taskView {
 		return li.ID < rj.ID
 	})
 	return out
+}
+
+func readLastLines(path string, limit int) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	if limit <= 0 {
+		limit = 1
+	}
+	ring := make([]string, 0, limit)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := sc.Text()
+		if len(ring) < limit {
+			ring = append(ring, line)
+			continue
+		}
+		copy(ring, ring[1:])
+		ring[len(ring)-1] = line
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]string, len(ring))
+	copy(out, ring)
+	return out, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body map[string]any) {

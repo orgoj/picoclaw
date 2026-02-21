@@ -91,8 +91,12 @@
 >     - Draggable splitters (horizontal + vertical), persisted in browser local storage.
 >     - Top bar `Clear all filters` resets both session+agent filters to all-session history.
 >     - Selecting a subagent clears session selection (agent and session filters are mutually exclusive).
+>     - Active filter scope is always explicit in history header (`ALL`/`SESSION`/`AGENT`) with strong selected-row highlighting in Sessions/Agents tables.
 >     - History view keeps latest 1000 messages in one-line rows; each row can be clicked to expand full content.
+>     - All-history scope also includes recent runtime console lines from `agent.log` for operator parity with live console view.
+>     - Default all-history mode now maximizes visible data with bounded caps (sessions list + `agent.log` tail + UI render cap) to stay responsive.
 >     - Message panel uses dedicated mode buttons (`Queue/Inject/Force First/Append/Delete Last`) mapped to prefix controls.
+>     - Message textarea has responsive max-height on mobile to avoid overflow past viewport.
 >     - Agents table shows `KILL` action for running/pending tasks when control is enabled.
 >     - Queue table supports per-row reorder (`top/up/down/bottom`) and delete.
 >     - Destructive dashboard actions (`Delete Last`, queue `del`, `KILL`) require confirmation.

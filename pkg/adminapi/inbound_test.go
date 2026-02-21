@@ -322,3 +322,50 @@ func TestRuntimeRoute_ProvidesSummaryAndSanitizedConfig(t *testing.T) {
 		t.Fatalf("sanitized config leaked secrets: %s", sanitized)
 	}
 }
+
+func TestAgentLogHistoryRoute_ReturnsTailLines(t *testing.T) {
+	msgBus := bus.NewMessageBus()
+	mux := http.NewServeMux()
+
+	logDir := t.TempDir()
+	logPath := filepath.Join(logDir, "agent.log")
+	raw := strings.Join([]string{
+		"line-1",
+		"line-2",
+		"line-3",
+		"line-4",
+	}, "\n") + "\n"
+	if err := os.WriteFile(logPath, []byte(raw), 0644); err != nil {
+		t.Fatalf("write agent log: %v", err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Logging.Dir = logDir
+
+	RegisterInboundRoutes(&muxRegistrar{mux: mux}, msgBus, fakeHistory{}, &RuntimeOptions{
+		Config: cfg,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history/agent-log?tail=2", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET agent-log history status=%d want=200 body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Path  string   `json:"path"`
+		Lines []string `json:"lines"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal agent-log response: %v", err)
+	}
+	if resp.Path != logPath {
+		t.Fatalf("path=%q want=%q", resp.Path, logPath)
+	}
+	if len(resp.Lines) != 2 {
+		t.Fatalf("lines len=%d want=2", len(resp.Lines))
+	}
+	if resp.Lines[0] != "line-3" || resp.Lines[1] != "line-4" {
+		t.Fatalf("tail lines mismatch: %+v", resp.Lines)
+	}
+}
