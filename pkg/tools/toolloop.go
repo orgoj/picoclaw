@@ -99,13 +99,6 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 			messages = trimMessages(messages, effectiveContextLimit)
 		}
 
-		logger.DebugCF("toolloop", "LLM iteration",
-			map[string]any{
-				"run_id":    config.RunID,
-				"iteration": iteration,
-				"max":       config.MaxIterations,
-			})
-
 		// 1. Build tool definitions
 		var providerToolDefs []providers.ToolDefinition
 		if config.Tools != nil {
@@ -117,24 +110,25 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 
 		tokenEstimate := estimateTokens(messages)
 		contextWindowTokens := 0
-		contextUsagePct := 0.0
 		if effectiveContextLimit > 0 {
 			contextWindowTokens = effectiveContextLimit / 3
-			if contextWindowTokens > 0 {
-				contextUsagePct = (float64(tokenEstimate) / float64(contextWindowTokens)) * 100
-			}
 		}
-		logger.DebugCF("toolloop", "LLM request", map[string]any{
-			"run_id":            config.RunID,
-			"iteration":         iteration,
-			"model":             config.Model,
-			"messages_count":    len(messages),
-			"tools_count":       len(providerToolDefs),
-			"max_tokens":        llmOptionInt(llmOpts, "max_tokens"),
-			"temperature":       llmOptionFloat(llmOpts, "temperature"),
-			"token_estimate":    tokenEstimate,
-			"context_window":    contextWindowTokens,
-			"context_usage_pct": contextUsagePct,
+		contextRemainingTokens := 0
+		if contextWindowTokens > tokenEstimate {
+			contextRemainingTokens = contextWindowTokens - tokenEstimate
+		}
+		contextState := fmt.Sprintf("%d/%d", tokenEstimate, contextWindowTokens)
+		logger.DebugCF("toolloop", "LLM iteration", map[string]any{
+			"run_id":                      config.RunID,
+			"iteration":                   iteration,
+			"max":                         config.MaxIterations,
+			"context_state":               contextState,
+			"context_tokens":              tokenEstimate,
+			"context_window":              contextWindowTokens,
+			"context_remaining":           contextRemainingTokens,
+			"messages_count":              len(messages),
+			"tools_count":                 len(providerToolDefs),
+			"history_threshold_effective": effectiveHistoryThreshold,
 		})
 
 		// 3. Call LLM
@@ -415,46 +409,4 @@ func estimateTokens(messages []providers.Message) int {
 		total += utf8.RuneCountInString(m.Content) / 3
 	}
 	return total
-}
-
-func llmOptionInt(opts map[string]any, key string) int {
-	if opts == nil {
-		return 0
-	}
-	v, ok := opts[key]
-	if !ok {
-		return 0
-	}
-	switch t := v.(type) {
-	case int:
-		return t
-	case int64:
-		return int(t)
-	case float64:
-		return int(t)
-	default:
-		return 0
-	}
-}
-
-func llmOptionFloat(opts map[string]any, key string) float64 {
-	if opts == nil {
-		return 0
-	}
-	v, ok := opts[key]
-	if !ok {
-		return 0
-	}
-	switch t := v.(type) {
-	case float64:
-		return t
-	case float32:
-		return float64(t)
-	case int:
-		return float64(t)
-	case int64:
-		return float64(t)
-	default:
-		return 0
-	}
 }

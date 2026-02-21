@@ -1148,37 +1148,24 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			})
 		}
 
-		logger.DebugCF("agent", "LLM iteration",
-			map[string]interface{}{
-				"run_id":      runID,
-				"session_key": opts.SessionKey,
-				"iteration":   iteration,
-				"max":         al.maxIterations,
-			})
-
 		// Build tool definitions
 		providerToolDefs := al.tools.ToProviderDefs()
 		tokenEstimate := al.estimateTokens(messages)
-		contextUsagePct := 0.0
-		if al.contextWindow > 0 {
-			contextUsagePct = (float64(tokenEstimate) / float64(al.contextWindow)) * 100.0
+		contextRemaining := 0
+		if al.contextWindow > tokenEstimate {
+			contextRemaining = al.contextWindow - tokenEstimate
 		}
-
-		// Log LLM request details
-		logger.DebugCF("agent", "LLM request",
+		contextState := fmt.Sprintf("%d/%d", tokenEstimate, al.contextWindow)
+		logger.DebugCF("agent", "LLM iteration",
 			map[string]interface{}{
 				"run_id":            runID,
 				"session_key":       opts.SessionKey,
 				"iteration":         iteration,
-				"model":             al.model,
-				"messages_count":    len(messages),
-				"tools_count":       len(providerToolDefs),
-				"max_tokens":        al.maxTokens,
-				"temperature":       al.temperature,
-				"system_prompt_len": len(messages[0].Content),
-				"token_estimate":    tokenEstimate,
+				"max":               al.maxIterations,
+				"context_state":     contextState,
+				"context_tokens":    tokenEstimate,
 				"context_window":    al.contextWindow,
-				"context_usage_pct": contextUsagePct,
+				"context_remaining": contextRemaining,
 			})
 
 		// Keep full payload in audit JSON for observability/forensics.
