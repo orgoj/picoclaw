@@ -1,6 +1,7 @@
 package channels
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,25 @@ func TestMarkdownToTelegramHTML(t *testing.T) {
 				t.Errorf("markdownToTelegramHTML(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestSplitTelegramMessage_SplitsLongContent(t *testing.T) {
+	input := strings.Repeat("a", telegramMessageLimit+120)
+	chunks := splitTelegramMessage(input)
+	if len(chunks) < 2 {
+		t.Fatalf("expected split into multiple chunks, got %d", len(chunks))
+	}
+	for i, chunk := range chunks {
+		if len(chunk) > telegramMessageLimit {
+			t.Fatalf("chunk %d too long: %d", i, len(chunk))
+		}
+	}
+}
+
+func TestSplitTelegramMessage_EmptyReturnsNil(t *testing.T) {
+	chunks := splitTelegramMessage("   ")
+	if len(chunks) != 0 {
+		t.Fatalf("expected no chunks for empty content, got %d", len(chunks))
 	}
 }

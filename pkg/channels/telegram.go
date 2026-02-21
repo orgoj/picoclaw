@@ -45,6 +45,8 @@ type thinkingCancel struct {
 	fn context.CancelFunc
 }
 
+const telegramMessageLimit = 3800
+
 func (c *thinkingCancel) Cancel() {
 	if c != nil && c.fn != nil {
 		c.fn()
@@ -184,15 +186,23 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 		c.stopThinking.Delete(msg.ChatID)
 	}
 
-	htmlContent := markdownToTelegramHTML(msg.Content)
+	chunks := splitTelegramMessage(msg.Content)
+	if len(chunks) == 0 {
+		return nil
+	}
 
 	// Try to edit placeholder
 	if pID, ok := c.placeholders.Load(msg.ChatID); ok {
 		c.placeholders.Delete(msg.ChatID)
-		editMsg := tu.EditMessageText(tu.ID(chatID), pID.(int), htmlContent)
+		editMsg := tu.EditMessageText(tu.ID(chatID), pID.(int), markdownToTelegramHTML(chunks[0]))
 		editMsg.ParseMode = telego.ModeHTML
 
 		if _, err = c.bot.EditMessageText(ctx, editMsg); err == nil {
+			for _, chunk := range chunks[1:] {
+				if err := c.sendChunk(ctx, chatID, chunk); err != nil {
+					return err
+				}
+			}
 			return nil
 		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
@@ -200,21 +210,40 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 		// Fallback to new message if edit fails
 	}
 
+	for _, chunk := range chunks {
+		if err := c.sendChunk(ctx, chatID, chunk); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func splitTelegramMessage(content string) []string {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	return splitMessage(content, telegramMessageLimit)
+}
+
+func (c *TelegramChannel) sendChunk(ctx context.Context, chatID int64, content string) error {
+	htmlContent := markdownToTelegramHTML(content)
 	tgMsg := tu.Message(tu.ID(chatID), htmlContent)
 	tgMsg.ParseMode = telego.ModeHTML
 
-	if _, err = c.bot.SendMessage(ctx, tgMsg); err != nil {
+	if _, err := c.bot.SendMessage(ctx, tgMsg); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
 		logger.ErrorCF("telegram", "HTML parse failed, falling back to plain text", map[string]interface{}{
 			"error": err.Error(),
 		})
+		tgMsg.Text = content
 		tgMsg.ParseMode = ""
-		_, err = c.bot.SendMessage(ctx, tgMsg)
-		return err
+		if _, plainErr := c.bot.SendMessage(ctx, tgMsg); plainErr != nil {
+			return plainErr
+		}
 	}
-
 	return nil
 }
 

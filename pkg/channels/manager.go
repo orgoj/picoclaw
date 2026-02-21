@@ -292,6 +292,7 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 				logger.WarnCF("channels", "Unknown channel for outbound message", map[string]interface{}{
 					"channel": msg.Channel,
 				})
+				m.notifyDeliveryFailure(msg, fmt.Errorf("unknown channel: %s", msg.Channel))
 				continue
 			}
 
@@ -307,8 +308,46 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 					"channel": msg.Channel,
 					"error":   err.Error(),
 				})
+				m.notifyDeliveryFailure(msg, err)
 			}
 		}
+	}
+}
+
+func (m *Manager) notifyDeliveryFailure(msg bus.OutboundMessage, deliveryErr error) {
+	if m.bus == nil || strings.TrimSpace(msg.Channel) == "" || strings.TrimSpace(msg.ChatID) == "" || deliveryErr == nil {
+		return
+	}
+	// Prevent recursive feedback loops when the notice itself fails to deliver.
+	if strings.Contains(msg.Content, "<delivery_failure") {
+		return
+	}
+
+	sessionKey := fmt.Sprintf("%s:%s", msg.Channel, msg.ChatID)
+	notice := fmt.Sprintf(
+		"<delivery_failure channel=%q chat_id=%q>\nerror: %s\nfailed_content: %q\n</delivery_failure>\nReact to this failure before normal tasks.",
+		msg.Channel,
+		msg.ChatID,
+		deliveryErr.Error(),
+		truncateStr(msg.Content, 400),
+	)
+
+	inbound := bus.InboundMessage{
+		Channel:    msg.Channel,
+		SenderID:   "system:delivery",
+		ChatID:     msg.ChatID,
+		SessionKey: sessionKey,
+		Content:    notice,
+		Metadata: map[string]string{
+			"source": "system:delivery_failure",
+			"urgent": "true",
+		},
+	}
+	if _, ok := m.bus.PublishInboundWithID(inbound); !ok {
+		logger.WarnCF("channels", "Delivery failure notice dropped: inbound queue timeout", map[string]interface{}{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+		})
 	}
 }
 
