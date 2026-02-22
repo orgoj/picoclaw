@@ -17,11 +17,6 @@
 
 ### REF-3: Control semantics
 
-- [NOW] Prefix policy a json to musi byt samostatny atribbut
-  - `[SYS]` = systemove programove udalosti (start/stop/error/incident), mimo vedomi agenta
-  - `[AUTO]` = loop-level final fallback reply, pouze kdyz neprobehla zadna explicitni `message` tool zprava
-  - nikdy nemichat: system notifikace nesmi byt `[AUTO]`, fallback final reply nesmi byt `[SYS]`
-  - oboji musi byt konzistentni v channelu i dashboard feedu
 - [NOW] Incident report pipeline dodelat na 100% structured payload (`cause`, `channel`, `chat_id`, `sender_id`, `task_id`) a formalni event `kind=sys|auto`.
 
 ## HARD RULE PRO NOVOU VERZI

@@ -569,6 +569,36 @@ func (m *sequenceMockProvider) GetDefaultModel() string {
 	return "mock-model"
 }
 
+type messageToolThenFinalProvider struct {
+	calls int
+}
+
+func (m *messageToolThenFinalProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, opts map[string]interface{}) (*providers.LLMResponse, error) {
+	m.calls++
+	if m.calls == 1 {
+		return &providers.LLMResponse{
+			Content: "",
+			ToolCalls: []providers.ToolCall{
+				{
+					ID:   "tool-1",
+					Name: "message",
+					Arguments: map[string]interface{}{
+						"content": "tool says hello",
+					},
+				},
+			},
+		}, nil
+	}
+	return &providers.LLMResponse{
+		Content:   "final after tool",
+		ToolCalls: []providers.ToolCall{},
+	}, nil
+}
+
+func (m *messageToolThenFinalProvider) GetDefaultModel() string {
+	return "mock-model"
+}
+
 // mockCustomTool is a simple mock tool for registration testing
 type mockCustomTool struct{}
 
@@ -911,6 +941,62 @@ func TestToolResult_UserFacingToolDoesSendMessage(t *testing.T) {
 	// User-facing tool should include the output in final response
 	if response != "Command output: hello world" {
 		t.Errorf("Expected 'Command output: hello world', got: %s", response)
+	}
+}
+
+func TestMessageTool_SuppressesAutoFinalOutbound(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+				MaxIterations:     10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &messageToolThenFinalProvider{}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	msg := bus.InboundMessage{
+		Channel:    "telegram",
+		SenderID:   "u1",
+		ChatID:     "1",
+		Content:    "send via tool",
+		SessionKey: "telegram:1",
+	}
+
+	resp, err := al.processMessage(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("processMessage failed: %v", err)
+	}
+	if resp != "final after tool" {
+		t.Fatalf("unexpected final response: %q", resp)
+	}
+
+	ctx1, cancel1 := context.WithTimeout(context.Background(), time.Second)
+	defer cancel1()
+	first, ok := msgBus.SubscribeOutbound(ctx1)
+	if !ok {
+		t.Fatal("expected outbound from message tool")
+	}
+	if first.Content != "tool says hello" {
+		t.Fatalf("unexpected first outbound content: %q", first.Content)
+	}
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel2()
+	if _, ok := msgBus.SubscribeOutbound(ctx2); ok {
+		t.Fatal("expected no auto final outbound when message tool already sent explicit message")
 	}
 }
 

@@ -1213,7 +1213,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	// 3. Run LLM iteration loop
-	finalContent, iteration, err := al.runLLMIteration(runCtx, messages, opts, runID)
+	finalContent, iteration, explicitMessageToolSent, err := al.runLLMIteration(runCtx, messages, opts, runID)
 	if err != nil {
 		audit.Record("agent_run_error", map[string]interface{}{
 			"run_id":      runID,
@@ -1244,19 +1244,28 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 	// 7. Optional: send response via bus
 	if opts.SendResponse {
-		outboundContent := finalContent
-		if opts.Channel != "system" && !strings.HasPrefix(strings.TrimSpace(outboundContent), al.sysMessagePrefix()) {
-			outboundContent = al.prefixAutoFinal(outboundContent)
-		}
-		if ok := al.bus.PublishOutbound(bus.OutboundMessage{
-			Channel: opts.Channel,
-			ChatID:  opts.ChatID,
-			Content: outboundContent,
-		}); !ok {
-			logger.WarnCF("agent", "Failed to publish runAgentLoop response: outbound queue timeout", map[string]interface{}{
-				"channel": opts.Channel,
-				"chat_id": opts.ChatID,
+		if explicitMessageToolSent && opts.Channel != "system" {
+			audit.Record("agent_run_outbound_suppressed_explicit_message", map[string]interface{}{
+				"run_id":      runID,
+				"session_key": opts.SessionKey,
+				"channel":     opts.Channel,
+				"chat_id":     opts.ChatID,
 			})
+		} else {
+			outboundContent := finalContent
+			if opts.Channel != "system" && !strings.HasPrefix(strings.TrimSpace(outboundContent), al.sysMessagePrefix()) {
+				outboundContent = al.prefixAutoFinal(outboundContent)
+			}
+			if ok := al.bus.PublishOutbound(bus.OutboundMessage{
+				Channel: opts.Channel,
+				ChatID:  opts.ChatID,
+				Content: outboundContent,
+			}); !ok {
+				logger.WarnCF("agent", "Failed to publish runAgentLoop response: outbound queue timeout", map[string]interface{}{
+					"channel": opts.Channel,
+					"chat_id": opts.ChatID,
+				})
+			}
 		}
 	}
 
@@ -1282,10 +1291,11 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 // runLLMIteration executes the LLM call loop with tool handling.
 // Returns the final content, iteration count, and any error.
-func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions, runID string) (string, int, error) {
+func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions, runID string) (string, int, bool, error) {
 	iteration := 0
 	toolIteration := 0
 	var finalContent string
+	explicitMessageToolSent := false
 
 	for iteration < al.maxIterations {
 		iteration++
@@ -1390,7 +1400,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 					"iteration":   iteration,
 					"error":       err.Error(),
 				})
-			return "", iteration, fmt.Errorf("LLM call failed: %w", err)
+			return "", iteration, explicitMessageToolSent, fmt.Errorf("LLM call failed: %w", err)
 		}
 
 		// Check if no tool calls - we're done
@@ -1452,7 +1462,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			})
 		toolIteration++
 		if al.maxToolIterations > 0 && toolIteration > al.maxToolIterations {
-			return "", iteration, fmt.Errorf("agent loop reached max tool iterations (%d) without final response", al.maxToolIterations)
+			return "", iteration, explicitMessageToolSent, fmt.Errorf("agent loop reached max tool iterations (%d) without final response", al.maxToolIterations)
 		}
 
 		// Build assistant message with tool calls
@@ -1508,6 +1518,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			}
 
 			toolResult := al.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, opts.Channel, opts.ChatID, asyncCallback)
+			if tc.Name == "message" && toolResult != nil && !toolResult.IsError {
+				explicitMessageToolSent = true
+			}
 
 			// Determine content for LLM based on tool result
 			contentForLLM := toolResult.ForLLM
@@ -1527,7 +1540,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 	}
 
-	return finalContent, iteration, nil
+	return finalContent, iteration, explicitMessageToolSent, nil
 }
 
 func (al *AgentLoop) trimMessagesToTokenBudget(messages []providers.Message, targetTokens int) []providers.Message {
