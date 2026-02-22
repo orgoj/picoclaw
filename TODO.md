@@ -7,7 +7,6 @@
 - info v head o hlavnim agentovi, doba behu, stav contextu, pocet message a tool call, celkove a od compactu
 - filter na history abych mohl skyt rychle debug a info
 - ta history je spatna - to musi byt casove jak to slo za sebou (ted je best-effort, doplnit 100% timeline i pro starsi data bez timestamp)
-- to web ui se asi porad prekresluje, nejde ani oznacit text na copy, kurva to musi menit jen zmeny a ne cele predrbavat porad
 - u agenta potrebuji videt cas spusteni a cas konce, pocet message, pocet toolcall, context size aktualni. a co je tam pending u neho sama nula 0 proc to tam je?
 - injekce message agentovi
 
