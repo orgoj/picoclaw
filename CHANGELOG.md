@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.42 - 2026-02-22
+
+### Fixed
+- Dashboard composer now supports explicit routing fields (`channel`, `chat_id`, `sender_id`) alongside `session_key`, enabling direct non-Telegram operation from web UI without hidden defaults.
+- Session-key selection now synchronizes route fields (`channel/chat`) automatically for faster queue edit/replay workflows.
+
 ## v0.1.41 - 2026-02-22
 
 ### Fixed

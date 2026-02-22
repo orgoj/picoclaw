@@ -435,6 +435,11 @@ const dashboardHTML = `<!doctype html>
       <section class="card leftComposerCard">
         <h2>Input</h2>
         <div class="row"><input id="sessionKey" class="grow" placeholder="session_key (e.g. telegram:7221629441)"></div>
+        <div class="row">
+          <input id="channelInput" placeholder="channel (optional)">
+          <input id="chatInput" placeholder="chat_id (optional)">
+          <input id="senderInput" placeholder="sender_id (default: web)">
+        </div>
         <div class="row"><textarea id="content" placeholder="Type message..."></textarea></div>
         <div class="row">
           <select id="quickCommand" class="grow">
@@ -1482,7 +1487,10 @@ async function selectSession(key) {
   state.selectedAgentID = "";
   state.selectedAgentName = "";
   state.expandedHistoryKey = "";
-  if (state.selectedSession) $("sessionKey").value = state.selectedSession;
+  if (state.selectedSession) {
+    $("sessionKey").value = state.selectedSession;
+    syncRouteInputsFromSessionKey();
+  }
   renderSubagents(state.subagents);
   renderSessions(state.sessions);
   connectEvents(state.streamSession);
@@ -1520,15 +1528,36 @@ async function sendMainContent(content) {
   const sessionKey = $("sessionKey").value.trim();
   if (!sessionKey) throw new Error("session_key is required");
   state.streamSession = sessionKey;
+  const channel = $("channelInput") ? $("channelInput").value.trim() : "";
+  const chatID = $("chatInput") ? $("chatInput").value.trim() : "";
+  const senderID = $("senderInput") ? $("senderInput").value.trim() : "";
+  const body = { session_key: sessionKey, content };
+  if (channel) body.channel = channel;
+  if (chatID) body.chat_id = chatID;
+  if (senderID) body.sender_id = senderID;
   return jfetch("/api/v1/main/message", {
     method: "POST",
-    body: JSON.stringify({ session_key: sessionKey, content }),
+    body: JSON.stringify(body),
   });
 }
 
 function currentQueueSessionKey() {
   const key = $("sessionKey") ? $("sessionKey").value.trim() : "";
   return key || state.streamSession || state.selectedSession || "";
+}
+
+function syncRouteInputsFromSessionKey() {
+  const keyEl = $("sessionKey");
+  const chEl = $("channelInput");
+  const chatEl = $("chatInput");
+  if (!keyEl || !chEl || !chatEl) return;
+  const key = String(keyEl.value || "").trim();
+  const idx = key.indexOf(":");
+  if (idx <= 0) return;
+  const ch = key.slice(0, idx).trim();
+  const chat = key.slice(idx + 1).trim();
+  if (ch && !String(chEl.value || "").trim()) chEl.value = ch;
+  if (chat && !String(chatEl.value || "").trim()) chatEl.value = chat;
 }
 
 function pullQueuedMessageIntoComposer() {
@@ -1553,6 +1582,7 @@ function pullQueuedMessageIntoComposer() {
   if ($("sessionKey") && m.session_key) {
     $("sessionKey").value = String(m.session_key);
     state.streamSession = String(m.session_key);
+    syncRouteInputsFromSessionKey();
   }
   content.value = String(m.content || "");
   content.focus();
@@ -2050,6 +2080,7 @@ if (sessionKey) {
   sessionKey.addEventListener("change", async () => {
     const key = sessionKey.value.trim();
     if (!key) return;
+    syncRouteInputsFromSessionKey();
     state.streamSession = key;
     await selectSession(key);
   });
@@ -2082,6 +2113,7 @@ initHistoryListEvents();
 initModeButtons();
 initFeedControls();
 initMobilePanels();
+if ($("senderInput") && !String($("senderInput").value || "").trim()) $("senderInput").value = "web";
 const useQuickCommandBtn = $("useQuickCommandBtn");
 if (useQuickCommandBtn) useQuickCommandBtn.addEventListener("click", applyQuickCommand);
 setMessageMode("normal");
