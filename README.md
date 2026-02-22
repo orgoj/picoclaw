@@ -59,7 +59,7 @@
 > **Fork-specific capabilities in `orgoj/picoclaw` (snapshot: 2026-02-20)**
 >
 > **This fork includes both:**
-> - **Admin API** (`/api/v1/runtime`, `/api/v1/sessions`, `/api/v1/inbound`, `/api/v1/history`, `/api/v1/subagents`, `/api/v1/events`)
+> - **Admin API** (`/api/v1/runtime`, `/api/v1/sessions`, `/api/v1/inbound`, `/api/v1/history`, `/api/v1/timeline`, `/api/v1/subagents`, `/api/v1/agents/{id}/log`, `/api/v1/events`)
 > - **Web UI dashboard** (`/dashboard`) backed by the same runtime APIs/SSE stream
 >
 > **Delta at a glance**

@@ -7,29 +7,15 @@
 - [NOW] Zavest jednotny event schema pro dashboard/feed:
   - povinne pole: `event_id`, `timestamp_ms`, `source`, `session_key`, `agent_id`, `kind`, `level`, `payload`.
   - `kind`: `message|auto|sys|tool|llm|queue|error|warn|info|debug`.
-- [NOW] Udelat per-agent JSONL streamy:
-  - `logs/agents/main.jsonl`
-  - `logs/agents/subagent-<id>.jsonl`
-  - volitelne alias pro named agenta.
-- [NOW] Pridat runtime counter pro monotonic `agent_instance_id` (persist ve state).
-- [NOW] Udelat API:
-  - `GET /api/v1/timeline` (filtrovani: session, agent, kind, level, from, limit)
-  - `GET /api/v1/agents/{id}/log`
-  - `GET /api/v1/events` jako delta stream (patch), ne full snapshot tick.
 
 ### REF-2: Dashboard rewrite (frontend)
 
-- [NOW] Prepnout dashboard na jeden datovy feed model (`timeline` + delta SSE patch).
-- [NOW] Zadny periodicky full redraw: pouze keyed incremental updates ve vsech panelech.
+- [NOW] Zadny periodicky full redraw: dodelat keyed incremental updates ve zbylych panelech (`channels/control/defined-agents/skills`).
 - [NOW] Layout final:
   - vlevo: `Messages -> Queue -> Input`
   - vpravo: `Agents -> Sessions -> Channels`
   - splittery stabilni, persist, bez jitteru.
-- [NOW] Filtry first-class:
-  - agent/session/kind/level
-  - toggle hide debug
-  - feed "same as telegram".
-- [NOW] Composer parity s channel prikazy (+ menu + direct action UX).
+- [NOW] Filtry first-class dodelat na formalni event schema (`kind/level` podle dat, ne heuristik jen z textu).
 
 ### REF-3: Control semantics
 
@@ -38,8 +24,7 @@
   - `[AUTO]` = loop-level final fallback reply, pouze kdyz neprobehla zadna explicitni `message` tool zprava
   - nikdy nemichat: system notifikace nesmi byt `[AUTO]`, fallback final reply nesmi byt `[SYS]`
   - oboji musi byt konzistentni v channelu i dashboard feedu
-- [NOW] Pause/continue implementace a viditelny stav v UI.
-- [NOW] Incident report pipeline: crash/kill -> structured SYS event + queue-head inject do main session.
+- [NOW] Incident report pipeline dodelat na 100% structured payload (`cause`, `channel`, `chat_id`, `sender_id`, `task_id`).
 
 ## HARD RULE PRO NOVOU VERZI
 

@@ -90,6 +90,7 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/inbound/", api.handleInboundItem)
 	r.HandleFunc("/api/v1/history", api.handleHistory)
 	r.HandleFunc("/api/v1/history/agent-log", api.handleAgentLogHistory)
+	r.HandleFunc("/api/v1/timeline", api.handleTimeline)
 	r.HandleFunc("/api/v1/sessions", api.handleSessions)
 	r.HandleFunc("/api/v1/main/message", api.handleMainMessage)
 	r.HandleFunc("/api/v1/subagents", api.handleSubagents)
@@ -98,6 +99,20 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/events", api.handleEvents)
 	r.HandleFunc("/api/v1/runtime", api.handleRuntime)
 	RegisterDashboardRoutes(r)
+}
+
+type timelineItem struct {
+	ID          string         `json:"id"`
+	EventID     string         `json:"event_id"`
+	TimestampMS int64          `json:"timestamp_ms"`
+	Source      string         `json:"source"`
+	SessionKey  string         `json:"session_key"`
+	AgentID     string         `json:"agent_id,omitempty"`
+	Role        string         `json:"role"`
+	Kind        string         `json:"kind"`
+	Level       string         `json:"level"`
+	Content     string         `json:"content"`
+	Payload     map[string]any `json:"payload,omitempty"`
 }
 
 func (a *inboundAPI) handleInboundRoot(w http.ResponseWriter, r *http.Request) {
@@ -210,6 +225,134 @@ func (a *inboundAPI) handleSessions(w http.ResponseWriter, r *http.Request) {
 	items := lp.ListSessions(limit)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
+	})
+}
+
+func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	if a.hist == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "history provider unavailable"})
+		return
+	}
+
+	sessionFilter := strings.TrimSpace(r.URL.Query().Get("session"))
+	agentFilter := strings.TrimSpace(r.URL.Query().Get("agent"))
+	kindFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("kind")))
+	levelFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("level")))
+	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	fromMS := int64(0)
+	if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			fromMS = n
+		}
+	}
+	limit := 3000
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 10000 {
+		limit = 10000
+	}
+
+	items := make([]timelineItem, 0, 4096)
+	sessionKeys := make([]string, 0, 64)
+	if sessionFilter != "" {
+		sessionKeys = append(sessionKeys, sessionFilter)
+	} else if lp, ok := a.hist.(sessionListProvider); ok && lp != nil {
+		for _, s := range lp.ListSessions(1000) {
+			if strings.TrimSpace(s.Key) != "" {
+				sessionKeys = append(sessionKeys, s.Key)
+			}
+		}
+	}
+
+	for _, key := range sessionKeys {
+		h := a.hist.GetSessionHistory(key)
+		for i, m := range h {
+			content := strings.TrimSpace(m.Content)
+			role := strings.ToLower(strings.TrimSpace(m.Role))
+			ts := m.TimestampMS
+			if ts <= 0 {
+				ts = int64(i + 1)
+			}
+			kind := classifyTimelineKind(role, content, a.cfg)
+			level := classifyTimelineLevel(content)
+			agentID := detectTimelineAgentID(content)
+			item := timelineItem{
+				ID:          fmt.Sprintf("%s#%d", key, i),
+				EventID:     fmt.Sprintf("%s#%d", key, i),
+				TimestampMS: ts,
+				Source:      "session",
+				SessionKey:  key,
+				AgentID:     agentID,
+				Role:        role,
+				Kind:        kind,
+				Level:       level,
+				Content:     content,
+				Payload: map[string]any{
+					"role": role,
+				},
+			}
+			if !timelineMatches(item, sessionFilter, agentFilter, kindFilter, levelFilter, query, fromMS) {
+				continue
+			}
+			items = append(items, item)
+		}
+	}
+
+	if a.cfg != nil && sessionFilter == "" {
+		mainLogPath := filepath.Join(a.cfg.LoggingDirPath(), "agent.jsonl")
+		lines, _ := readLastLines(mainLogPath, 5000)
+		for i, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			ts := parseTimelineLogTimestamp(line)
+			if ts <= 0 {
+				ts = int64(i + 1)
+			}
+			level := classifyTimelineLevel(line)
+			agentID := detectTimelineAgentID(line)
+			item := timelineItem{
+				ID:          fmt.Sprintf("agent.jsonl#%d", i),
+				EventID:     fmt.Sprintf("agent.jsonl#%d", i),
+				TimestampMS: ts,
+				Source:      "agent_log",
+				SessionKey:  "agent.jsonl",
+				AgentID:     agentID,
+				Role:        "log",
+				Kind:        classifyTimelineKind("log", line, a.cfg),
+				Level:       level,
+				Content:     line,
+				Payload: map[string]any{
+					"log_path": mainLogPath,
+				},
+			}
+			if !timelineMatches(item, sessionFilter, agentFilter, kindFilter, levelFilter, query, fromMS) {
+				continue
+			}
+			items = append(items, item)
+		}
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].TimestampMS != items[j].TimestampMS {
+			return items[i].TimestampMS < items[j].TimestampMS
+		}
+		return items[i].ID < items[j].ID
+	})
+	if len(items) > limit {
+		items = items[len(items)-limit:]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"count": len(items),
 	})
 }
 
@@ -932,4 +1075,130 @@ func jsonEqual(left, right any) bool {
 		return false
 	}
 	return string(lb) == string(rb)
+}
+
+func detectTimelineAgentID(content string) string {
+	lc := strings.ToLower(content)
+	if idx := strings.Index(lc, "subagent-"); idx >= 0 {
+		rest := content[idx:]
+		for i := 0; i < len(rest); i++ {
+			ch := rest[i]
+			if ch == '\n' || ch == ' ' || ch == '"' || ch == '\'' || ch == ')' || ch == ']' {
+				return rest[:i]
+			}
+		}
+		return rest
+	}
+	return ""
+}
+
+func classifyTimelineKind(role, content string, cfg *config.Config) string {
+	role = strings.ToLower(strings.TrimSpace(role))
+	content = strings.TrimSpace(content)
+	lc := strings.ToLower(content)
+	switch role {
+	case "tool":
+		return "tool"
+	case "assistant", "user":
+		return "message"
+	case "log":
+		switch {
+		case strings.Contains(lc, "llm "):
+			return "llm"
+		case strings.Contains(lc, "queue"), strings.Contains(lc, "inbound"), strings.Contains(lc, "outbound"):
+			return "queue"
+		case strings.Contains(lc, "error"):
+			return "error"
+		case strings.Contains(lc, "warn"):
+			return "warn"
+		case strings.Contains(lc, "debug"):
+			return "debug"
+		default:
+			return "info"
+		}
+	case "system":
+		sysPrefix := "[SYS]"
+		autoPrefix := "[AUTO]"
+		if cfg != nil {
+			if p := strings.TrimSpace(cfg.Gateway.SysMessagePrefix); p != "" {
+				sysPrefix = p
+			}
+			if p := strings.TrimSpace(cfg.Gateway.AutoFinalPrefix); p != "" {
+				autoPrefix = p
+			}
+		}
+		switch {
+		case strings.HasPrefix(content, sysPrefix):
+			return "sys"
+		case strings.HasPrefix(content, autoPrefix):
+			return "auto"
+		default:
+			return "sys"
+		}
+	default:
+		return "info"
+	}
+}
+
+func classifyTimelineLevel(content string) string {
+	lc := strings.ToLower(content)
+	switch {
+	case strings.Contains(lc, "error"), strings.Contains(lc, "failed"), strings.Contains(lc, "panic"):
+		return "error"
+	case strings.Contains(lc, "warn"), strings.Contains(lc, "timeout"):
+		return "warn"
+	case strings.Contains(lc, "debug"):
+		return "debug"
+	default:
+		return "info"
+	}
+}
+
+func timelineMatches(item timelineItem, session, agent, kind, level, q string, fromMS int64) bool {
+	if session != "" && item.SessionKey != session {
+		return false
+	}
+	if agent != "" {
+		agent = strings.ToLower(agent)
+		if !strings.Contains(strings.ToLower(item.AgentID), agent) &&
+			!strings.Contains(strings.ToLower(item.Content), agent) &&
+			!strings.Contains(strings.ToLower(item.SessionKey), agent) {
+			return false
+		}
+	}
+	if kind != "" && kind != "all" && strings.ToLower(item.Kind) != kind {
+		return false
+	}
+	if level != "" && level != "all" && strings.ToLower(item.Level) != level {
+		return false
+	}
+	if fromMS > 0 && item.TimestampMS < fromMS {
+		return false
+	}
+	if q != "" {
+		stack := strings.ToLower(item.Content + "\n" + item.SessionKey + "\n" + item.AgentID + "\n" + item.Kind + "\n" + item.Level)
+		if !strings.Contains(stack, q) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseTimelineLogTimestamp(line string) int64 {
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		return 0
+	}
+	if ts, ok := obj["timestamp"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(ts)); err == nil {
+			return t.UnixMilli()
+		}
+	}
+	if ts, ok := obj["ts"].(float64); ok {
+		if ts > 1e12 {
+			return int64(ts)
+		}
+		return int64(ts * 1000)
+	}
+	return 0
 }

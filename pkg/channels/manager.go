@@ -844,10 +844,12 @@ func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
 		return true
 	}
 	incident := fmt.Sprintf(
-		"<incident source=\"control:kill\" task_id=\"%s\" channel=\"%s\" chat_id=\"%s\">Subagent cancelled by operator via control command.</incident>",
+		"<incident source=\"control:kill\" cause=\"cancelled\" task_id=\"%s\" channel=\"%s\" chat_id=\"%s\" sender_id=\"%s\" session_key=\"%s\">Subagent cancelled by operator via control command.</incident>",
 		taskID,
 		msg.Channel,
 		msg.ChatID,
+		msg.SenderID,
+		msg.SessionKey,
 	)
 	_, _ = m.bus.InsertInboundFirst(bus.InboundMessage{
 		Channel:    msg.Channel,

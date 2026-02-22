@@ -500,6 +500,7 @@ const $ = (id) => document.getElementById(id);
 let es = null;
 let reconnectTimer = null;
 let allHistoryRefreshTimer = null;
+let timelineRefreshTimer = null;
 
 const state = {
   selectedSession: "",
@@ -512,6 +513,7 @@ const state = {
   selectedAgentLogLines: [],
   sessions: [],
   subagents: [],
+  timelineItems: [],
   historyLimit: 3000,
   sessionsFetchLimit: 1000,
   agentLogTailLimit: 5000,
@@ -530,6 +532,7 @@ const state = {
   controlCommands: [],
   definedAgents: [],
   skills: [],
+  renderSig: {},
 };
 
 async function jfetch(url, opts={}) {
@@ -703,6 +706,23 @@ function isChannelVisibleEntry(entry) {
 }
 
 function collectHistoryEntries(includeAgentLog) {
+  if (Array.isArray(state.timelineItems) && state.timelineItems.length > 0) {
+    return state.timelineItems.map((it, i) => {
+      const content = String(it.content || "");
+      return {
+        historyKey: String(it.id || ("timeline#" + i)),
+        sessionKey: String(it.session_key || ""),
+        index: i,
+        role: String(it.role || ""),
+        content,
+        tone: detectTone(content),
+        kind: String(it.kind || detectKind(it.role, content)),
+        level: String(it.level || detectLevel(content)),
+        agentName: String(it.agent_id || detectAgentName(content)),
+        ts: Number(it.timestamp_ms || 0) || (i + 1),
+      };
+    });
+  }
   const keys = [];
   if (state.selectedSession) {
     keys.push(state.selectedSession);
@@ -1041,6 +1061,8 @@ function renderChannels(chNode) {
   const node = chNode || {};
   const enabled = Array.isArray(node.enabled) ? node.enabled : [];
   const status = node.status || {};
+  const sig = JSON.stringify({ enabled, status });
+  if (state.renderSig.channels === sig) return;
   let html = "<tr><th>Channel</th><th>Enabled</th><th>Status</th></tr>";
   for (const name of enabled) {
     const st = status[name] || {};
@@ -1055,12 +1077,15 @@ function renderChannels(chNode) {
     html += "<tr><td colspan='3' class='small'>No enabled channels</td></tr>";
   }
   t.innerHTML = html;
+  state.renderSig.channels = sig;
 }
 
 function renderControls(commands) {
   const t = $("controlTable");
   if (!t) return;
   const cmds = Array.isArray(commands) ? commands : [];
+  const sig = JSON.stringify(cmds);
+  if (state.renderSig.controls === sig) return;
   let html = "<tr><th>+ Menu Commands</th></tr>";
   if (cmds.length === 0) {
     html += "<tr><td class='small'>No control commands</td></tr>";
@@ -1070,12 +1095,15 @@ function renderControls(commands) {
     }
   }
   t.innerHTML = html;
+  state.renderSig.controls = sig;
 }
 
 function renderDefinedAgents(items) {
   const t = $("definedAgentTable");
   if (!t) return;
   const rows = Array.isArray(items) ? items : [];
+  const sig = JSON.stringify(rows);
+  if (state.renderSig.definedAgents === sig) return;
   let html = "<tr><th>Defined Agents</th><th>Source</th></tr>";
   if (rows.length === 0) {
     html += "<tr><td colspan='2' class='small'>No defined agents</td></tr>";
@@ -1085,12 +1113,15 @@ function renderDefinedAgents(items) {
     }
   }
   t.innerHTML = html;
+  state.renderSig.definedAgents = sig;
 }
 
 function renderSkills(items) {
   const t = $("skillsTable");
   if (!t) return;
   const rows = Array.isArray(items) ? items : [];
+  const sig = JSON.stringify(rows);
+  if (state.renderSig.skills === sig) return;
   let html = "<tr><th>Skills</th><th>Source</th></tr>";
   if (rows.length === 0) {
     html += "<tr><td colspan='2' class='small'>No skills discovered</td></tr>";
@@ -1100,6 +1131,7 @@ function renderSkills(items) {
     }
   }
   t.innerHTML = html;
+  state.renderSig.skills = sig;
 }
 
 async function refreshInbound() {
@@ -1230,19 +1262,28 @@ function scheduleRefreshAllHistories() {
 
 async function refreshHistory() {
   try {
-    if (state.selectedAgentID) {
-      await refreshSelectedAgentLogHistory(true);
-      return;
-    }
-    if (state.selectedSession) {
-      await refreshHistoryForSession(state.selectedSession, true);
-      return;
-    }
-    await refreshAllHistories();
+    const params = new URLSearchParams();
+    if (state.selectedSession) params.set("session", state.selectedSession);
+    if (state.selectedAgentID) params.set("agent", state.selectedAgentID);
+    if (state.kindFilter && state.kindFilter !== "all") params.set("kind", state.kindFilter);
+    if (state.levelFilter && state.levelFilter !== "all") params.set("level", state.levelFilter);
+    if (state.quickFilter) params.set("q", state.quickFilter);
+    params.set("limit", String(state.historyLimit));
+    const res = await jfetch("/api/v1/timeline?" + params.toString());
+    state.timelineItems = Array.isArray(res.items) ? res.items : [];
+    renderHistory();
   } catch (e) {
     const list = $("historyList");
     if (list) list.innerHTML = "<div class='small bad' style='padding:8px'>ERROR: " + escapeHTML(e.message) + "</div>";
   }
+}
+
+function scheduleTimelineRefresh() {
+  if (timelineRefreshTimer) clearTimeout(timelineRefreshTimer);
+  timelineRefreshTimer = setTimeout(() => {
+    timelineRefreshTimer = null;
+    refreshHistory().catch((e) => setSendOut("ERROR: " + e.message, true));
+  }, 120);
 }
 
 async function refreshSubagents() {
@@ -1266,11 +1307,7 @@ async function refreshSessions() {
     if (state.streamSession && !$("sessionKey").value.trim()) {
       $("sessionKey").value = state.streamSession;
     }
-    if (state.selectedSession) {
-      await refreshHistoryForSession(state.selectedSession, true);
-    } else {
-      await refreshAllHistories();
-    }
+    await refreshHistory();
     if (state.streamSession) connectEvents(state.streamSession);
   } catch (e) {
     $("sessionTable").innerHTML = "<tr><td class='bad'>" + e.message + "</td></tr>";
@@ -1303,11 +1340,7 @@ function connectEvents(forceKey) {
       if (Array.isArray(data.inbound)) renderInbound(data.inbound || []);
       const snapshotKey = String(data.session_key || state.streamSession || "");
       if (snapshotKey && snapshotKey !== "__all__" && Array.isArray(data.history)) setSessionHistory(snapshotKey, data.history || []);
-      if (!state.selectedSession) refreshAgentLogHistory(false).then(() => renderHistory());
-      if (state.selectedAgentID) refreshSelectedAgentLogHistory(false).then(() => renderHistory());
-      if (state.selectedSession === snapshotKey || !state.selectedSession) {
-        renderHistory();
-      }
+      scheduleTimelineRefresh();
       if (Array.isArray(data.subagents)) {
         state.subagents = data.subagents || [];
         renderSubagents(state.subagents);
@@ -1315,7 +1348,7 @@ function connectEvents(forceKey) {
       if (Array.isArray(data.sessions)) {
         state.sessions = data.sessions;
         renderSessions(state.sessions);
-        if (!state.selectedSession) scheduleRefreshAllHistories();
+        if (!state.selectedSession) scheduleTimelineRefresh();
       }
       if (data.runtime) refreshRuntimeFromPayload(data.runtime);
     } catch (e) {
@@ -1353,7 +1386,7 @@ async function selectAgent(id, name) {
   state.expandedHistoryKey = "";
   renderSubagents(state.subagents);
   renderSessions(state.sessions);
-  await refreshSelectedAgentLogHistory(true);
+  await refreshHistory();
 }
 
 async function clearAllFilters() {

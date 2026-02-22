@@ -338,7 +338,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 								"chat_id": msg.ChatID,
 								"session": msg.SessionKey,
 							})
-						al.enqueueIncidentNotice(msg, fmt.Sprintf("panic recovered: %v", r))
+						al.enqueueIncidentNotice(msg, "panic", fmt.Sprintf("panic recovered: %v", r))
 						// Send user-friendly error message
 						if ok := al.bus.PublishOutbound(bus.OutboundMessage{
 							Channel: msg.Channel,
@@ -357,7 +357,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				response, err := al.processMessage(ctx, msg)
 				if err != nil {
 					// Check if it's an API/network error and provide user-friendly message
-					al.enqueueIncidentNotice(msg, err.Error())
+					al.enqueueIncidentNotice(msg, "error", err.Error())
 					response = al.prefixSysMessage(al.formatErrorMessage(err, msg.SessionKey))
 				}
 
@@ -385,7 +385,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 	return nil
 }
 
-func (al *AgentLoop) enqueueIncidentNotice(msg bus.InboundMessage, errText string) {
+func (al *AgentLoop) enqueueIncidentNotice(msg bus.InboundMessage, cause, errText string) {
 	if al.bus == nil {
 		return
 	}
@@ -394,10 +394,12 @@ func (al *AgentLoop) enqueueIncidentNotice(msg bus.InboundMessage, errText strin
 		return
 	}
 	incident := fmt.Sprintf(
-		"<incident source=\"agent-loop\" channel=\"%s\" chat_id=\"%s\" sender_id=\"%s\">\n%s\n</incident>",
+		"<incident source=\"agent-loop\" cause=\"%s\" channel=\"%s\" chat_id=\"%s\" sender_id=\"%s\" session_key=\"%s\">\n%s\n</incident>",
+		cause,
 		msg.Channel,
 		msg.ChatID,
 		msg.SenderID,
+		msg.SessionKey,
 		errText,
 	)
 	inbound := bus.InboundMessage{

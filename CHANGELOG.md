@@ -20,7 +20,9 @@
   - `main.jsonl` for main flow,
   - `<subagent-id>.jsonl` for subagent-specific flow.
 - New Admin API endpoint: `GET /api/v1/agents/{id}/log?tail=N` for direct per-agent log retrieval.
+- New Admin API endpoint: `GET /api/v1/timeline` with filter surface (`session`, `agent`, `kind`, `level`, `q`, `from`, `limit`) for unified dashboard feed consumption.
 - Crash/panic and operator subagent-cancel incidents are now enqueued back to queue head as urgent incident context for immediate main-loop visibility.
+- Dashboard history rendering now consumes unified timeline API data and refreshes via SSE-triggered timeline reload (single feed model for session/agent/kind/level views).
 
 ## v0.1.38 - 2026-02-22
 
