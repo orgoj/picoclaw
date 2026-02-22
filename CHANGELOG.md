@@ -26,6 +26,7 @@
 - Dashboard history rendering now consumes unified timeline API data and refreshes via SSE-triggered timeline reload (single feed model for session/agent/kind/level views).
 - Timeline log ingestion now enforces JSONL-only runtime records (non-JSON log lines are ignored), with formal `source/kind/level/payload` mapping from structured log fields.
 - Dashboard right-panel tables (`channels`, `+ commands`, `defined agents`, `skills`) now use keyed row patching instead of full-table string rebuilds.
+- Timeline API now enforces always-present event schema fields (`event_id`, `timestamp_ms`, `source`, `session_key`, `agent_id`, `kind`, `level`, `payload`) and computes stable content-based `event_id` values for runtime-log rows.
 
 ## v0.1.38 - 2026-02-22
 

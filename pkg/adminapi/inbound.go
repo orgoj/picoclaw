@@ -2,8 +2,10 @@ package adminapi
 
 import (
 	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,12 +109,12 @@ type timelineItem struct {
 	TimestampMS int64          `json:"timestamp_ms"`
 	Source      string         `json:"source"`
 	SessionKey  string         `json:"session_key"`
-	AgentID     string         `json:"agent_id,omitempty"`
+	AgentID     string         `json:"agent_id"`
 	Role        string         `json:"role"`
 	Kind        string         `json:"kind"`
 	Level       string         `json:"level"`
 	Content     string         `json:"content"`
-	Payload     map[string]any `json:"payload,omitempty"`
+	Payload     map[string]any `json:"payload"`
 }
 
 func (a *inboundAPI) handleInboundRoot(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +287,7 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 			agentID := detectTimelineAgentID(content)
 			item := timelineItem{
 				ID:          fmt.Sprintf("%s#%d", key, i),
-				EventID:     fmt.Sprintf("%s#%d", key, i),
+				EventID:     timelineEventID("session", key, strconv.Itoa(i), strconv.FormatInt(ts, 10), role, content),
 				TimestampMS: ts,
 				Source:      "session",
 				SessionKey:  key,
@@ -329,7 +331,7 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 			agentID := detectTimelineAgentID(entry.Message)
 			item := timelineItem{
 				ID:          fmt.Sprintf("agent.jsonl#%d", i),
-				EventID:     fmt.Sprintf("agent.jsonl#%d", i),
+				EventID:     timelineEventID("agent_log", strconv.FormatInt(ts, 10), entry.Component, level, entry.Message),
 				TimestampMS: ts,
 				Source:      "agent_log",
 				SessionKey:  "agent.jsonl",
@@ -342,6 +344,7 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 					"log_path":  mainLogPath,
 					"component": entry.Component,
 					"fields":    entry.Fields,
+					"line":      line,
 				},
 			}
 			if !timelineMatches(item, sessionFilter, agentFilter, kindFilter, levelFilter, query, fromMS) {
@@ -1186,7 +1189,7 @@ func timelineMatches(item timelineItem, session, agent, kind, level, q string, f
 		return false
 	}
 	if q != "" {
-		stack := strings.ToLower(item.Content + "\n" + item.SessionKey + "\n" + item.AgentID + "\n" + item.Kind + "\n" + item.Level)
+		stack := strings.ToLower(item.Content + "\n" + item.SessionKey + "\n" + item.AgentID + "\n" + item.Kind + "\n" + item.Level + "\n" + item.Source)
 		if !strings.Contains(stack, q) {
 			return false
 		}
@@ -1248,4 +1251,18 @@ func classifyRuntimeLogKind(entry runtimeLogEntry) string {
 	default:
 		return "info"
 	}
+}
+
+func timelineEventID(source string, parts ...string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(source))
+	_, _ = h.Write([]byte{0})
+	for _, p := range parts {
+		_, _ = h.Write([]byte(p))
+		_, _ = h.Write([]byte{0})
+	}
+	sum := h.Sum64()
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], sum)
+	return fmt.Sprintf("%s:%x", source, buf[:])
 }
