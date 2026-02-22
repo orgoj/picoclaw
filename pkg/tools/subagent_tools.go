@@ -69,7 +69,7 @@ func (t *SubagentStatusTool) Execute(ctx context.Context, args map[string]interf
 		created := time.UnixMilli(task.Created).Format("15:04:05")
 		label := task.Label
 		if label == "" {
-			label = "(unnamed)"
+			label = "no-label"
 		}
 		agentInfo := ""
 		if task.Name != "" {
@@ -134,7 +134,7 @@ func (t *SubagentHistoryTool) Execute(ctx context.Context, args map[string]inter
 
 	label := task.Label
 	if label == "" {
-		label = "(unnamed)"
+		label = "no-label"
 	}
 
 	created := time.UnixMilli(task.Created).Format("2006-01-02 15:04:05")

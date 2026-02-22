@@ -240,9 +240,9 @@ func TestSubagentTool_Execute_NoLabel(t *testing.T) {
 		t.Errorf("Expected success without label, got error: %s", result.ForLLM)
 	}
 
-	// ForLLM should show (unnamed) for missing label
-	if !strings.Contains(result.ForLLM, "(unnamed)") {
-		t.Errorf("ForLLM should show '(unnamed)' for missing label, got: %s", result.ForLLM)
+	// ForLLM should show no-label for missing label
+	if !strings.Contains(result.ForLLM, "no-label") {
+		t.Errorf("ForLLM should show 'no-label' for missing label, got: %s", result.ForLLM)
 	}
 }
 

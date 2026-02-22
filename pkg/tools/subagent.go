@@ -849,7 +849,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	// ForLLM: Full execution details
 	labelStr := label
 	if labelStr == "" {
-		labelStr = "(unnamed)"
+		labelStr = "no-label"
 	}
 	llmContent := fmt.Sprintf("Subagent task completed:\nLabel: %s\nIterations: %d\nResult: %s",
 		labelStr, loopResult.Iterations, resultContent)
