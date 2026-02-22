@@ -409,8 +409,13 @@ func (al *AgentLoop) enqueueIncidentNotice(msg bus.InboundMessage, cause, errTex
 		SessionKey: msg.SessionKey,
 		Content:    incident,
 		Metadata: map[string]string{
-			"source": "system:incident",
-			"urgent": "true",
+			"source":      "system:incident",
+			"urgent":      "true",
+			"cause":       cause,
+			"channel":     msg.Channel,
+			"chat_id":     msg.ChatID,
+			"sender_id":   msg.SenderID,
+			"session_key": msg.SessionKey,
 		},
 	}
 	if _, ok := al.bus.InsertInboundFirst(inbound); !ok {

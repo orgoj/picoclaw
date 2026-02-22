@@ -858,8 +858,14 @@ func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
 		SessionKey: msg.SessionKey,
 		Content:    incident,
 		Metadata: map[string]string{
-			"source": "system:kill",
-			"urgent": "true",
+			"source":      "system:kill",
+			"urgent":      "true",
+			"cause":       "cancelled",
+			"task_id":     taskID,
+			"channel":     msg.Channel,
+			"chat_id":     msg.ChatID,
+			"sender_id":   msg.SenderID,
+			"session_key": msg.SessionKey,
 		},
 	})
 
