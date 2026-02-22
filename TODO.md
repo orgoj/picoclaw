@@ -1,24 +1,5 @@
 # TODO for picoclaw agents system
 
-## JEDEN VELKY REFACTOR (udelat najednou, ne po kouskach)
-
-## HARD RULE PRO NOVOU VERZI
-
-- [MUST] Bez zpetne kompatibility: cte se jen nove schema/logy/API; zadne fallback parsery a zadne migracni vetve pro stare formaty.
-
-## DEFINITION OF DONE (pro "hotovy dashboard bez telegramu")
-
-- [ ] Cely provoz je ovladatelny z dashboardu bez Telegramu.
-- [ ] Feed v dashboardu odpovida tomu, co by prislo do channelu + explicitni SYS/AUTO eventy. TY eventy jsou doufam na vsech aktivnich chanels
-- [ ] Zadny pravidelny full repaint; pouze incremental patch.
-- [ ] Timeline ordering je stabilni a reprodukovatelny.
-- [ ] Kazdy agent ma vlastni log stream a rychle API nacteni.
-- [ ] `make vet` + `make test` prochazi.
-- [ ] CHANGELOG + README + VERSION + TODO aktualizovane ve stejnem passu.
-
-
-## BACKLOG ZACHOVAN (udelat potom)
-
 ### LLM
 
 - [LATER] LLM autotune context/retry podle chyb - pro konretniho provedera a model separatne
@@ -26,6 +7,16 @@
 - [LATER] autotune retry podle error
 - [LATER] barvicky ve WEBUI agentu, aby bylo videt retry
 - [LATER] proverit stream mode z.ai: https://docs.z.ai/guides/capabilities/streaming
+
+### Config parity
+
+- [LATER] legacy config migrace bez `agents.defaults.provider` (jen pokud budeme chtit zpetnou kompatibilitu), toto je co?
+  - upstream referencni commit: `58b5e21`
+
+- [LATER] sjednotit datovou strukturu `agents.defaults` a `agents.subagents` (plus `agents.<name>` override) do plne parity
+  - subagent runtime ma mit stejne konfigurovatelne limity jako main agent (timeout/retries/backoff/context apod.)
+  - zavest jeden resolver/runtime profil pro main i subagent beh
+  - `config/config.example.json` drzet 1:1 se skutecnym runtime chovanim po dodelani parity
 
 ### Memory tooling (future)
 
@@ -38,18 +29,6 @@
   - detekce duplicit a sumarizace starsich zaznamu
   - zachovat audit trail (co bylo slouceno a kdy)
   - zamezit opakovanemu consolidate po nastavidelne dobe
-
-### Upstream backlog (2026-02-20)
-
-- [LATER] legacy config migrace bez `agents.defaults.provider` (jen pokud budeme chtit zpetnou kompatibilitu)
-  - upstream referencni commit: `58b5e21`
-
-### Config parity
-
-- [LATER] sjednotit datovou strukturu `agents.defaults` a `agents.subagents` (plus `agents.<name>` override) do plne parity
-  - subagent runtime ma mit stejne konfigurovatelne limity jako main agent (timeout/retries/backoff/context apod.)
-  - zavest jeden resolver/runtime profil pro main i subagent beh
-  - `config/config.example.json` drzet 1:1 se skutecnym runtime chovanim po dodelani parity
 
 ### Ideas
 
