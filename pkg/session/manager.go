@@ -81,6 +81,10 @@ func (sm *SessionManager) AddFullMessage(sessionKey string, msg providers.Messag
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	if msg.TimestampMS <= 0 {
+		msg.TimestampMS = time.Now().UnixMilli()
+	}
+
 	session, ok := sm.sessions[sessionKey]
 	if !ok {
 		session = &Session{

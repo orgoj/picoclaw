@@ -84,13 +84,15 @@
 >   - Automatic runtime/panic notices use the configured `gateway.auto_message_prefix`.
 > - **Inbound queue, timing, and observability**
 >   - Bounded/editable inbound queue APIs (inspect/update/delete/reorder).
+>   - Direct subagent cancellation API (`DELETE /api/v1/subagents/{id}`) for dashboard `KILL` controls.
 >   - Ingress timing metadata: `received_at`, `enqueued_at`, `delta_since_prev_ms`, `queue_len_at_enqueue`, `gap_notice`.
 >   - Ingress merge controls with forced-prefix concat behavior.
 >   - Unified runtime logging under `logging.dir` plus `audit.jsonl`.
 >   - Live ops visibility via dashboard + SSE snapshot stream.
+>   - Session persistence records per-message `timestamp_ms` for stable dashboard timeline ordering.
 >   - Dashboard ops layout:
 >     - Left: full-height history pane.
->     - Right: stacked `Agents / Sessions / Queue / Message`.
+>     - Right: stacked `Agents / Sessions / Channels`.
 >     - Click filters: session and subagent.
 >     - Draggable splitters (horizontal + vertical), persisted in browser local storage.
 >     - Top bar `Clear all filters` resets both session+agent filters to all-session history.
@@ -100,8 +102,10 @@
 >     - All-history scope also includes recent runtime console lines from `agent.log` for operator parity with live console view.
 >     - Default all-history mode now maximizes visible data with bounded caps (sessions list + `agent.log` tail + UI render cap) to stay responsive.
 >     - Message panel uses dedicated mode buttons (`Queue/Inject/Force First/Append/Delete Last`) mapped to prefix controls.
+>     - Composer includes quick `+` command menu for direct command insertion.
 >     - Message textarea has responsive max-height on mobile to avoid overflow past viewport.
 >     - Agents table shows `KILL` action for running/pending tasks when control is enabled.
+>     - Channels panel includes runtime channels plus discovered skills and defined named-agent catalogs.
 >     - Queue table supports per-row reorder (`top/up/down/bottom`) and delete.
 >     - Destructive dashboard actions (`Delete Last`, queue `del`, `KILL`) require confirmation.
 >     - Action buttons use busy states to reduce accidental duplicate clicks.

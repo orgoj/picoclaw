@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.35 - 2026-02-22
+
+### Added
+- Admin API now exposes direct subagent cancellation via `DELETE /api/v1/subagents/{id}` (dashboard `KILL` no longer depends on control-message parsing).
+- Runtime inspector payload (`/api/v1/runtime`) now includes catalog metadata:
+  - `runtime.catalog.defined_agents` (all discovered/configured named agents),
+  - `runtime.catalog.skills` (all discovered skills with source/path metadata).
+- Session message model now stores per-message `timestamp_ms` when messages are persisted.
+
+### Changed
+- Dashboard layout is now operator-first: left flow `Messages -> Queue -> Input`, right stack `Agents -> Sessions -> Channels`.
+- Dashboard Channels panel now includes:
+  - enabled channel runtime status,
+  - full `+` control command menu list,
+  - defined named-agent catalog,
+  - discovered skills catalog.
+- Dashboard composer now has quick `+` command selector and ArrowUp empty-input queue recall/edit helper.
+
+### Fixed
+- Dashboard `KILL` action now calls direct API cancel endpoint (no queue/control-command roundtrip).
+- Dashboard aggregated history now uses best-effort chronological ordering with priority on message `timestamp_ms` and parsed log timestamps, improving cross-source timeline coherence.
+
 ## v0.1.34 - 2026-02-22
 
 ### Fixed

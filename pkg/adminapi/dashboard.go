@@ -666,6 +666,7 @@ function collectHistoryEntries(includeAgentLog) {
     for (let i = 0; i < list.length; i++) {
       const m = list[i] || {};
       const content = String(m.content || "");
+      const ts = Number(m.timestamp_ms || 0);
       out.push({
         historyKey: key + "#" + i,
         sessionKey: key,
@@ -674,7 +675,7 @@ function collectHistoryEntries(includeAgentLog) {
         content,
         tone: detectTone(content),
         agentName: detectAgentName(content),
-        ts: baseTs + i,
+        ts: ts > 0 ? ts : (baseTs + i),
       });
     }
   }

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
 func TestSanitizeFilename(t *testing.T) {
@@ -70,5 +72,21 @@ func TestSave_RejectsPathTraversal(t *testing.T) {
 		if err := sm.Save(key); err == nil {
 			t.Errorf("Save(%q) should have failed but didn't", key)
 		}
+	}
+}
+
+func TestAddFullMessage_AssignsTimestampWhenMissing(t *testing.T) {
+	sm := NewSessionManager("")
+	key := "web:test"
+	sm.AddFullMessage(key, providers.Message{
+		Role:    "user",
+		Content: "hello",
+	})
+	history := sm.GetHistory(key)
+	if len(history) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(history))
+	}
+	if history[0].TimestampMS <= 0 {
+		t.Fatalf("expected timestamp_ms to be set, got %d", history[0].TimestampMS)
 	}
 }
