@@ -17,8 +17,6 @@
 
 ### REF-3: Control semantics
 
-- [NOW] Incident report pipeline dodelat na 100% structured payload (`cause`, `channel`, `chat_id`, `sender_id`, `task_id`) a formalni event `kind=sys|auto`.
-
 ## HARD RULE PRO NOVOU VERZI
 
 - [MUST] Bez zpetne kompatibility: cte se jen nove schema/logy/API; zadne fallback parsery a zadne migracni vetve pro stare formaty.

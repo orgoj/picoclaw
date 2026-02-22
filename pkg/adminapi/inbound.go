@@ -307,6 +307,56 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	for _, q := range a.msgBus.ListInbound() {
+		msg := q.Message
+		key := strings.TrimSpace(msg.SessionKey)
+		if key == "" {
+			if ch := strings.TrimSpace(msg.Channel); ch != "" && strings.TrimSpace(msg.ChatID) != "" {
+				key = ch + ":" + strings.TrimSpace(msg.ChatID)
+			}
+		}
+		ts := q.EnqueuedAt
+		if ts <= 0 {
+			ts = parseTimestampMS(msg.Metadata["enqueued_at"])
+		}
+		if ts <= 0 {
+			ts = time.Now().UnixMilli()
+		}
+		kind := "queue"
+		if raw := strings.ToLower(strings.TrimSpace(msg.Metadata["kind"])); raw != "" {
+			kind = raw
+		}
+		level := "info"
+		if raw := strings.ToLower(strings.TrimSpace(msg.Metadata["level"])); raw != "" {
+			level = raw
+		}
+		content := strings.TrimSpace(msg.Content)
+		item := timelineItem{
+			ID:          "queue:" + q.ID,
+			EventID:     timelineEventID("queue", q.ID, strconv.FormatInt(ts, 10), key, content),
+			TimestampMS: ts,
+			Source:      "queue",
+			SessionKey:  key,
+			AgentID:     strings.TrimSpace(msg.SenderID),
+			Role:        "queue",
+			Kind:        kind,
+			Level:       level,
+			Content:     content,
+			Payload: map[string]any{
+				"inbound_id":  q.ID,
+				"channel":     msg.Channel,
+				"chat_id":     msg.ChatID,
+				"sender_id":   msg.SenderID,
+				"enqueued_at": q.EnqueuedAt,
+				"metadata":    mapStringStringAny(msg.Metadata),
+			},
+		}
+		if !timelineMatches(item, sessionFilter, agentFilter, kindFilter, levelFilter, query, fromMS) {
+			continue
+		}
+		items = append(items, item)
+	}
+
 	if a.cfg != nil && sessionFilter == "" {
 		mainLogPath := filepath.Join(a.cfg.LoggingDirPath(), "agent.jsonl")
 		lines, _ := readLastLines(mainLogPath, 5000)
@@ -1251,6 +1301,26 @@ func classifyRuntimeLogKind(entry runtimeLogEntry) string {
 	default:
 		return "info"
 	}
+}
+
+func mapStringStringAny(in map[string]string) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func parseTimestampMS(raw string) int64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 func timelineEventID(source string, parts ...string) string {
