@@ -597,18 +597,19 @@ function historyEntryMatchesAgent(entry) {
 }
 
 function parseLineTimestamp(content) {
-  const text = String(content || "");
-  const patterns = [
-    /(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)/,
-    /(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})/,
-    /(\\d{4}\\/\\d{2}\\/\\d{2} \\d{2}:\\d{2}:\\d{2})/,
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (!m || !m[1]) continue;
-    const ts = Date.parse(m[1].replace(/\\//g, "-"));
-    if (!Number.isNaN(ts)) return ts;
-  }
+  const text = String(content || "").trim();
+  if (!text) return 0;
+  try {
+    const obj = JSON.parse(text);
+    if (obj && typeof obj.timestamp === "string") {
+      const n = Date.parse(obj.timestamp);
+      if (!Number.isNaN(n)) return n;
+    }
+    if (obj && typeof obj.ts === "number") {
+      // Accept both ms and second precision if upstream emits either form.
+      return obj.ts > 1e12 ? obj.ts : Math.round(obj.ts * 1000);
+    }
+  } catch (_) {}
   return 0;
 }
 

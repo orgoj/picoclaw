@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.37 - 2026-02-22
+
+### Fixed
+- Dashboard JS runtime syntax error in timestamp parsing was fixed.
+- Restored dashboard boot sequence for live SSE updates and drag-resize handlers (script no longer crashes during initialization).
+
 ## v0.1.36 - 2026-02-22
 
 ### Fixed

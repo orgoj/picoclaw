@@ -2,8 +2,11 @@
 
 ## FIX
 
+- kdyz agent havaruje, tak by to melo dat vice info a nejake jeho posledni message a presne error co ho shodi hlavnimu agentovi primo do queue na zacatek a procesit jestli nic nebezi, stejna funkce jako idle co to vlozi a pusti kdyz nic nejede
+
 ### WEBUI
 
+- divne UX
 - info v head o hlavnim agentovi, doba behu, stav contextu, pocet message a tool call, celkove a od compactu
 - filter na history abych mohl skyt rychle debug a info
 - ta history je spatna - to musi byt casove jak to slo za sebou (ted je best-effort, doplnit 100% timeline i pro starsi data bez timestamp)
