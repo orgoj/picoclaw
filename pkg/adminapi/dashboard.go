@@ -1061,77 +1061,116 @@ function renderChannels(chNode) {
   const node = chNode || {};
   const enabled = Array.isArray(node.enabled) ? node.enabled : [];
   const status = node.status || {};
-  const sig = JSON.stringify({ enabled, status });
-  if (state.renderSig.channels === sig) return;
-  let html = "<tr><th>Channel</th><th>Enabled</th><th>Status</th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>Channel</th><th>Enabled</th><th>Status</th></tr>";
   for (const name of enabled) {
     const st = status[name] || {};
     const running = st.running === true;
-    html += "<tr>";
-    html += "<td>" + escapeHTML(name) + "</td>";
-    html += "<td>yes</td>";
-    html += "<td>" + (running ? "<span class='ok'>running</span>" : "<span class='warn'>stopped</span>") + "</td>";
-    html += "</tr>";
+    const key = String(name || "");
+    const sig = running ? "1" : "0";
+    let tr = oldByKey.get(key);
+    if (!tr || tr.getAttribute("data-sig") !== sig) {
+      tr = document.createElement("tr");
+      tr.setAttribute("data-key", key);
+      tr.setAttribute("data-sig", sig);
+      tr.innerHTML =
+        "<td>" + escapeHTML(name) + "</td>" +
+        "<td>yes</td>" +
+        "<td>" + (running ? "<span class='ok'>running</span>" : "<span class='warn'>stopped</span>") + "</td>";
+    }
+    t.appendChild(tr);
   }
   if (enabled.length === 0) {
-    html += "<tr><td colspan='3' class='small'>No enabled channels</td></tr>";
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td colspan='3' class='small'>No enabled channels</td>";
+    t.appendChild(tr);
   }
-  t.innerHTML = html;
-  state.renderSig.channels = sig;
 }
 
 function renderControls(commands) {
   const t = $("controlTable");
   if (!t) return;
   const cmds = Array.isArray(commands) ? commands : [];
-  const sig = JSON.stringify(cmds);
-  if (state.renderSig.controls === sig) return;
-  let html = "<tr><th>+ Menu Commands</th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>+ Menu Commands</th></tr>";
   if (cmds.length === 0) {
-    html += "<tr><td class='small'>No control commands</td></tr>";
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td class='small'>No control commands</td>";
+    t.appendChild(tr);
   } else {
-    for (const c of cmds) {
-      html += "<tr><td>" + escapeHTML(String(c || "")) + "</td></tr>";
+    for (let i = 0; i < cmds.length; i++) {
+      const c = String(cmds[i] || "");
+      const key = String(i);
+      let tr = oldByKey.get(key);
+      if (!tr || tr.getAttribute("data-sig") !== c) {
+        tr = document.createElement("tr");
+        tr.setAttribute("data-key", key);
+        tr.setAttribute("data-sig", c);
+        tr.innerHTML = "<td>" + escapeHTML(c) + "</td>";
+      }
+      t.appendChild(tr);
     }
   }
-  t.innerHTML = html;
-  state.renderSig.controls = sig;
 }
 
 function renderDefinedAgents(items) {
   const t = $("definedAgentTable");
   if (!t) return;
   const rows = Array.isArray(items) ? items : [];
-  const sig = JSON.stringify(rows);
-  if (state.renderSig.definedAgents === sig) return;
-  let html = "<tr><th>Defined Agents</th><th>Source</th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>Defined Agents</th><th>Source</th></tr>";
   if (rows.length === 0) {
-    html += "<tr><td colspan='2' class='small'>No defined agents</td></tr>";
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td colspan='2' class='small'>No defined agents</td>";
+    t.appendChild(tr);
   } else {
     for (const it of rows) {
-      html += "<tr><td>" + escapeHTML(it.name || "") + "</td><td>" + escapeHTML(it.source || "") + "</td></tr>";
+      const key = String(it.name || "");
+      const sig = String((it.name || "") + "|" + (it.source || ""));
+      let tr = oldByKey.get(key);
+      if (!tr || tr.getAttribute("data-sig") !== sig) {
+        tr = document.createElement("tr");
+        tr.setAttribute("data-key", key);
+        tr.setAttribute("data-sig", sig);
+        tr.innerHTML = "<td>" + escapeHTML(it.name || "") + "</td><td>" + escapeHTML(it.source || "") + "</td>";
+      }
+      t.appendChild(tr);
     }
   }
-  t.innerHTML = html;
-  state.renderSig.definedAgents = sig;
 }
 
 function renderSkills(items) {
   const t = $("skillsTable");
   if (!t) return;
   const rows = Array.isArray(items) ? items : [];
-  const sig = JSON.stringify(rows);
-  if (state.renderSig.skills === sig) return;
-  let html = "<tr><th>Skills</th><th>Source</th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>Skills</th><th>Source</th></tr>";
   if (rows.length === 0) {
-    html += "<tr><td colspan='2' class='small'>No skills discovered</td></tr>";
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td colspan='2' class='small'>No skills discovered</td>";
+    t.appendChild(tr);
   } else {
     for (const it of rows) {
-      html += "<tr><td>" + escapeHTML(it.name || "") + "</td><td>" + escapeHTML(it.source || "") + "</td></tr>";
+      const key = String(it.name || "");
+      const sig = String((it.name || "") + "|" + (it.source || ""));
+      let tr = oldByKey.get(key);
+      if (!tr || tr.getAttribute("data-sig") !== sig) {
+        tr = document.createElement("tr");
+        tr.setAttribute("data-key", key);
+        tr.setAttribute("data-sig", sig);
+        tr.innerHTML = "<td>" + escapeHTML(it.name || "") + "</td><td>" + escapeHTML(it.source || "") + "</td>";
+      }
+      t.appendChild(tr);
     }
   }
-  t.innerHTML = html;
-  state.renderSig.skills = sig;
 }
 
 async function refreshInbound() {

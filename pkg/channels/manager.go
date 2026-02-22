@@ -860,6 +860,8 @@ func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
 		Metadata: map[string]string{
 			"source":      "system:kill",
 			"urgent":      "true",
+			"kind":        "sys",
+			"level":       "warn",
 			"cause":       "cancelled",
 			"task_id":     taskID,
 			"channel":     msg.Channel,

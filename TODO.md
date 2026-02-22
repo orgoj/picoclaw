@@ -43,7 +43,7 @@
 
 ### LLM
 
-- [LATER] LLM autotune context/retry podle chyb.
+- [LATER] LLM autotune context/retry podle chyb - pro konretniho provedera a model separatne
 - [LATER] autotune max context podle error
 - [LATER] autotune retry podle error
 - [LATER] barvicky ve WEBUI agentu, aby bylo videt retry
@@ -56,9 +56,10 @@
   - `memory_search(name, query, limit?)`
   - `memory_consolidate(name)` pro slouceni denich poznamek do dlouhodobe memory
 - [LATER] idle worker pro memory maintenance
-  - periodicky spoustet `memory_consolidate` jen pri idle
+  - periodicky spoustet `memory_consolidate` jen pri idle po nastavitejne dobe idle a v povolenem casovem rozsahu (default idle 30m v case 02-04h)
   - detekce duplicit a sumarizace starsich zaznamu
   - zachovat audit trail (co bylo slouceno a kdy)
+  - zamezit opakovanemu consolidate po nastavidelne dobe
 
 ### Upstream backlog (2026-02-20)
 

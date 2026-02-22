@@ -411,6 +411,8 @@ func (al *AgentLoop) enqueueIncidentNotice(msg bus.InboundMessage, cause, errTex
 		Metadata: map[string]string{
 			"source":      "system:incident",
 			"urgent":      "true",
+			"kind":        "sys",
+			"level":       "error",
 			"cause":       cause,
 			"channel":     msg.Channel,
 			"chat_id":     msg.ChatID,
@@ -1647,9 +1649,10 @@ func (al *AgentLoop) maybeSummarize(sessionKey string) {
 	newHistory := al.sessions.GetHistory(sessionKey)
 	tokenEstimate := al.estimateTokens(newHistory)
 
-	threshold := int(float64(al.contextWindow) * al.memoryThreshold)
-
-	if len(newHistory) > al.historyMessageThreshold || tokenEstimate > threshold {
+	shouldByMessageCount := al.historyMessageThreshold > 0 && len(newHistory) > al.historyMessageThreshold
+	tokenThreshold := int(float64(al.contextWindow) * al.memoryThreshold)
+	shouldByTokenUse := tokenThreshold > 0 && tokenEstimate > tokenThreshold
+	if shouldByMessageCount || shouldByTokenUse {
 		if _, loading := al.summarizing.LoadOrStore(sessionKey, true); !loading {
 			go func() {
 				defer func() {
