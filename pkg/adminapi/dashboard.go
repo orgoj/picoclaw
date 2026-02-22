@@ -957,17 +957,41 @@ function updateFilterStateUI() {
   box.innerHTML = html;
 }
 
+function ensureTableHeader(table, headerHTML) {
+  if (!table) return null;
+  let header = table.querySelector("tr[data-header='1']");
+  if (!header) {
+    header = document.createElement("tr");
+    header.setAttribute("data-header", "1");
+    table.appendChild(header);
+  }
+  if (header.getAttribute("data-sig") !== headerHTML) {
+    header.setAttribute("data-sig", headerHTML);
+    header.innerHTML = headerHTML;
+  }
+  return header;
+}
+
+function tableBodyRowMap(table) {
+  const out = new Map();
+  if (!table) return out;
+  const rows = Array.from(table.querySelectorAll("tr[data-key]"));
+  for (const n of rows) out.set(String(n.getAttribute("data-key") || ""), n);
+  return out;
+}
+
 function renderInbound(items) {
   const t = $("inboundTable");
+  if (!t) return;
   const rows = (items || []);
   state.inboundItems = rows;
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>#</th><th>ID</th><th>Session</th><th>Content</th><th></th></tr>";
+  ensureTableHeader(t, "<th>#</th><th>ID</th><th>Session</th><th>Content</th><th></th>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   for (let i = 0; i < rows.length; i++) {
     const it = rows[i] || {};
     const id = String(it.id || "");
+    seen.add(id);
     const m = it.message || {};
     const sig = [i, m.session_key || "", m.content || "", rows.length].join("|");
     let tr = oldByKey.get(id);
@@ -991,17 +1015,21 @@ function renderInbound(items) {
     }
     t.appendChild(tr);
   }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
+  }
 }
 
 function renderSubagents(items) {
   const t = $("subagentTable");
+  if (!t) return;
   const rows = (items || []);
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th></tr>";
+  ensureTableHeader(t, "<th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   for (const it of rows) {
     const key = String(it.id || "");
+    seen.add(key);
     const running = it.status === "running" || it.status === "pending";
     const cls = (running ? "agent-running" : "agent-stopped") + (state.selectedAgentID === it.id ? " selected" : "");
     const sig = [it.status || "", it.name || "", it.label || "", it.pending || 0, cls].join("|");
@@ -1024,17 +1052,21 @@ function renderSubagents(items) {
     }
     t.appendChild(tr);
   }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
+  }
 }
 
 function renderSessions(items) {
   const t = $("sessionTable");
+  if (!t) return;
   const rows = (items || []);
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>Session</th><th>Msgs</th><th>Updated</th></tr>";
+  ensureTableHeader(t, "<th>Session</th><th>Msgs</th><th>Updated</th></tr>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   for (const it of rows) {
     const key = it && it.key ? String(it.key) : "";
+    seen.add(key);
     const selected = state.selectedSession === key ? " selected" : "";
     const sig = [it.messages || 0, it.updated || 0, selected].join("|");
     let tr = oldByKey.get(key);
@@ -1053,6 +1085,9 @@ function renderSessions(items) {
     }
     t.appendChild(tr);
   }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
+  }
 }
 
 function renderChannels(chNode) {
@@ -1061,14 +1096,14 @@ function renderChannels(chNode) {
   const node = chNode || {};
   const enabled = Array.isArray(node.enabled) ? node.enabled : [];
   const status = node.status || {};
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>Channel</th><th>Enabled</th><th>Status</th></tr>";
+  ensureTableHeader(t, "<th>Channel</th><th>Enabled</th><th>Status</th></tr>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   for (const name of enabled) {
     const st = status[name] || {};
     const running = st.running === true;
     const key = String(name || "");
+    seen.add(key);
     const sig = running ? "1" : "0";
     let tr = oldByKey.get(key);
     if (!tr || tr.getAttribute("data-sig") !== sig) {
@@ -1083,9 +1118,18 @@ function renderChannels(chNode) {
     t.appendChild(tr);
   }
   if (enabled.length === 0) {
-    const tr = document.createElement("tr");
+    const key = "__empty__";
+    seen.add(key);
+    let tr = oldByKey.get(key);
+    if (!tr) {
+      tr = document.createElement("tr");
+      tr.setAttribute("data-key", key);
+    }
     tr.innerHTML = "<td colspan='3' class='small'>No enabled channels</td>";
     t.appendChild(tr);
+  }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
   }
 }
 
@@ -1093,18 +1137,24 @@ function renderControls(commands) {
   const t = $("controlTable");
   if (!t) return;
   const cmds = Array.isArray(commands) ? commands : [];
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>+ Menu Commands</th></tr>";
+  ensureTableHeader(t, "<th>+ Menu Commands</th></tr>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   if (cmds.length === 0) {
-    const tr = document.createElement("tr");
+    const key = "__empty__";
+    seen.add(key);
+    let tr = oldByKey.get(key);
+    if (!tr) {
+      tr = document.createElement("tr");
+      tr.setAttribute("data-key", key);
+    }
     tr.innerHTML = "<td class='small'>No control commands</td>";
     t.appendChild(tr);
   } else {
     for (let i = 0; i < cmds.length; i++) {
       const c = String(cmds[i] || "");
       const key = String(i);
+      seen.add(key);
       let tr = oldByKey.get(key);
       if (!tr || tr.getAttribute("data-sig") !== c) {
         tr = document.createElement("tr");
@@ -1115,23 +1165,32 @@ function renderControls(commands) {
       t.appendChild(tr);
     }
   }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
+  }
 }
 
 function renderDefinedAgents(items) {
   const t = $("definedAgentTable");
   if (!t) return;
   const rows = Array.isArray(items) ? items : [];
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>Defined Agents</th><th>Source</th></tr>";
+  ensureTableHeader(t, "<th>Defined Agents</th><th>Source</th></tr>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   if (rows.length === 0) {
-    const tr = document.createElement("tr");
+    const key = "__empty__";
+    seen.add(key);
+    let tr = oldByKey.get(key);
+    if (!tr) {
+      tr = document.createElement("tr");
+      tr.setAttribute("data-key", key);
+    }
     tr.innerHTML = "<td colspan='2' class='small'>No defined agents</td>";
     t.appendChild(tr);
   } else {
     for (const it of rows) {
       const key = String(it.name || "");
+      seen.add(key);
       const sig = String((it.name || "") + "|" + (it.source || ""));
       let tr = oldByKey.get(key);
       if (!tr || tr.getAttribute("data-sig") !== sig) {
@@ -1143,23 +1202,32 @@ function renderDefinedAgents(items) {
       t.appendChild(tr);
     }
   }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
+  }
 }
 
 function renderSkills(items) {
   const t = $("skillsTable");
   if (!t) return;
   const rows = Array.isArray(items) ? items : [];
-  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
-  const oldByKey = new Map();
-  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
-  t.innerHTML = "<tr><th>Skills</th><th>Source</th></tr>";
+  ensureTableHeader(t, "<th>Skills</th><th>Source</th></tr>");
+  const oldByKey = tableBodyRowMap(t);
+  const seen = new Set();
   if (rows.length === 0) {
-    const tr = document.createElement("tr");
+    const key = "__empty__";
+    seen.add(key);
+    let tr = oldByKey.get(key);
+    if (!tr) {
+      tr = document.createElement("tr");
+      tr.setAttribute("data-key", key);
+    }
     tr.innerHTML = "<td colspan='2' class='small'>No skills discovered</td>";
     t.appendChild(tr);
   } else {
     for (const it of rows) {
       const key = String(it.name || "");
+      seen.add(key);
       const sig = String((it.name || "") + "|" + (it.source || ""));
       let tr = oldByKey.get(key);
       if (!tr || tr.getAttribute("data-sig") !== sig) {
@@ -1170,6 +1238,9 @@ function renderSkills(items) {
       }
       t.appendChild(tr);
     }
+  }
+  for (const [k, row] of oldByKey.entries()) {
+    if (!seen.has(k)) row.remove();
   }
 }
 

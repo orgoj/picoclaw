@@ -2,20 +2,12 @@
 
 ## JEDEN VELKY REFACTOR (udelat najednou, ne po kouskach)
 
-### REF-1: Log & Event model (backend)
+### REF-4: Upstream parity (active in full REF)
 
-- [NOW] Zavest jednotny event schema pro dashboard/feed:
-  - povinne pole: `event_id`, `timestamp_ms`, `source`, `session_key`, `agent_id`, `kind`, `level`, `payload`.
-  - `kind`: `message|auto|sys|tool|llm|queue|error|warn|info|debug`.
-
-### REF-2: Dashboard rewrite (frontend)
-
-- [NOW] Layout final:
-  - vlevo: `Messages -> Queue -> Input`
-  - vpravo: `Agents -> Sessions -> Channels`
-  - splittery stabilni, persist, bez jitteru.
-
-### REF-3: Control semantics
+- [NOW] proverit upstream patch pro `max_completion_tokens` u GPT-5 v `pkg/providers/http_provider.go`
+  - upstream referencni commit: `bb0424e`
+- [NOW] zvazit `channel session key routing` metadata (`peer_kind`, `peer_id`) pro non-telegram kanaly
+  - upstream referencni commit: `4adafa8`
 
 ## HARD RULE PRO NOVOU VERZI
 
@@ -56,10 +48,6 @@
 
 ### Upstream backlog (2026-02-20)
 
-- [LATER] proverit upstream patch pro `max_completion_tokens` u GPT-5 v `pkg/providers/http_provider.go`
-  - upstream referencni commit: `bb0424e`
-- [LATER] zvazit `channel session key routing` metadata (`peer_kind`, `peer_id`) pro non-telegram kanaly
-  - upstream referencni commit: `4adafa8`
 - [LATER] legacy config migrace bez `agents.defaults.provider` (jen pokud budeme chtit zpetnou kompatibilitu)
   - upstream referencni commit: `58b5e21`
 

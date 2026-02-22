@@ -30,6 +30,7 @@
 - Main-loop outbound policy now suppresses fallback final channel send when an explicit successful `message` tool send already happened in the same run (`[AUTO]` remains fallback-only).
 - Successful `message` tool deliveries are now persisted into target session history (`assistant` role) so dashboard timeline mirrors channel-visible output.
 - Timeline now ingests live inbound queue rows as first-class `source="queue"` events, preserving structured metadata (`cause`, `channel`, `chat_id`, `sender_id`, `task_id`, `kind`, `level`) in `payload.metadata`.
+- Dashboard table rendering no longer resets table `innerHTML` on refresh for queue/sessions/subagents/channels/catalog lists; all operator panes now use keyed row patching with stale-row pruning.
 
 ## v0.1.38 - 2026-02-22
 
