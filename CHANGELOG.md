@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.34 - 2026-02-22
+
+### Fixed
+- Main-agent loop no longer auto-forwards tool `ForUser` payloads to external channels during tool execution.
+- Raw tool output (especially from `exec`, e.g. `--help`/grep/stdout-stderr dumps) is now kept internal for LLM/session context unless explicitly sent via the `message` tool.
+- Main-agent final response remains delivered through the normal outbound path (no silent drop after tool activity).
+- Automatic panic/runtime error notices sent from agent loop are now prefixed with `gateway.auto_message_prefix` (same style as startup/shutdown auto notices).
+
+### Added
+- New session rule in `AGENTS.md` enforcing strict outbound policy:
+  - no automatic tool-output forwarding,
+  - user-visible output is limited to explicit `message` sends and final main-agent response,
+  - automatic panic/runtime errors must include configured auto prefix.
+
 ## v0.1.33 - 2026-02-22
 
 ### Fixed

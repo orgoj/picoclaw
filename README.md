@@ -78,6 +78,10 @@
 >   - Configurable command prefix via `ingress.concat_prefix` (first rune).
 >   - Append behavior `<prefix><prefix>MESSAGE` appends MESSAGE to previous queued message and returns explicit confirmation.
 >   - Priority behavior: active-run urgent injection + queue-head insertion semantics.
+> - **Outbound safety for operator channels**
+>   - Tool execution output is not auto-forwarded to external channels.
+>   - External user-facing content is restricted to explicit `message` sends and final main-agent response.
+>   - Automatic runtime/panic notices use the configured `gateway.auto_message_prefix`.
 > - **Inbound queue, timing, and observability**
 >   - Bounded/editable inbound queue APIs (inspect/update/delete/reorder).
 >   - Ingress timing metadata: `received_at`, `enqueued_at`, `delta_since_prev_ms`, `queue_len_at_enqueue`, `gap_notice`.
