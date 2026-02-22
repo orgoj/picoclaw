@@ -28,6 +28,7 @@
 - Dashboard right-panel tables (`channels`, `+ commands`, `defined agents`, `skills`) now use keyed row patching instead of full-table string rebuilds.
 - Timeline API now enforces always-present event schema fields (`event_id`, `timestamp_ms`, `source`, `session_key`, `agent_id`, `kind`, `level`, `payload`) and computes stable content-based `event_id` values for runtime-log rows.
 - Main-loop outbound policy now suppresses fallback final channel send when an explicit successful `message` tool send already happened in the same run (`[AUTO]` remains fallback-only).
+- Successful `message` tool deliveries are now persisted into target session history (`assistant` role) so dashboard timeline mirrors channel-visible output.
 
 ## v0.1.38 - 2026-02-22
 

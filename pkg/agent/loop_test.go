@@ -822,12 +822,15 @@ func TestProcessSystemMessage_TriggersImmediateRunForOriginSession(t *testing.T)
 	if len(history) == 0 {
 		t.Fatal("expected system completion in origin session history")
 	}
-	last := history[len(history)-1]
-	if last.Role != "system" {
-		t.Fatalf("expected last history role=system, got %s", last.Role)
+	foundSystemCompletion := false
+	for _, item := range history {
+		if item.Role == "system" && strings.Contains(item.Content, "Subagent subagent:subagent-1 completed") {
+			foundSystemCompletion = true
+			break
+		}
 	}
-	if !strings.Contains(last.Content, "Subagent subagent:subagent-1 completed") {
-		t.Fatalf("unexpected system notification content: %q", last.Content)
+	if !foundSystemCompletion {
+		t.Fatalf("expected system completion notification in history, got %d items", len(history))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -997,6 +1000,46 @@ func TestMessageTool_SuppressesAutoFinalOutbound(t *testing.T) {
 	defer cancel2()
 	if _, ok := msgBus.SubscribeOutbound(ctx2); ok {
 		t.Fatal("expected no auto final outbound when message tool already sent explicit message")
+	}
+
+	history := al.sessions.GetHistory("telegram:1")
+	foundToolDelivery := false
+	for _, item := range history {
+		if item.Role == "assistant" && item.Content == "tool says hello" {
+			foundToolDelivery = true
+			break
+		}
+	}
+	if !foundToolDelivery {
+		t.Fatal("expected explicit message tool delivery to be persisted in session history")
+	}
+}
+
+func TestExtractMessageToolDelivery_TargetResolution(t *testing.T) {
+	opts := processOptions{
+		SessionKey: "telegram:1",
+		Channel:    "telegram",
+		ChatID:     "1",
+	}
+
+	content, key, ok := extractMessageToolDelivery(map[string]interface{}{
+		"content": " hello ",
+	}, opts)
+	if !ok || content != "hello" || key != "telegram:1" {
+		t.Fatalf("unexpected default target resolution: ok=%v content=%q key=%q", ok, content, key)
+	}
+
+	content, key, ok = extractMessageToolDelivery(map[string]interface{}{
+		"content": "x",
+		"channel": "web",
+		"chat_id": "dashboard",
+	}, opts)
+	if !ok || key != "web:dashboard" {
+		t.Fatalf("unexpected explicit target resolution: ok=%v content=%q key=%q", ok, content, key)
+	}
+
+	if _, _, ok := extractMessageToolDelivery(map[string]interface{}{"content": "   "}, opts); ok {
+		t.Fatal("expected empty content to be rejected")
 	}
 }
 

@@ -1520,6 +1520,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			toolResult := al.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, opts.Channel, opts.ChatID, asyncCallback)
 			if tc.Name == "message" && toolResult != nil && !toolResult.IsError {
 				explicitMessageToolSent = true
+				if sentContent, targetSessionKey, ok := extractMessageToolDelivery(tc.Arguments, opts); ok {
+					al.sessions.AddMessage(targetSessionKey, "assistant", sentContent)
+				}
 			}
 
 			// Determine content for LLM based on tool result
@@ -1655,6 +1658,39 @@ func maxInt(v, min int) int {
 		return min
 	}
 	return v
+}
+
+func extractMessageToolDelivery(args map[string]interface{}, opts processOptions) (content, sessionKey string, ok bool) {
+	raw, hasContent := args["content"]
+	if !hasContent {
+		return "", "", false
+	}
+	content, ok = raw.(string)
+	if !ok {
+		return "", "", false
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return "", "", false
+	}
+
+	channel := strings.TrimSpace(opts.Channel)
+	chatID := strings.TrimSpace(opts.ChatID)
+	if raw, ok := args["channel"].(string); ok && strings.TrimSpace(raw) != "" {
+		channel = strings.TrimSpace(raw)
+	}
+	if raw, ok := args["chat_id"].(string); ok && strings.TrimSpace(raw) != "" {
+		chatID = strings.TrimSpace(raw)
+	}
+
+	sessionKey = strings.TrimSpace(opts.SessionKey)
+	if channel != "" && chatID != "" {
+		sessionKey = channel + ":" + chatID
+	}
+	if sessionKey == "" {
+		return "", "", false
+	}
+	return content, sessionKey, true
 }
 
 // maybeSummarize triggers summarization if the session history exceeds thresholds.
