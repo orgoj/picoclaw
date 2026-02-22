@@ -2,13 +2,6 @@
 
 ## JEDEN VELKY REFACTOR (udelat najednou, ne po kouskach)
 
-### REF-4: Upstream parity (active in full REF)
-
-- [NOW] proverit upstream patch pro `max_completion_tokens` u GPT-5 v `pkg/providers/http_provider.go`
-  - upstream referencni commit: `bb0424e`
-- [NOW] zvazit `channel session key routing` metadata (`peer_kind`, `peer_id`) pro non-telegram kanaly
-  - upstream referencni commit: `4adafa8`
-
 ## HARD RULE PRO NOVOU VERZI
 
 - [MUST] Bez zpetne kompatibility: cte se jen nove schema/logy/API; zadne fallback parsery a zadne migracni vetve pro stare formaty.

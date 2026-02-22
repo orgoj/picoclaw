@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.40 - 2026-02-22
+
+### Fixed
+- Dashboard queue/sessions/subagents/channels/catalog tables now patch rows incrementally without full table header/body redraw on refresh, reducing jitter and preserving UI state during live updates.
+- HTTP provider request shaping now recognizes GPT-5 and modern OpenAI `o*` model families for `max_completion_tokens` usage instead of `max_tokens`.
+- Channel base ingress now attaches routing metadata (`peer_kind`, `peer_id`) on inbound messages by default, with caller-provided values preserved.
+
 ## v0.1.39 - 2026-02-22
 
 ### Changed

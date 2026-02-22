@@ -77,8 +77,7 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 	}
 
 	if maxTokens, ok := options["max_tokens"].(int); ok {
-		lowerModel := strings.ToLower(model)
-		if strings.Contains(lowerModel, "glm") || strings.Contains(lowerModel, "o1") {
+		if shouldUseMaxCompletionTokens(model) {
 			requestBody["max_completion_tokens"] = maxTokens
 		} else {
 			requestBody["max_tokens"] = maxTokens
@@ -201,6 +200,22 @@ func (p *HTTPProvider) parseResponse(body []byte) (*LLMResponse, error) {
 
 func (p *HTTPProvider) GetDefaultModel() string {
 	return ""
+}
+
+func shouldUseMaxCompletionTokens(model string) bool {
+	lowerModel := strings.ToLower(strings.TrimSpace(model))
+	if lowerModel == "" {
+		return false
+	}
+	if strings.Contains(lowerModel, "glm") {
+		return true
+	}
+	if strings.Contains(lowerModel, "gpt-5") {
+		return true
+	}
+	parts := strings.Split(lowerModel, "/")
+	last := parts[len(parts)-1]
+	return strings.HasPrefix(last, "o1") || strings.HasPrefix(last, "o3") || strings.HasPrefix(last, "o4")
 }
 
 func createClaudeAuthProvider() (LLMProvider, error) {

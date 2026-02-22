@@ -1,6 +1,12 @@
 package channels
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/sipeed/picoclaw/pkg/bus"
+)
 
 func TestBaseChannelIsAllowed(t *testing.T) {
 	tests := []struct {
@@ -48,5 +54,48 @@ func TestBaseChannelIsAllowed(t *testing.T) {
 				t.Fatalf("IsAllowed(%q) = %v, want %v", tt.senderID, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBaseChannelHandleMessage_AddsPeerRoutingMetadata(t *testing.T) {
+	mb := bus.NewMessageBus()
+	ch := NewBaseChannel("line", nil, mb, nil)
+
+	ch.HandleMessage("u1", "chat-42", "hello", nil, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	msg, ok := mb.ConsumeInbound(ctx)
+	if !ok {
+		t.Fatal("expected inbound message")
+	}
+	if got := msg.Metadata["peer_kind"]; got != "chat" {
+		t.Fatalf("peer_kind=%q want=chat", got)
+	}
+	if got := msg.Metadata["peer_id"]; got != "chat-42" {
+		t.Fatalf("peer_id=%q want=chat-42", got)
+	}
+}
+
+func TestBaseChannelHandleMessage_RespectsProvidedPeerRoutingMetadata(t *testing.T) {
+	mb := bus.NewMessageBus()
+	ch := NewBaseChannel("discord", nil, mb, nil)
+
+	ch.HandleMessage("u1", "chat-42", "hello", nil, map[string]string{
+		"peer_kind": "user",
+		"peer_id":   "alice",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	msg, ok := mb.ConsumeInbound(ctx)
+	if !ok {
+		t.Fatal("expected inbound message")
+	}
+	if got := msg.Metadata["peer_kind"]; got != "user" {
+		t.Fatalf("peer_kind=%q want=user", got)
+	}
+	if got := msg.Metadata["peer_id"]; got != "alice" {
+		t.Fatalf("peer_id=%q want=alice", got)
 	}
 }

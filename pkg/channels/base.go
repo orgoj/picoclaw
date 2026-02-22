@@ -92,6 +92,16 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 	// Build session key: channel:chatID
 	sessionKey := fmt.Sprintf("%s:%s", c.name, chatID)
 
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	if _, ok := metadata["peer_kind"]; !ok {
+		metadata["peer_kind"] = "chat"
+	}
+	if _, ok := metadata["peer_id"]; !ok && strings.TrimSpace(chatID) != "" {
+		metadata["peer_id"] = chatID
+	}
+
 	msg := bus.InboundMessage{
 		Channel:    c.name,
 		SenderID:   senderID,
