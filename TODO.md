@@ -2,15 +2,26 @@
 
 ## FIX
 
-- WEBUI: `KILL` pro subagenta nefunguje přes `/api/v1/main/message` (`+kill <id>` se neparsuje jako control command)
-  - přidat přímý endpoint `DELETE /api/v1/subagents/{id}` -> `subagentMgr.Cancel(id)`
-  - Web UI tlačítko `KILL` přepnout na tento endpoint (ne přes queue message)
-  - po cancel okamžitě refresh subagent listu a vizuální status
-
 ### WEBUI
 
-- filter na hisotry abych mohl skyt rychle debug a info
-- ta history je spatna - to musi byt casove jak to slo za sebou a ne napred session a pak agent.log 
+- info v head o hlavnim agentovi, doba behu, stav contextu, pocet message a tool call, celkove a od compactu
+- filter na history abych mohl skyt rychle debug a info
+- ta history je spatna - to musi byt casove jak to slo za sebou (ted je best-effort, doplnit 100% timeline i pro starsi data bez timestamp)
+- to web ui se asi porad prekresluje, nejde ani oznacit text na copy, kurva to musi menit jen zmeny a ne cele predrbavat porad
+- u agenta potrebuji videt cas spusteni a cas konce, pocet message, pocet toolcall, context size aktualni. a co je tam pending u neho sama nula 0 proc to tam je?
+- injekce message agentovi
+
+- asi nejak celkove review, oprava UX, toto musi byt pouzitelne jako primarni ovladaci panel, abych to rozjel i bez telegram a toto byl primarni chanell
+
+- pres to web ui by melo by dostupny i cely workspace file manager (do budoucna i editace file)
+
+
+## LLM
+
+- autotune max context podle error
+- autotune restry podle error
+- barvicky ve WEBUI agentu, abych videl ze je retry 
+
 
 ## Memory tooling (future)
 
@@ -48,3 +59,6 @@
 - komunikace primo s agentem
   - injekce message agentovi
   - moznost ho spustit primo na chanell a komunikovat s nim, nejake `+agent_chat PROMPT` by ho pustilo  a vse co pise davalo na chanell, a konec kdyz skonci a nebo `+kill`
+
+- multi dashboard vice picoclaw pres API
+- project panel ve webui
