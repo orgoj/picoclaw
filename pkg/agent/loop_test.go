@@ -913,3 +913,44 @@ func TestToolResult_UserFacingToolDoesSendMessage(t *testing.T) {
 		t.Errorf("Expected 'Command output: hello world', got: %s", response)
 	}
 }
+
+func TestEstimateTokensWithSafety_IsConservative(t *testing.T) {
+	al := &AgentLoop{}
+	messages := []providers.Message{
+		{Role: "system", Content: strings.Repeat("a", 1200)},
+		{Role: "user", Content: strings.Repeat("b", 800)},
+	}
+
+	raw := al.estimateTokens(messages)
+	safe := al.estimateTokensWithSafety(messages)
+
+	if safe <= raw {
+		t.Fatalf("expected safe estimate > raw estimate, raw=%d safe=%d", raw, safe)
+	}
+}
+
+func TestTrimMessagesToTokenBudget_PreservesSystemAndLatest(t *testing.T) {
+	al := &AgentLoop{}
+	messages := []providers.Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: strings.Repeat("old-1 ", 400)},
+		{Role: "assistant", Content: strings.Repeat("old-2 ", 400)},
+		{Role: "user", Content: strings.Repeat("old-3 ", 400)},
+		{Role: "user", Content: "latest"},
+	}
+
+	trimmed := al.trimMessagesToTokenBudget(messages, 2100)
+	if len(trimmed) < 2 {
+		t.Fatalf("expected at least 2 messages after trim, got %d", len(trimmed))
+	}
+	if trimmed[0].Role != "system" || trimmed[0].Content != "sys" {
+		t.Fatalf("expected system prompt preserved, got role=%q content=%q", trimmed[0].Role, trimmed[0].Content)
+	}
+	last := trimmed[len(trimmed)-1]
+	if last.Content != "latest" {
+		t.Fatalf("expected latest message preserved, got %q", last.Content)
+	}
+	if al.estimateTokensWithSafety(trimmed) > 2100 {
+		t.Fatalf("expected trimmed messages within budget, got %d", al.estimateTokensWithSafety(trimmed))
+	}
+}

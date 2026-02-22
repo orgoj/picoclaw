@@ -79,6 +79,31 @@ func subagentResolvedContextLimit(defaultContextWindow, maxTokens int) int {
 	return subagentContextLimit(maxTokens)
 }
 
+func (sm *SubagentManager) resolveProviderForAgent(agentName, model string) (providers.LLMProvider, error) {
+	resolved := sm.cfg.Agents.ResolveAgentConfig(agentName)
+	providerName := strings.TrimSpace(resolved.Provider)
+	if providerName == "" {
+		return sm.provider, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(sm.cfg.Agents.Defaults.Provider), providerName) {
+		return sm.provider, nil
+	}
+
+	providerCfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: sm.cfg.Agents.Defaults,
+		},
+		Providers: sm.cfg.Providers,
+	}
+	providerCfg.Agents.Defaults.Provider = providerName
+	providerCfg.Agents.Defaults.Model = model
+	p, err := providers.CreateProvider(providerCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create provider %q: %w", providerName, err)
+	}
+	return p, nil
+}
+
 // SetTools sets the tool registry for subagent execution.
 // If not set, subagent will have access to the provided tools.
 func (sm *SubagentManager) SetTools(tools *ToolRegistry) {
@@ -301,6 +326,27 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	memoryThreshold := resolvedCfg.MemoryThreshold
 	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
 	contextLimit := subagentResolvedContextLimit(sm.cfg.Agents.Defaults.ContextWindow, maxTok)
+	providerForTask, err := sm.resolveProviderForAgent(task.Name, model)
+	if err != nil {
+		sm.mu.Lock()
+		task.Status = "failed"
+		task.Result = fmt.Sprintf("Failed to resolve provider: %v", err)
+		task.Ended = time.Now().UnixMilli()
+		delete(sm.cancels, task.ID)
+		sm.mu.Unlock()
+		sm.publishTaskUpdate(task)
+		if callback != nil {
+			callback(ctx, &ToolResult{
+				ForLLM:  task.Result,
+				ForUser: "",
+				Silent:  false,
+				IsError: true,
+				Async:   false,
+				Err:     err,
+			})
+		}
+		return
+	}
 
 	// Run tool loop with access to tools
 	sm.mu.RLock()
@@ -311,7 +357,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	scopedCtx = WithWorkingDirectory(scopedCtx, sm.workspace, task.Directory)
 
 	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
-		Provider:          sm.provider,
+		Provider:          providerForTask,
 		Model:             model,
 		Tools:             tools,
 		MaxIterations:     maxIter,
@@ -748,6 +794,10 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	memoryThreshold := resolvedCfg.MemoryThreshold
 	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
 	contextLimit := subagentResolvedContextLimit(sm.cfg.Agents.Defaults.ContextWindow, maxTok)
+	providerForTask, err := sm.resolveProviderForAgent(name, model)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to resolve provider for subagent: %v", err)).WithError(err)
+	}
 
 	sm.mu.RLock()
 	tools := sm.tools
@@ -756,7 +806,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	scopedCtx := WithWriteScope(ctx, sm.resolveWriteRoots(name, directory))
 	scopedCtx = WithWorkingDirectory(scopedCtx, sm.workspace, directory)
 	loopResult, err := RunToolLoop(scopedCtx, ToolLoopConfig{
-		Provider:                sm.provider,
+		Provider:                providerForTask,
 		Model:                   model,
 		Tools:                   tools,
 		MaxIterations:           maxIter,

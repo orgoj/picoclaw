@@ -24,6 +24,7 @@
       "summary_keep_last_messages": 4
     },
     "subagents": {
+      "provider": "",
       "model": "glm-4.7",
       "max_tokens": 4096,
       "max_iterations": 20,
@@ -35,6 +36,7 @@
       "history_message_threshold": 100
     },
     "example_named_agent": {
+      "provider": "",
       "model": "glm-4.7",
       "max_tokens": 4096,
       "max_iterations": 20,

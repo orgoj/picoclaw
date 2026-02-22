@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,15 @@ import (
 	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/utils"
+)
+
+const (
+	// Token estimation is intentionally conservative because provider-side
+	// tokenization (especially on OpenAI-compatible gateways) can exceed our
+	// local approximation by a notable margin.
+	tokenEstimateSafetyMultiplier = 1.35
+	tokenEstimateSafetyPadding    = 2048
+	contextPreTrimTargetRatio     = 0.90
 )
 
 type AgentLoop struct {
@@ -1196,9 +1206,31 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			})
 		}
 
+		if al.contextWindow > 0 {
+			target := int(math.Floor(float64(al.contextWindow) * contextPreTrimTargetRatio))
+			if target < 1 {
+				target = 1
+			}
+			beforeTokens := al.estimateTokensWithSafety(messages)
+			if beforeTokens > target {
+				originalCount := len(messages)
+				messages = al.trimMessagesToTokenBudget(messages, target)
+				afterTokens := al.estimateTokensWithSafety(messages)
+				logger.WarnCF("agent", "Context pre-trimmed for provider safety", map[string]any{
+					"run_id":             runID,
+					"session_key":        opts.SessionKey,
+					"target_tokens":      target,
+					"before_tokens":      beforeTokens,
+					"after_tokens":       afterTokens,
+					"original_messages":  originalCount,
+					"remaining_messages": len(messages),
+				})
+			}
+		}
+
 		// Build tool definitions
 		providerToolDefs := al.tools.ToProviderDefs()
-		tokenEstimate := al.estimateTokens(messages)
+		tokenEstimate := al.estimateTokensWithSafety(messages)
 		contextRemaining := 0
 		if al.contextWindow > tokenEstimate {
 			contextRemaining = al.contextWindow - tokenEstimate
@@ -1424,6 +1456,17 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 	}
 
 	return finalContent, iteration, sentUserViaTool, nil
+}
+
+func (al *AgentLoop) trimMessagesToTokenBudget(messages []providers.Message, targetTokens int) []providers.Message {
+	if targetTokens <= 0 || len(messages) <= 2 {
+		return messages
+	}
+	trimmed := messages
+	for len(trimmed) > 2 && al.estimateTokensWithSafety(trimmed) > targetTokens {
+		trimmed = append(trimmed[:1], trimmed[2:]...)
+	}
+	return trimmed
 }
 
 func (al *AgentLoop) nextRunID(sessionKey string) string {
@@ -1804,4 +1847,12 @@ func (al *AgentLoop) estimateTokens(messages []providers.Message) int {
 		total += utf8.RuneCountInString(m.Content) / 3
 	}
 	return total
+}
+
+func (al *AgentLoop) estimateTokensWithSafety(messages []providers.Message) int {
+	raw := al.estimateTokens(messages)
+	if raw <= 0 {
+		return 0
+	}
+	return int(math.Ceil(float64(raw)*tokenEstimateSafetyMultiplier)) + tokenEstimateSafetyPadding
 }

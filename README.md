@@ -332,6 +332,7 @@ picoclaw onboard
 | `max_tool_iterations` | `20` | Max iterations that may include tool calls in main agent loop |
 | `agents.subagents.max_iterations` | 20 | Max total LLM loop iterations per subagent run |
 | `agents.subagents.max_tool_iterations` | 20 | Max iterations that may include tool calls in subagent loop |
+| `agents.subagents.provider` | inherits `agents.defaults.provider` | Provider used by subagents by default |
 | `agents.subagents.model` | `glm-4.7` | Model used by subagents by default |
 | `agents.subagents.max_tokens` | 4096 | Max tokens for subagents (global subagent limit) |
 | `agents.subagents.memory_threshold` | 0.8 | Subagent context trim threshold as a fraction of its context budget |
@@ -1225,9 +1226,11 @@ Retry semantics (exact):
 | `agents.subagents.max_tokens` | `4096` | Global token limit for subagent responses |
 | `agents.subagents.max_iterations` | `20` | Global max total LLM loop iterations for subagents |
 | `agents.subagents.max_tool_iterations` | `20` | Global max tool-call iterations for subagents |
+| `agents.subagents.provider` | inherits `agents.defaults.provider` | Global default provider for subagents |
 | `agents.subagents.memory_threshold` | `0.8` | Subagent context trim threshold (fraction of context budget, 0-1) |
 | `agents.subagents.summary_keep_last_messages` | `4` | Minimum recent-message retention budget for subagent loop trimming |
 | `agents.subagents.max_concurrent_subagents` | `2` | Global subagent concurrency limit |
+| `agents.<name>.provider` | inherits `agents.subagents.provider` (fallback `agents.defaults.provider`) | Per-named-agent provider override |
 | `agents.<name>.model` | inherits `agents.subagents.model` (fallback `agents.defaults.model`) | Per-named-agent model override |
 | `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` (fallback `agents.defaults.max_tokens`) | Per-named-agent token override |
 | `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` (fallback `agents.defaults.max_iterations`) | Per-named-agent iteration override |
@@ -1641,6 +1644,10 @@ Z.AI provides unified MCP tools: `webSearchPrime` (search), `webReader` (fetch),
 ### Getting content filtering errors
 
 Some providers (like Zhipu) have content filtering. Try rephrasing your query or use a different model.
+
+### SiliconFlow/OpenAI-compatible provider returns `max_prompt_tokens` exceeded
+
+If your logs show provider-side prompt tokens above the configured context window, reduce `agents.defaults.context_window` and `agents.defaults.max_tokens` and restart gateway. PicoClaw also applies conservative pre-call context trimming, but different providers may tokenize prompts differently.
 
 ### Telegram bot says "Conflict: terminated by other getUpdates"
 

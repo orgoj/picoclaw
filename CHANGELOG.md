@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.1.33 - 2026-02-22
+
+### Fixed
+- Main agent loop now applies pre-call context trimming against a conservative token estimate (safety multiplier + fixed padding) before each LLM request.
+- This prevents provider-side prompt token overflow on OpenAI-compatible endpoints (including SiliconFlow) when local token approximation underestimates actual server tokenization.
+
+### Added
+- New runtime warning log when pre-call trimming is applied:
+  - `Context pre-trimmed for provider safety` with before/after token estimate and message counts.
+
+### Docs
+- Added troubleshooting guidance for `max_prompt_tokens` provider errors to `README.md`.
+
+## v0.1.32 - 2026-02-21
+
+### Changed
+- Subagent runtime now supports per-agent LLM provider selection with fallback chain:
+  - `agents.<name>.provider` -> `agents.subagents.provider` -> `agents.defaults.provider`.
+- Synchronous (`subagent`) and asynchronous (`spawn`) named subagent runs now resolve provider per task instead of always reusing only the main-agent provider instance.
+
+### Added
+- New user-visible config fields:
+  - `agents.subagents.provider`
+  - `agents.<name>.provider`
+
+### Docs
+- Updated `README.md` and `config/config.example.json` to document provider overrides for subagents and named agents.
+
 ## v0.1.31 - 2026-02-21
 
 ### Added

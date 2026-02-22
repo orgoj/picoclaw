@@ -84,6 +84,7 @@ type AgentsConfig struct {
 // SubagentsConfig holds default configuration for anonymous subagents.
 // These settings apply when no named agent is specified.
 type SubagentsConfig struct {
+	Provider                string  `json:"provider" env:"PICOCLAW_AGENTS_SUBAGENTS_PROVIDER"`
 	Model                   string  `json:"model" env:"PICOCLAW_AGENTS_SUBAGENTS_MODEL"`
 	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOKENS"`
 	MaxIterations           int     `json:"max_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_ITERATIONS"`
@@ -98,6 +99,7 @@ type SubagentsConfig struct {
 // NamedAgentConfig holds configuration for a named agent.
 // All fields are optional and will be merged with subagents baseline.
 type NamedAgentConfig struct {
+	Provider                string  `json:"provider"`
 	Model                   string  `json:"model"`
 	MaxTokens               int     `json:"max_tokens"`
 	MaxIterations           int     `json:"max_iterations"`
@@ -164,6 +166,7 @@ func (a *AgentsConfig) UnmarshalJSON(data []byte) error {
 
 // ResolvedAgentConfig is the final merged configuration for an agent.
 type ResolvedAgentConfig struct {
+	Provider                string
 	Model                   string
 	MaxTokens               int
 	MaxIterations           int
@@ -183,6 +186,7 @@ type ResolvedAgentConfig struct {
 func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 	// Start with defaults baseline.
 	result := ResolvedAgentConfig{
+		Provider:                a.Defaults.Provider,
 		Model:                   a.Defaults.Model,
 		MaxTokens:               a.Defaults.MaxTokens,
 		MaxIterations:           a.Defaults.MaxIterations,
@@ -194,6 +198,9 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 	}
 
 	// Overlay subagents config where explicitly set.
+	if strings.TrimSpace(a.Subagents.Provider) != "" {
+		result.Provider = a.Subagents.Provider
+	}
 	if strings.TrimSpace(a.Subagents.Model) != "" {
 		result.Model = a.Subagents.Model
 	}
@@ -227,6 +234,9 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 	// Check if this named agent exists
 	if named, ok := a.NamedAgents[name]; ok {
 		// Named agent config overrides subagents/defaults baseline.
+		if strings.TrimSpace(named.Provider) != "" {
+			result.Provider = named.Provider
+		}
 		if strings.TrimSpace(named.Model) != "" {
 			result.Model = named.Model
 		}
@@ -511,6 +521,7 @@ func DefaultConfig() *Config {
 				SummaryKeepLastMessages: 4,
 			},
 			Subagents: SubagentsConfig{
+				Provider:                "",
 				Model:                   "glm-4.7",
 				MaxTokens:               4096,
 				MaxIterations:           20,

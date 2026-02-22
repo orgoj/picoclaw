@@ -368,6 +368,35 @@ func TestSubagentTool_Execute_WithName(t *testing.T) {
 	}
 }
 
+func TestSubagentTool_Execute_WithNameProviderOverride(t *testing.T) {
+	provider := &MockLLMProvider{}
+	msgBus := bus.NewMessageBus()
+	cfg := testConfig()
+	cfg.Agents.Defaults.Provider = "zhipu"
+	cfg.Agents.NamedAgents = map[string]config.NamedAgentConfig{
+		"silicon-worker": {
+			Provider: "openai",
+			Model:    "deepseek-ai/DeepSeek-V3.2",
+		},
+	}
+	manager := NewSubagentManager(provider, cfg, "/tmp/test", msgBus)
+	tool := NewSubagentTool(manager)
+
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"task": "Test per-agent provider override",
+		"name": "silicon-worker",
+	}
+
+	result := tool.Execute(ctx, args)
+	if !result.IsError {
+		t.Fatalf("Expected provider resolution error due to missing OpenAI credentials")
+	}
+	if !strings.Contains(strings.ToLower(result.ForLLM), "provider") {
+		t.Fatalf("Expected provider-related error, got: %s", result.ForLLM)
+	}
+}
+
 // TestSubagentTool_Execute_InvalidName tests that path traversal names are ignored safely.
 func TestSubagentTool_Execute_InvalidName(t *testing.T) {
 	provider := &MockLLMProvider{}

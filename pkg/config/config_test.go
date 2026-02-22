@@ -385,6 +385,7 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 			"history_message_threshold": 100
 		},
 		"subagents": {
+			"provider": "zhipu",
 			"model": "subagent-model",
 			"max_tokens": 2048,
 			"max_iterations": 12,
@@ -392,6 +393,7 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 			"history_message_threshold": 50
 		},
 		"analyst": {
+			"provider": "openai",
 			"model": "analyst-model",
 			"max_tokens": 8192,
 			"history_message_threshold": 200,
@@ -420,6 +422,9 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 	if agents.Subagents.Model != "subagent-model" {
 		t.Errorf("Expected subagents.model 'subagent-model', got %q", agents.Subagents.Model)
 	}
+	if agents.Subagents.Provider != "zhipu" {
+		t.Errorf("Expected subagents.provider 'zhipu', got %q", agents.Subagents.Provider)
+	}
 
 	// Verify named agents exist
 	if len(agents.NamedAgents) != 2 {
@@ -436,6 +441,9 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 	}
 	if analyst.Model != "analyst-model" {
 		t.Errorf("Expected analyst.model 'analyst-model', got %q", analyst.Model)
+	}
+	if analyst.Provider != "openai" {
+		t.Errorf("Expected analyst.provider 'openai', got %q", analyst.Provider)
 	}
 	if analyst.HistoryMessageThreshold != 200 {
 		t.Errorf("Expected analyst.history_message_threshold 200, got %d", analyst.HistoryMessageThreshold)
@@ -464,6 +472,7 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	// Add a named agent
 	cfg.Agents.NamedAgents = map[string]NamedAgentConfig{
 		"analyst": {
+			Provider:                "openai",
 			Model:                   "named-model",
 			MaxTokens:               8192,
 			MemoryThreshold:         0.7,
@@ -472,6 +481,7 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 		},
 	}
 	cfg.Agents.Subagents = SubagentsConfig{
+		Provider:                "zhipu",
 		Model:                   "subagent-model",
 		MaxTokens:               2048,
 		MaxIterations:           11,
@@ -498,6 +508,9 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	if resolved.Model != "named-model" {
 		t.Errorf("Expected analyst model 'named-model', got %q", resolved.Model)
 	}
+	if resolved.Provider != "openai" {
+		t.Errorf("Expected analyst provider 'openai', got %q", resolved.Provider)
+	}
 	// Should inherit from subagents when not specified
 	if resolved.MaxIterations != cfg.Agents.Subagents.MaxIterations {
 		t.Errorf("Expected analyst max_iterations from subagents, got %d", resolved.MaxIterations)
@@ -513,6 +526,9 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	}
 	if resolved.Model != "subagent-model" {
 		t.Errorf("Expected subagent model 'subagent-model', got %q", resolved.Model)
+	}
+	if resolved.Provider != "zhipu" {
+		t.Errorf("Expected subagent provider 'zhipu', got %q", resolved.Provider)
 	}
 	if resolved.MaxIterations != 11 {
 		t.Errorf("Expected subagent max_iterations 11, got %d", resolved.MaxIterations)
@@ -541,6 +557,7 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	cfg := &AgentsConfig{
 		Defaults: AgentDefaults{
+			Provider:                "openrouter",
 			Model:                   "defaults-model",
 			Temperature:             0.9,
 			MemoryThreshold:         0.8,
@@ -548,6 +565,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 			HistoryMessageThreshold: 10,
 		},
 		Subagents: SubagentsConfig{
+			Provider:                "zhipu",
 			Model:                   "subagents-model",
 			MaxTokens:               2000,
 			MaxIterations:           25,
@@ -559,6 +577,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 		},
 		NamedAgents: map[string]NamedAgentConfig{
 			"custom": {
+				Provider:                "openai",
 				Model:                   "named-model",
 				MaxTokens:               3000,
 				MemoryThreshold:         0.55,
@@ -577,6 +596,9 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	if anon.Model != "subagents-model" {
 		t.Errorf("Anonymous: expected model 'subagents-model' (from subagents), got %q", anon.Model)
 	}
+	if anon.Provider != "zhipu" {
+		t.Errorf("Anonymous: expected provider 'zhipu' (from subagents), got %q", anon.Provider)
+	}
 	if anon.Temperature != 0.5 {
 		t.Errorf("Anonymous: expected temperature 0.5 (from subagents), got %f", anon.Temperature)
 	}
@@ -594,6 +616,9 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	}
 	if named.Model != "named-model" {
 		t.Errorf("Named: expected model 'named-model' (from named), got %q", named.Model)
+	}
+	if named.Provider != "openai" {
+		t.Errorf("Named: expected provider 'openai' (from named), got %q", named.Provider)
 	}
 	if named.HistoryMessageThreshold != 30 {
 		t.Errorf("Named: expected history_threshold 30 (from named), got %d", named.HistoryMessageThreshold)
@@ -619,6 +644,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t *testing.T) {
 	cfg := &AgentsConfig{
 		Defaults: AgentDefaults{
+			Provider:                "openrouter",
 			Model:                   "defaults-model",
 			MaxTokens:               9000,
 			MaxIterations:           42,
@@ -637,6 +663,9 @@ func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t 
 	resolved := cfg.ResolveAgentConfig("")
 	if resolved.Model != "subagents-model" {
 		t.Errorf("Expected model from subagents, got %q", resolved.Model)
+	}
+	if resolved.Provider != "openrouter" {
+		t.Errorf("Expected provider from defaults, got %q", resolved.Provider)
 	}
 	if resolved.MaxTokens != 9000 {
 		t.Errorf("Expected max_tokens from defaults, got %d", resolved.MaxTokens)
