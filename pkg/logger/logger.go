@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -38,8 +39,9 @@ var (
 )
 
 type Logger struct {
-	file      *os.File
-	debugFile *os.File
+	file         *os.File
+	debugFile    *os.File
+	agentLogsDir string
 }
 
 type LogEntry struct {
@@ -116,6 +118,22 @@ func EnableDebugFileLogging(filePath string) error {
 	return nil
 }
 
+func SetAgentLogsDir(dirPath string) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if strings.TrimSpace(dirPath) == "" {
+		logger.agentLogsDir = ""
+		return nil
+	}
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		return fmt.Errorf("failed to create agent logs dir: %w", err)
+	}
+	logger.agentLogsDir = dirPath
+	log.Println("Agent-scoped file logging enabled:", dirPath)
+	return nil
+}
+
 func DisableDebugFileLogging() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -153,6 +171,7 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 			logger.file.WriteString(string(jsonData) + "\n")
 		}
 	}
+	writeAgentScopedEntry(entry, fields)
 
 	var fieldStr string
 	if len(fields) > 0 {
@@ -179,6 +198,31 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 
 	if level == FATAL {
 		os.Exit(1)
+	}
+}
+
+func writeAgentScopedEntry(entry LogEntry, fields map[string]interface{}) {
+	dir := strings.TrimSpace(logger.agentLogsDir)
+	if dir == "" {
+		return
+	}
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	writeScopedLine := func(filename string) {
+		path := filepath.Join(dir, filename)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return
+		}
+		_, _ = f.WriteString(string(raw) + "\n")
+		_ = f.Close()
+	}
+
+	writeScopedLine("main.jsonl")
+	if taskID, ok := extractSubagentID(fields); ok {
+		writeScopedLine(taskID + ".jsonl")
 	}
 }
 

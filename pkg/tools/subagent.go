@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,10 +47,11 @@ type SubagentManager struct {
 	cfg                    *config.Config
 	maxConcurrentSubagents int // Max number of concurrently running subagents
 	nextID                 int
+	counterFile            string
 }
 
 func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, workspace string, bus *bus.MessageBus) *SubagentManager {
-	return &SubagentManager{
+	sm := &SubagentManager{
 		tasks:                  make(map[string]*SubagentTask),
 		cancels:                make(map[string]context.CancelFunc),
 		provider:               provider,
@@ -59,7 +61,39 @@ func NewSubagentManager(provider providers.LLMProvider, cfg *config.Config, work
 		cfg:                    cfg,
 		maxConcurrentSubagents: cfg.Agents.Defaults.MaxConcurrentSubagents,
 		nextID:                 1,
+		counterFile:            filepath.Join(workspace, "state", "subagent-next-id.txt"),
 	}
+	sm.loadCounter()
+	return sm
+}
+
+func (sm *SubagentManager) loadCounter() {
+	data, err := os.ReadFile(sm.counterFile)
+	if err != nil {
+		return
+	}
+	raw := strings.TrimSpace(string(data))
+	if raw == "" {
+		return
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return
+	}
+	sm.nextID = n
+}
+
+func (sm *SubagentManager) persistCounterLocked() {
+	if sm.counterFile == "" {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(sm.counterFile), 0755)
+	tmp := sm.counterFile + ".tmp"
+	data := []byte(strconv.Itoa(sm.nextID) + "\n")
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, sm.counterFile)
 }
 
 func subagentContextLimit(maxTokens int) int {
@@ -159,6 +193,7 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, name, directo
 
 	taskID := fmt.Sprintf("subagent-%d", sm.nextID)
 	sm.nextID++
+	sm.persistCounterLocked()
 
 	subagentTask := &SubagentTask{
 		ID:            taskID,

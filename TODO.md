@@ -1,66 +1,104 @@
 # TODO for picoclaw agents system
 
-## FIX
+## JEDEN VELKY REFACTOR (udelat najednou, ne po kouskach)
 
-- kdyz agent havaruje, tak by to melo dat vice info a nejake jeho posledni message a presne error co ho shodi hlavnimu agentovi primo do queue na zacatek a procesit jestli nic nebezi, stejna funkce jako idle co to vlozi a pusti kdyz nic nejede
+### REF-1: Log & Event model (backend)
 
-### WEBUI
+- [NOW] Zavest jednotny event schema pro dashboard/feed:
+  - povinne pole: `event_id`, `timestamp_ms`, `source`, `session_key`, `agent_id`, `kind`, `level`, `payload`.
+  - `kind`: `message|auto|sys|tool|llm|queue|error|warn|info|debug`.
+- [NOW] Udelat per-agent JSONL streamy:
+  - `logs/agents/main.jsonl`
+  - `logs/agents/subagent-<id>.jsonl`
+  - volitelne alias pro named agenta.
+- [NOW] Pridat runtime counter pro monotonic `agent_instance_id` (persist ve state).
+- [NOW] Udelat API:
+  - `GET /api/v1/timeline` (filtrovani: session, agent, kind, level, from, limit)
+  - `GET /api/v1/agents/{id}/log`
+  - `GET /api/v1/events` jako delta stream (patch), ne full snapshot tick.
 
-- divne UX
-- info v head o hlavnim agentovi, doba behu, stav contextu, pocet message a tool call, celkove a od compactu
-- filter na history abych mohl skyt rychle debug a info
-- ta history je spatna - to musi byt casove jak to slo za sebou (ted je best-effort, doplnit 100% timeline i pro starsi data bez timestamp)
-- u agenta potrebuji videt cas spusteni a cas konce, pocet message, pocet toolcall, context size aktualni. a co je tam pending u neho sama nula 0 proc to tam je?
-- injekce message agentovi
+### REF-2: Dashboard rewrite (frontend)
 
-- asi nejak celkove review, oprava UX, toto musi byt pouzitelne jako primarni ovladaci panel, abych to rozjel i bez telegram a toto byl primarni chanell
+- [NOW] Prepnout dashboard na jeden datovy feed model (`timeline` + delta SSE patch).
+- [NOW] Zadny periodicky full redraw: pouze keyed incremental updates ve vsech panelech.
+- [NOW] Layout final:
+  - vlevo: `Messages -> Queue -> Input`
+  - vpravo: `Agents -> Sessions -> Channels`
+  - splittery stabilni, persist, bez jitteru.
+- [NOW] Filtry first-class:
+  - agent/session/kind/level
+  - toggle hide debug
+  - feed "same as telegram".
+- [NOW] Composer parity s channel prikazy (+ menu + direct action UX).
 
-- pres to web ui by melo by dostupny i cely workspace file manager (do budoucna i editace file)
+### REF-3: Control semantics
+
+- [NOW] Prefix policy a json to musi byt samostatny atribbut
+  - `[SYS]` = systemove programove udalosti (start/stop/error/incident), mimo vedomi agenta
+  - `[AUTO]` = loop-level final fallback reply, pouze kdyz neprobehla zadna explicitni `message` tool zprava
+  - nikdy nemichat: system notifikace nesmi byt `[AUTO]`, fallback final reply nesmi byt `[SYS]`
+  - oboji musi byt konzistentni v channelu i dashboard feedu
+- [NOW] Pause/continue implementace a viditelny stav v UI.
+- [NOW] Incident report pipeline: crash/kill -> structured SYS event + queue-head inject do main session.
+
+## HARD RULE PRO NOVOU VERZI
+
+- [MUST] Bez zpetne kompatibility: cte se jen nove schema/logy/API; zadne fallback parsery a zadne migracni vetve pro stare formaty.
+
+## DEFINITION OF DONE (pro "hotovy dashboard bez telegramu")
+
+- [ ] Cely provoz je ovladatelny z dashboardu bez Telegramu.
+- [ ] Feed v dashboardu odpovida tomu, co by prislo do channelu + explicitni SYS/AUTO eventy. TY eventy jsou doufam na vsech aktivnich chanels
+- [ ] Zadny pravidelny full repaint; pouze incremental patch.
+- [ ] Timeline ordering je stabilni a reprodukovatelny.
+- [ ] Kazdy agent ma vlastni log stream a rychle API nacteni.
+- [ ] `make vet` + `make test` prochazi.
+- [ ] CHANGELOG + README + VERSION + TODO aktualizovane ve stejnem passu.
 
 
-## LLM
+## BACKLOG ZACHOVAN (udelat potom)
 
-- autotune max context podle error
-- autotune restry podle error
-- barvicky ve WEBUI agentu, abych videl ze je retry 
+### LLM
 
+- [LATER] LLM autotune context/retry podle chyb.
+- [LATER] autotune max context podle error
+- [LATER] autotune retry podle error
+- [LATER] barvicky ve WEBUI agentu, aby bylo videt retry
+- [LATER] proverit stream mode z.ai: https://docs.z.ai/guides/capabilities/streaming
 
-## Memory tooling (future)
+### Memory tooling (future)
 
-- [ ] Zavedeni `memory_*` toolu misto ad-hoc write/read
+- [LATER] zavedeni `memory_*` toolu misto ad-hoc write/read
   - `memory_append(name, note, tags?)`
   - `memory_search(name, query, limit?)`
-  - `memory_consolidate(name)` pro slouceni dennich poznamek do dlouhodobe memory
-- [ ] Idle worker pro memory maintenance
-  - to by mel byt nejaky prompt, ktery by se poustel na memory dir kazdeho (sub)agenta
+  - `memory_consolidate(name)` pro slouceni denich poznamek do dlouhodobe memory
+- [LATER] idle worker pro memory maintenance
   - periodicky spoustet `memory_consolidate` jen pri idle
   - detekce duplicit a sumarizace starsich zaznamu
   - zachovat audit trail (co bylo slouceno a kdy)
 
-## Upstream backlog (2026-02-20)
+### Upstream backlog (2026-02-20)
 
-- [ ] proverit upstream patch pro `max_completion_tokens` u GPT-5 v `pkg/providers/http_provider.go`
+- [LATER] proverit upstream patch pro `max_completion_tokens` u GPT-5 v `pkg/providers/http_provider.go`
   - upstream referencni commit: `bb0424e`
-  - u nas uz existuje vetveni pro `glm`/`o1`; rozhodnout jestli rozsirit i o `gpt-5`
-- [ ] zvazit `channel session key routing` metadata (`peer_kind`, `peer_id`) pro non-telegram kanaly
+- [LATER] zvazit `channel session key routing` metadata (`peer_kind`, `peer_id`) pro non-telegram kanaly
   - upstream referencni commit: `4adafa8`
-  - overit prinos pro nase aktualni session/routing modely a DM/group oddeleni
-- [ ] legacy config migrace bez `agents.defaults.provider` (jen kdyz budeme chtit zpetnou kompatibilitu)
+- [LATER] legacy config migrace bez `agents.defaults.provider` (jen pokud budeme chtit zpetnou kompatibilitu)
   - upstream referencni commit: `58b5e21`
-  - zatim low priority, pokud necilime na stare konfigurace
 
-## Config parity
+### Config parity
 
-- [ ] sjednotit datovou strukturu `agents.defaults` a `agents.subagents` (plus `agents.<name>` override) do plne parity
+- [LATER] sjednotit datovou strukturu `agents.defaults` a `agents.subagents` (plus `agents.<name>` override) do plne parity
   - subagent runtime ma mit stejne konfigurovatelne limity jako main agent (timeout/retries/backoff/context apod.)
   - zavest jeden resolver/runtime profil pro main i subagent beh
   - `config/config.example.json` drzet 1:1 se skutecnym runtime chovanim po dodelani parity
 
-## IDEAS
+### Ideas
 
-- komunikace primo s agentem
+- [LATER] komunikace primo s agentem
   - injekce message agentovi
-  - moznost ho spustit primo na chanell a komunikovat s nim, nejake `+agent_chat PROMPT` by ho pustilo  a vse co pise davalo na chanell, a konec kdyz skonci a nebo `+kill`
-
-- multi dashboard vice picoclaw pres API
-- project panel ve webui
+  - moznost ho spustit primo na channel a komunikovat s nim (`+agent_chat PROMPT`, ukonceni po konci nebo `+kill`)
+- [LATER] project panel ve webui
+- [LATER] Multi-dashboard pro vice picoclaw instanci.
+- [LATER] Memory tooling (`memory_append/search/consolidate`) + idle maintenance.
+- [LATER] Workspace file manager ve web UI (+ pozdeji editace).

@@ -338,11 +338,12 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 								"chat_id": msg.ChatID,
 								"session": msg.SessionKey,
 							})
+						al.enqueueIncidentNotice(msg, fmt.Sprintf("panic recovered: %v", r))
 						// Send user-friendly error message
 						if ok := al.bus.PublishOutbound(bus.OutboundMessage{
 							Channel: msg.Channel,
 							ChatID:  msg.ChatID,
-							Content: al.prefixAutomaticNotice("⚠️ An internal error occurred. The agent has recovered and is still running. Please try again."),
+							Content: al.prefixSysMessage("⚠️ An internal error occurred. The agent has recovered and is still running. Please try again."),
 						}); !ok {
 							logger.WarnCF("agent", "Failed to publish panic recovery message: outbound queue timeout",
 								map[string]interface{}{
@@ -356,14 +357,19 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				response, err := al.processMessage(ctx, msg)
 				if err != nil {
 					// Check if it's an API/network error and provide user-friendly message
-					response = al.prefixAutomaticNotice(al.formatErrorMessage(err, msg.SessionKey))
+					al.enqueueIncidentNotice(msg, err.Error())
+					response = al.prefixSysMessage(al.formatErrorMessage(err, msg.SessionKey))
 				}
 
 				if response != "" {
+					outboundContent := response
+					if msg.Channel != "system" && !strings.HasPrefix(strings.TrimSpace(outboundContent), al.sysMessagePrefix()) {
+						outboundContent = al.prefixAutoFinal(outboundContent)
+					}
 					if ok := al.bus.PublishOutbound(bus.OutboundMessage{
 						Channel: msg.Channel,
 						ChatID:  msg.ChatID,
-						Content: response,
+						Content: outboundContent,
 					}); !ok {
 						logger.WarnCF("agent", "Failed to publish agent response: outbound queue timeout",
 							map[string]interface{}{
@@ -377,6 +383,40 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (al *AgentLoop) enqueueIncidentNotice(msg bus.InboundMessage, errText string) {
+	if al.bus == nil {
+		return
+	}
+	errText = strings.TrimSpace(errText)
+	if errText == "" {
+		return
+	}
+	incident := fmt.Sprintf(
+		"<incident source=\"agent-loop\" channel=\"%s\" chat_id=\"%s\" sender_id=\"%s\">\n%s\n</incident>",
+		msg.Channel,
+		msg.ChatID,
+		msg.SenderID,
+		errText,
+	)
+	inbound := bus.InboundMessage{
+		Channel:    msg.Channel,
+		SenderID:   "system:incident",
+		ChatID:     msg.ChatID,
+		SessionKey: msg.SessionKey,
+		Content:    incident,
+		Metadata: map[string]string{
+			"source": "system:incident",
+			"urgent": "true",
+		},
+	}
+	if _, ok := al.bus.InsertInboundFirst(inbound); !ok {
+		logger.WarnCF("agent", "Failed to enqueue incident notice: inbound queue timeout", map[string]interface{}{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+		})
+	}
 }
 
 // formatErrorMessage converts technical errors into user-friendly messages
@@ -484,17 +524,48 @@ func (al *AgentLoop) formatErrorMessage(err error, sessionKey string) string {
 	return userMessage
 }
 
-func (al *AgentLoop) prefixAutomaticNotice(content string) string {
+func (al *AgentLoop) autoFinalPrefix() string {
+	prefix := "[AUTO]"
+	if al.cfg != nil {
+		if cfgPrefix := strings.TrimSpace(al.cfg.Gateway.AutoFinalPrefix); cfgPrefix != "" {
+			prefix = cfgPrefix
+		}
+	}
+	return prefix
+}
+
+func (al *AgentLoop) sysMessagePrefix() string {
+	prefix := "[SYS]"
+	if al.cfg != nil {
+		if cfgPrefix := strings.TrimSpace(al.cfg.Gateway.SysMessagePrefix); cfgPrefix != "" {
+			prefix = cfgPrefix
+		}
+	}
+	return prefix
+}
+
+func (al *AgentLoop) prefixAutoFinal(content string) string {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return ""
 	}
-	prefix := "[AUTO]"
-	if al.cfg != nil {
-		if cfgPrefix := strings.TrimSpace(al.cfg.Gateway.AutoMessagePrefix); cfgPrefix != "" {
-			prefix = cfgPrefix
-		}
+	prefix := al.autoFinalPrefix()
+	if strings.HasPrefix(content, prefix) {
+		return content
 	}
+	sep := " "
+	if strings.HasSuffix(prefix, " ") {
+		sep = ""
+	}
+	return prefix + sep + content
+}
+
+func (al *AgentLoop) prefixSysMessage(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	prefix := al.sysMessagePrefix()
 	if strings.HasPrefix(content, prefix) {
 		return content
 	}
@@ -603,10 +674,14 @@ func (al *AgentLoop) triggerIdle(ctx context.Context, m idleMetrics) {
 	}
 
 	if response != "" && response != "IDLE_OK" {
+		outboundContent := response
+		if channel != "system" && !strings.HasPrefix(strings.TrimSpace(outboundContent), al.sysMessagePrefix()) {
+			outboundContent = al.prefixAutoFinal(outboundContent)
+		}
 		if ok := al.bus.PublishOutbound(bus.OutboundMessage{
 			Channel: channel,
 			ChatID:  chatID,
-			Content: response,
+			Content: outboundContent,
 		}); !ok {
 			logger.WarnCF("agent", "Failed to publish idle response: outbound queue timeout", map[string]interface{}{
 				"channel": channel,
@@ -1160,10 +1235,14 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 	// 7. Optional: send response via bus
 	if opts.SendResponse {
+		outboundContent := finalContent
+		if opts.Channel != "system" && !strings.HasPrefix(strings.TrimSpace(outboundContent), al.sysMessagePrefix()) {
+			outboundContent = al.prefixAutoFinal(outboundContent)
+		}
 		if ok := al.bus.PublishOutbound(bus.OutboundMessage{
 			Channel: opts.Channel,
 			ChatID:  opts.ChatID,
-			Content: finalContent,
+			Content: outboundContent,
 		}); !ok {
 			logger.WarnCF("agent", "Failed to publish runAgentLoop response: outbound queue timeout", map[string]interface{}{
 				"channel": opts.Channel,

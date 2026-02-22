@@ -436,11 +436,12 @@ type ProviderConfig struct {
 }
 
 type GatewayConfig struct {
-	Host              string                      `json:"host" env:"PICOCLAW_GATEWAY_HOST"`
-	Port              int                         `json:"port" env:"PICOCLAW_GATEWAY_PORT"`
-	AutoMessagePrefix string                      `json:"auto_message_prefix" env:"PICOCLAW_GATEWAY_AUTO_MESSAGE_PREFIX"`
-	StartupPrompt     GatewayStartupPromptConfig  `json:"startup_prompt"`
-	ShutdownNotice    GatewayShutdownNoticeConfig `json:"shutdown_notice"`
+	Host             string                      `json:"host" env:"PICOCLAW_GATEWAY_HOST"`
+	Port             int                         `json:"port" env:"PICOCLAW_GATEWAY_PORT"`
+	SysMessagePrefix string                      `json:"sys_message_prefix" env:"PICOCLAW_GATEWAY_SYS_MESSAGE_PREFIX"`
+	AutoFinalPrefix  string                      `json:"auto_final_prefix" env:"PICOCLAW_GATEWAY_AUTO_FINAL_PREFIX"`
+	StartupPrompt    GatewayStartupPromptConfig  `json:"startup_prompt"`
+	ShutdownNotice   GatewayShutdownNoticeConfig `json:"shutdown_notice"`
 }
 
 type GatewayStartupPromptConfig struct {
@@ -612,9 +613,10 @@ func DefaultConfig() *Config {
 			ShengSuanYun: ProviderConfig{},
 		},
 		Gateway: GatewayConfig{
-			Host:              "0.0.0.0",
-			Port:              18790,
-			AutoMessagePrefix: "[AUTO]",
+			Host:             "0.0.0.0",
+			Port:             18790,
+			SysMessagePrefix: "[SYS]",
+			AutoFinalPrefix:  "[AUTO]",
 			StartupPrompt: GatewayStartupPromptConfig{
 				Enabled:                  true,
 				Template:                 "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Continue in this same thread and preserve continuity. If user requested, send a short restart confirmation.",

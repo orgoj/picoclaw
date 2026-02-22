@@ -31,6 +31,7 @@ type Manager struct {
 	subagentManager *tools.SubagentManager
 	agentLoop       *agent.AgentLoop
 	dispatchTask    *asyncTask
+	pausedSessions  map[string]bool
 	mu              sync.RWMutex
 }
 
@@ -45,6 +46,7 @@ func NewManager(cfg *config.Config, messageBus *bus.MessageBus, subagentManager 
 		config:          cfg,
 		subagentManager: subagentManager,
 		agentLoop:       agentLoop,
+		pausedSessions:  make(map[string]bool),
 	}
 
 	if err := m.initChannels(); err != nil {
@@ -425,6 +427,9 @@ func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
 
 	cmd, body, ok := splitControlCommand(prefix, msg.Content)
 	if !ok {
+		if m.isPausedSession(msg.SessionKey) {
+			return m.handleInjectControl(msg, msg.Content)
+		}
 		return false
 	}
 
@@ -445,6 +450,10 @@ func (m *Manager) handleInboundControl(msg bus.InboundMessage) bool {
 		return m.handleKillControl(msg, body)
 	case "delete":
 		return m.handleDeleteControl(msg)
+	case "stop":
+		return m.handleStopControl(msg)
+	case "continue":
+		return m.handleContinueControl(msg)
 	default:
 		return false
 	}
@@ -461,6 +470,8 @@ func (m *Manager) handleHelpControl(msg bus.InboundMessage) bool {
 		fmt.Sprintf("%sinject MESSAGE - Immediate context inject", prefix),
 		fmt.Sprintf("%sfirst MESSAGE - Put message at inbound queue head", prefix),
 		fmt.Sprintf("%sdelete - Delete last queued message in this session", prefix),
+		fmt.Sprintf("%sstop - Pause normal queueing for this session (messages become inject)", prefix),
+		fmt.Sprintf("%scontinue - Resume normal queueing for this session", prefix),
 		fmt.Sprintf("%s%sMESSAGE - Append to previous queued message in this session", prefix, prefix),
 	}
 	if m.config != nil && m.config.Tools.Spawn.Enabled {
@@ -538,6 +549,11 @@ func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
 
 	inbound := m.bus.ListInbound()
 	sb.WriteString(fmt.Sprintf("Inbound queue: %d\n", len(inbound)))
+	if m.isPausedSession(msg.SessionKey) {
+		sb.WriteString("Session mode: PAUSED (normal messages are treated as inject)\n")
+	} else {
+		sb.WriteString("Session mode: RUNNING\n")
+	}
 
 	if m.subagentManager != nil {
 		running := m.subagentManager.GetRunningTasks()
@@ -827,6 +843,23 @@ func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
 		m.sendControlReply(msg, fmt.Sprintf("Failed to cancel task '%s': %v", taskID, err))
 		return true
 	}
+	incident := fmt.Sprintf(
+		"<incident source=\"control:kill\" task_id=\"%s\" channel=\"%s\" chat_id=\"%s\">Subagent cancelled by operator via control command.</incident>",
+		taskID,
+		msg.Channel,
+		msg.ChatID,
+	)
+	_, _ = m.bus.InsertInboundFirst(bus.InboundMessage{
+		Channel:    msg.Channel,
+		SenderID:   "system:kill",
+		ChatID:     msg.ChatID,
+		SessionKey: msg.SessionKey,
+		Content:    incident,
+		Metadata: map[string]string{
+			"source": "system:kill",
+			"urgent": "true",
+		},
+	})
 
 	audit.Record("control_kill_cancel", map[string]interface{}{
 		"task_id": taskID,
@@ -870,6 +903,39 @@ func (m *Manager) handleDeleteControl(msg bus.InboundMessage) bool {
 		"chat_id":     msg.ChatID,
 	})
 	m.sendControlReply(msg, fmt.Sprintf("Deleted last queued message. Queue ID: %s\nContent: %q", targetID, truncateStr(targetContent, 80)))
+	return true
+}
+
+func (m *Manager) isPausedSession(sessionKey string) bool {
+	if strings.TrimSpace(sessionKey) == "" {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.pausedSessions[sessionKey]
+}
+
+func (m *Manager) handleStopControl(msg bus.InboundMessage) bool {
+	if strings.TrimSpace(msg.SessionKey) == "" {
+		m.sendControlReply(msg, "Cannot pause: missing session key.")
+		return true
+	}
+	m.mu.Lock()
+	m.pausedSessions[msg.SessionKey] = true
+	m.mu.Unlock()
+	m.sendControlReply(msg, "Session paused. Next normal messages will be treated as inject until +continue.")
+	return true
+}
+
+func (m *Manager) handleContinueControl(msg bus.InboundMessage) bool {
+	if strings.TrimSpace(msg.SessionKey) == "" {
+		m.sendControlReply(msg, "Cannot continue: missing session key.")
+		return true
+	}
+	m.mu.Lock()
+	delete(m.pausedSessions, msg.SessionKey)
+	m.mu.Unlock()
+	m.sendControlReply(msg, "Session resumed. Normal queueing restored.")
 	return true
 }
 

@@ -94,6 +94,7 @@ func RegisterInboundRoutes(r routeRegistrar, msgBus *bus.MessageBus, runtime ses
 	r.HandleFunc("/api/v1/main/message", api.handleMainMessage)
 	r.HandleFunc("/api/v1/subagents", api.handleSubagents)
 	r.HandleFunc("/api/v1/subagents/", api.handleSubagentItem)
+	r.HandleFunc("/api/v1/agents/", api.handleAgentItem)
 	r.HandleFunc("/api/v1/events", api.handleEvents)
 	r.HandleFunc("/api/v1/runtime", api.handleRuntime)
 	RegisterDashboardRoutes(r)
@@ -184,10 +185,6 @@ func (a *inboundAPI) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionKey := strings.TrimSpace(r.URL.Query().Get("session_key"))
-	if sessionKey == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "session_key query param is required"})
-		return
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_key": sessionKey,
 		"items":       a.hist.GetSessionHistory(sessionKey),
@@ -386,6 +383,55 @@ func (a *inboundAPI) handleSubagentItem(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (a *inboundAPI) handleAgentItem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	if a.cfg == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "config unavailable"})
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/")
+	path = strings.TrimSpace(path)
+	if !strings.HasSuffix(path, "/log") {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
+		return
+	}
+	agentID := strings.TrimSpace(strings.TrimSuffix(path, "/log"))
+	agentID = strings.TrimSuffix(agentID, "/")
+	if agentID == "" || strings.Contains(agentID, "/") || strings.Contains(agentID, "..") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid agent id"})
+		return
+	}
+	tail := 500
+	if raw := strings.TrimSpace(r.URL.Query().Get("tail")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			tail = n
+		}
+	}
+	if tail > 5000 {
+		tail = 5000
+	}
+
+	logPath := filepath.Join(a.cfg.LoggingDirPath(), "agents", agentID+".jsonl")
+	lines, err := readLastLines(logPath, tail)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"agent_id": agentID,
+			"path":     logPath,
+			"lines":    []string{},
+			"error":    err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agent_id": agentID,
+		"path":     logPath,
+		"lines":    lines,
+	})
+}
+
 func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
@@ -412,17 +458,29 @@ func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	sendSnapshot := func() error {
-		payload := map[string]any{
-			"session_key": sessionKey,
-			"inbound":     a.msgBus.ListInbound(),
-			"history":     a.hist.GetSessionHistory(sessionKey),
-			"subagents":   a.listSubagentViews(),
-			"sessions":    a.listSessions(200),
-			"ts":          time.Now().UnixMilli(),
+	type eventSnapshot struct {
+		Inbound   []bus.InboundQueueItem
+		History   []providers.Message
+		Subagents []taskView
+		Sessions  []session.SessionSummary
+		Runtime   map[string]any
+	}
+	capture := func() eventSnapshot {
+		history := []providers.Message{}
+		if sessionKey != "" {
+			history = a.hist.GetSessionHistory(sessionKey)
 		}
+		return eventSnapshot{
+			Inbound:   a.msgBus.ListInbound(),
+			History:   history,
+			Subagents: a.listSubagentViews(),
+			Sessions:  a.listSessions(200),
+			Runtime:   a.buildRuntimeData(),
+		}
+	}
+	sendEvent := func(eventName string, payload map[string]any) error {
 		raw, _ := json.Marshal(payload)
-		if _, err := fmt.Fprintf(w, "event: snapshot\n"); err != nil {
+		if _, err := fmt.Fprintf(w, "event: %s\n", eventName); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
@@ -431,14 +489,58 @@ func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return nil
 	}
+	sendSnapshot := func(s eventSnapshot) error {
+		payload := map[string]any{
+			"session_key": sessionKey,
+			"inbound":     s.Inbound,
+			"history":     s.History,
+			"subagents":   s.Subagents,
+			"sessions":    s.Sessions,
+			"runtime":     s.Runtime,
+			"ts":          time.Now().UnixMilli(),
+		}
+		return sendEvent("snapshot", payload)
+	}
+	sendPatch := func(prev, next eventSnapshot) error {
+		payload := map[string]any{
+			"session_key": sessionKey,
+			"ts":          time.Now().UnixMilli(),
+		}
+		changed := false
+		if !jsonEqual(prev.Inbound, next.Inbound) {
+			payload["inbound"] = next.Inbound
+			changed = true
+		}
+		if !jsonEqual(prev.History, next.History) {
+			payload["history"] = next.History
+			changed = true
+		}
+		if !jsonEqual(prev.Subagents, next.Subagents) {
+			payload["subagents"] = next.Subagents
+			changed = true
+		}
+		if !jsonEqual(prev.Sessions, next.Sessions) {
+			payload["sessions"] = next.Sessions
+			changed = true
+		}
+		if !jsonEqual(prev.Runtime, next.Runtime) {
+			payload["runtime"] = next.Runtime
+			changed = true
+		}
+		if !changed {
+			return nil
+		}
+		return sendEvent("patch", payload)
+	}
 
 	_, _ = fmt.Fprintf(w, "retry: 1500\n\n")
 	flusher.Flush()
 
-	if err := sendSnapshot(); err != nil {
+	prev := capture()
+	if err := sendSnapshot(prev); err != nil {
 		return
 	}
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(750 * time.Millisecond)
 	defer ticker.Stop()
 	keepalive := time.NewTicker(15 * time.Second)
 	defer keepalive.Stop()
@@ -448,9 +550,11 @@ func (a *inboundAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			if err := sendSnapshot(); err != nil {
+			next := capture()
+			if err := sendPatch(prev, next); err != nil {
 				return
 			}
+			prev = next
 		case <-keepalive.C:
 			if _, err := fmt.Fprintf(w, ": keepalive %d\n\n", time.Now().Unix()); err != nil {
 				return
@@ -473,7 +577,10 @@ func (a *inboundAPI) handleRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{"runtime": a.buildRuntimeData()})
+}
 
+func (a *inboundAPI) buildRuntimeData() map[string]any {
 	runtime := map[string]any{
 		"version": map[string]any{
 			"app": version.Format(),
@@ -539,8 +646,7 @@ func (a *inboundAPI) handleRuntime(w http.ResponseWriter, r *http.Request) {
 			"sanitized": cfgData,
 		}
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"runtime": runtime})
+	return runtime
 }
 
 func (a *inboundAPI) listDefinedAgentsCatalog() []map[string]any {
@@ -630,6 +736,8 @@ func runtimeControlCommands(prefix string, includeKill bool) []string {
 		prefix + "status",
 		prefix + "models",
 		prefix + "channels",
+		prefix + "stop",
+		prefix + "continue",
 		prefix + "inject MESSAGE",
 		prefix + "first MESSAGE",
 		prefix + "delete",
@@ -812,4 +920,16 @@ func writeJSON(w http.ResponseWriter, status int, body map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func jsonEqual(left, right any) bool {
+	lb, err := json.Marshal(left)
+	if err != nil {
+		return false
+	}
+	rb, err := json.Marshal(right)
+	if err != nil {
+		return false
+	}
+	return string(lb) == string(rb)
 }

@@ -409,6 +409,9 @@ func setupLogging(cfg *config.Config) {
 	if err := logger.EnableFileLogging(logPath); err != nil {
 		fmt.Printf("Warning: could not enable file logging at %s: %v\n", logPath, err)
 	}
+	if err := logger.SetAgentLogsDir(filepath.Join(logDir, "agents")); err != nil {
+		fmt.Printf("Warning: could not enable agent-scoped logging: %v\n", err)
+	}
 	if logger.GetLevel() == logger.DEBUG {
 		if err := logger.EnableDebugFileLogging(debugPath); err != nil {
 			fmt.Printf("Warning: could not enable debug file logging at %s: %v\n", debugPath, err)
@@ -962,23 +965,23 @@ func collectNotificationTargets(cfg *config.Config, stateManager *state.Manager)
 	return targets
 }
 
-func gatewayAutoMessagePrefix(cfg *config.Config) string {
+func gatewaySysMessagePrefix(cfg *config.Config) string {
 	if cfg == nil {
-		return "[AUTO]"
+		return "[SYS]"
 	}
-	prefix := strings.TrimSpace(cfg.Gateway.AutoMessagePrefix)
+	prefix := strings.TrimSpace(cfg.Gateway.SysMessagePrefix)
 	if prefix == "" {
-		return "[AUTO]"
+		return "[SYS]"
 	}
 	return prefix
 }
 
-func prefixAutoMessage(cfg *config.Config, content string) string {
+func prefixSysMessage(cfg *config.Config, content string) string {
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return gatewayAutoMessagePrefix(cfg)
+		return gatewaySysMessagePrefix(cfg)
 	}
-	prefix := gatewayAutoMessagePrefix(cfg)
+	prefix := gatewaySysMessagePrefix(cfg)
 	if strings.HasPrefix(content, prefix) {
 		return content
 	}
@@ -1006,7 +1009,7 @@ func sendSystemNotice(cfg *config.Config, channelManager *channels.Manager, targ
 	if err := ch.Send(sendCtx, bus.OutboundMessage{
 		Channel: target.channel,
 		ChatID:  target.chatID,
-		Content: prefixAutoMessage(cfg, content),
+		Content: prefixSysMessage(cfg, content),
 	}); err != nil {
 		logger.WarnCF("gateway", "Failed to send system notice", map[string]interface{}{
 			"channel": target.channel,

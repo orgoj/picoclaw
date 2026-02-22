@@ -114,6 +114,7 @@ const dashboardHTML = `<!doctype html>
       background:var(--border);
       cursor:col-resize;
       user-select:none;
+      touch-action:none;
     }
     .splitter:hover { filter:brightness(1.15); }
     .card {
@@ -320,6 +321,7 @@ const dashboardHTML = `<!doctype html>
       background:var(--border);
       cursor:row-resize;
       user-select:none;
+      touch-action:none;
       flex:0 0 8px;
     }
     .rowSplitter:hover { filter:brightness(1.15); }
@@ -396,6 +398,26 @@ const dashboardHTML = `<!doctype html>
         </div>
         <div class="leftControls">
           <label class="small"><input id="showDebug" type="checkbox"> Show debug</label>
+          <select id="kindFilter" style="max-width:170px">
+            <option value="all">All kinds</option>
+            <option value="message">message</option>
+            <option value="auto">auto</option>
+            <option value="sys">sys</option>
+            <option value="tool">tool</option>
+            <option value="llm">llm</option>
+            <option value="queue">queue</option>
+            <option value="error">error</option>
+            <option value="warn">warn</option>
+            <option value="info">info</option>
+            <option value="debug">debug</option>
+          </select>
+          <select id="levelFilter" style="max-width:130px">
+            <option value="all">All levels</option>
+            <option value="error">ERROR</option>
+            <option value="warn">WARN</option>
+            <option value="info">INFO</option>
+            <option value="debug">DEBUG</option>
+          </select>
           <input id="historySearch" class="grow" placeholder="Filter messages...">
         </div>
         <div id="filterState" class="filterState"></div>
@@ -487,6 +509,7 @@ const state = {
   expandedHistoryKey: "",
   historyBySession: {},
   agentLogLines: [],
+  selectedAgentLogLines: [],
   sessions: [],
   subagents: [],
   historyLimit: 3000,
@@ -498,6 +521,8 @@ const state = {
   mobilePanel: "agents",
   feedMode: "messages",
   showDebug: false,
+  kindFilter: "all",
+  levelFilter: "all",
   quickFilter: "",
   inboundItems: [],
   queueEditIndex: -1,
@@ -556,6 +581,36 @@ function detectTone(content) {
   if (c.includes("warn") || c.includes("timeout")) return "warn";
   if (c.includes("info") || c.includes("status")) return "info";
   return "";
+}
+
+function detectKind(role, content) {
+  const r = String(role || "").toLowerCase();
+  const c = String(content || "");
+  const cl = c.toLowerCase();
+  if (r === "tool") return "tool";
+  if (r === "log") {
+    if (cl.includes("llm ")) return "llm";
+    if (cl.includes("inbound") || cl.includes("outbound") || cl.includes("queue")) return "queue";
+    if (cl.includes("error")) return "error";
+    if (cl.includes("warn")) return "warn";
+    if (cl.includes("debug")) return "debug";
+    return "info";
+  }
+  if (r === "system") {
+    if (c.includes("[SYS]")) return "sys";
+    if (c.includes("[AUTO]")) return "auto";
+    return "sys";
+  }
+  if (r === "assistant" || r === "user") return "message";
+  return "info";
+}
+
+function detectLevel(content) {
+  const c = String(content || "").toLowerCase();
+  if (c.includes("error") || c.includes("failed") || c.includes("panic")) return "error";
+  if (c.includes("warn") || c.includes("timeout")) return "warn";
+  if (c.includes("debug")) return "debug";
+  return "info";
 }
 
 function detectAgentName(content) {
@@ -642,7 +697,7 @@ function isChannelVisibleEntry(entry) {
   if (!state.showDebug && looksDebugContent(entry.content || "")) return false;
   if (role === "system") {
     const c = String(entry.content || "");
-    if (!c.includes("[AUTO]") && !c.includes("<delivery_failure")) return false;
+    if (!c.includes("[AUTO]") && !c.includes("[SYS]") && !c.includes("<delivery_failure")) return false;
   }
   return true;
 }
@@ -662,7 +717,7 @@ function collectHistoryEntries(includeAgentLog) {
   const out = [];
   for (const key of keys) {
     const list = getSessionHistory(key);
-    const updated = sessionUpdatedMs(key) || Date.now();
+    const updated = sessionUpdatedMs(key);
     const baseTs = Math.max(0, updated - Math.max(1, list.length));
     for (let i = 0; i < list.length; i++) {
       const m = list[i] || {};
@@ -675,12 +730,31 @@ function collectHistoryEntries(includeAgentLog) {
         role: String(m.role || ""),
         content,
         tone: detectTone(content),
+        kind: detectKind(m.role, content),
+        level: detectLevel(content),
         agentName: detectAgentName(content),
         ts: ts > 0 ? ts : (baseTs + i),
       });
     }
   }
-  if (includeAgentLog && !state.selectedSession) {
+  if (state.selectedAgentID && state.selectedAgentLogLines.length > 0) {
+    for (let i = 0; i < state.selectedAgentLogLines.length; i++) {
+      const line = String(state.selectedAgentLogLines[i] || "");
+      const parsedTs = parseLineTimestamp(line);
+      out.push({
+        historyKey: state.selectedAgentID + ".jsonl#" + i,
+        sessionKey: state.selectedAgentID + ".jsonl",
+        index: i,
+        role: "log",
+        content: line,
+        tone: detectTone(line),
+        kind: detectKind("log", line),
+        level: detectLevel(line),
+        agentName: state.selectedAgentName || state.selectedAgentID,
+        ts: parsedTs || (i + 1),
+      });
+    }
+  } else if (includeAgentLog && !state.selectedSession) {
     for (let i = 0; i < state.agentLogLines.length; i++) {
       const line = String(state.agentLogLines[i] || "");
       const parsedTs = parseLineTimestamp(line);
@@ -691,8 +765,10 @@ function collectHistoryEntries(includeAgentLog) {
         role: "log",
         content: line,
         tone: detectTone(line),
+        kind: detectKind("log", line),
+        level: detectLevel(line),
         agentName: detectAgentName(line),
-        ts: parsedTs || (Date.now() - (state.agentLogLines.length - i)),
+        ts: parsedTs || (i + 1),
       });
     }
   }
@@ -792,6 +868,12 @@ function renderHistory() {
   const includeAgentLog = state.feedMode === "ops";
   const all = collectHistoryEntries(includeAgentLog);
   let filtered = all.filter(historyEntryMatchesAgent);
+  if (state.kindFilter !== "all") {
+    filtered = filtered.filter((e) => String(e.kind || "") === state.kindFilter);
+  }
+  if (state.levelFilter !== "all") {
+    filtered = filtered.filter((e) => String(e.level || "") === state.levelFilter);
+  }
   if (state.feedMode === "messages") {
     filtered = filtered.filter(isChannelVisibleEntry);
   }
@@ -859,65 +941,98 @@ function renderInbound(items) {
   const t = $("inboundTable");
   const rows = (items || []);
   state.inboundItems = rows;
-  let html = "<tr><th>#</th><th>ID</th><th>Session</th><th>Content</th><th></th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>#</th><th>ID</th><th>Session</th><th>Content</th><th></th></tr>";
   for (let i = 0; i < rows.length; i++) {
-    const it = rows[i];
-    const id = it.id;
+    const it = rows[i] || {};
+    const id = String(it.id || "");
     const m = it.message || {};
-    html += "<tr>";
-    html += "<td>" + i + "</td>";
-    html += "<td>" + escapeHTML(id) + "</td>";
-    html += "<td>" + escapeHTML(m.session_key || "") + "</td>";
-    html += "<td><textarea id='e_" + id + "' style='min-height:54px'>" + escapeHTML(m.content || "") + "</textarea></td>";
-    html += "<td>";
-    html += "<button onclick='moveItem(\"" + id + "\",0,this,event)'>top</button> ";
-    if (i > 0) html += "<button onclick='moveItem(\"" + id + "\"," + (i - 1) + ",this,event)'>up</button> ";
-    if (i < rows.length - 1) html += "<button onclick='moveItem(\"" + id + "\"," + (i + 1) + ",this,event)'>down</button> ";
-    html += "<button onclick='moveItem(\"" + id + "\"," + (rows.length - 1) + ",this,event)'>bottom</button> ";
-    html += "<button onclick='patchItem(\"" + id + "\",this,event)'>save</button> ";
-    html += "<button onclick='delItem(\"" + id + "\",this,event)'>del</button>";
-    html += "</td></tr>";
+    const sig = [i, m.session_key || "", m.content || "", rows.length].join("|");
+    let tr = oldByKey.get(id);
+    if (!tr || tr.getAttribute("data-sig") !== sig) {
+      tr = document.createElement("tr");
+      tr.setAttribute("data-key", id);
+      tr.setAttribute("data-sig", sig);
+      let actionHTML = "";
+      actionHTML += "<button onclick='moveItem(\"" + id + "\",0,this,event)'>top</button> ";
+      if (i > 0) actionHTML += "<button onclick='moveItem(\"" + id + "\"," + (i - 1) + ",this,event)'>up</button> ";
+      if (i < rows.length - 1) actionHTML += "<button onclick='moveItem(\"" + id + "\"," + (i + 1) + ",this,event)'>down</button> ";
+      actionHTML += "<button onclick='moveItem(\"" + id + "\"," + (rows.length - 1) + ",this,event)'>bottom</button> ";
+      actionHTML += "<button onclick='patchItem(\"" + id + "\",this,event)'>save</button> ";
+      actionHTML += "<button onclick='delItem(\"" + id + "\",this,event)'>del</button>";
+      tr.innerHTML =
+        "<td>" + i + "</td>" +
+        "<td>" + escapeHTML(id) + "</td>" +
+        "<td>" + escapeHTML(m.session_key || "") + "</td>" +
+        "<td><textarea id='e_" + id + "' style='min-height:54px'>" + escapeHTML(m.content || "") + "</textarea></td>" +
+        "<td>" + actionHTML + "</td>";
+    }
+    t.appendChild(tr);
   }
-  t.innerHTML = html;
 }
 
 function renderSubagents(items) {
   const t = $("subagentTable");
   const rows = (items || []);
-  let html = "<tr><th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th></tr>";
   for (const it of rows) {
+    const key = String(it.id || "");
     const running = it.status === "running" || it.status === "pending";
-    const cls = running ? "agent-running" : "agent-stopped";
-    const selected = state.selectedAgentID === it.id ? " selected" : "";
-    html += "<tr class='clickable " + cls + selected + "' onclick='selectAgent(\"" + it.id + "\",\"" + escapeAttr(it.name || "") + "\")'>";
-    html += "<td>" + escapeHTML(it.id) + "</td>";
-    html += "<td>" + escapeHTML(it.status) + "</td>";
-    html += "<td>" + escapeHTML(it.name || "") + "</td>";
-    html += "<td>" + escapeHTML(it.label || "") + "</td>";
-    html += "<td>" + (it.pending || 0) + "</td>";
-    html += "<td>";
-    if (running) {
-      html += "<button onclick='killSubagent(\"" + it.id + "\",this,event)'>KILL</button>";
+    const cls = (running ? "agent-running" : "agent-stopped") + (state.selectedAgentID === it.id ? " selected" : "");
+    const sig = [it.status || "", it.name || "", it.label || "", it.pending || 0, cls].join("|");
+    let tr = oldByKey.get(key);
+    if (!tr || tr.getAttribute("data-sig") !== sig) {
+      tr = document.createElement("tr");
+      tr.className = "clickable " + cls;
+      tr.setAttribute("data-key", key);
+      tr.setAttribute("data-sig", sig);
+      tr.innerHTML =
+        "<td>" + escapeHTML(it.id) + "</td>" +
+        "<td>" + escapeHTML(it.status) + "</td>" +
+        "<td>" + escapeHTML(it.name || "") + "</td>" +
+        "<td>" + escapeHTML(it.label || "") + "</td>" +
+        "<td>" + (it.pending || 0) + "</td>" +
+        "<td>" + (running ? "<button onclick='killSubagent(\"" + it.id + "\",this,event)'>KILL</button>" : "") + "</td>";
+      tr.onclick = () => selectAgent(String(it.id || ""), String(it.name || ""));
+    } else {
+      tr.className = "clickable " + cls;
     }
-    html += "</td></tr>";
+    t.appendChild(tr);
   }
-  t.innerHTML = html;
 }
 
 function renderSessions(items) {
   const t = $("sessionTable");
   const rows = (items || []);
-  let html = "<tr><th>Session</th><th>Msgs</th><th>Updated</th></tr>";
+  const oldRows = Array.from(t.querySelectorAll("tr[data-key]"));
+  const oldByKey = new Map();
+  for (const n of oldRows) oldByKey.set(String(n.getAttribute("data-key") || ""), n);
+  t.innerHTML = "<tr><th>Session</th><th>Msgs</th><th>Updated</th></tr>";
   for (const it of rows) {
     const key = it && it.key ? String(it.key) : "";
     const selected = state.selectedSession === key ? " selected" : "";
-    html += "<tr class='clickable" + selected + "' onclick='selectSession(\"" + escapeAttr(key) + "\")'>";
-    html += "<td>" + escapeHTML(key) + "</td>";
-    html += "<td>" + (it.messages || 0) + "</td>";
-    html += "<td>" + fmtTs(it.updated) + "</td>";
-    html += "</tr>";
+    const sig = [it.messages || 0, it.updated || 0, selected].join("|");
+    let tr = oldByKey.get(key);
+    if (!tr || tr.getAttribute("data-sig") !== sig) {
+      tr = document.createElement("tr");
+      tr.className = "clickable" + selected;
+      tr.setAttribute("data-key", key);
+      tr.setAttribute("data-sig", sig);
+      tr.innerHTML =
+        "<td>" + escapeHTML(key) + "</td>" +
+        "<td>" + (it.messages || 0) + "</td>" +
+        "<td>" + fmtTs(it.updated) + "</td>";
+      tr.onclick = () => selectSession(key);
+    } else {
+      tr.className = "clickable" + selected;
+    }
+    t.appendChild(tr);
   }
-  t.innerHTML = html;
 }
 
 function renderChannels(chNode) {
@@ -1074,6 +1189,21 @@ async function refreshAgentLogHistory(shouldRender) {
   if (shouldRender) renderHistory();
 }
 
+async function refreshSelectedAgentLogHistory(shouldRender) {
+  if (!state.selectedAgentID) {
+    state.selectedAgentLogLines = [];
+    if (shouldRender) renderHistory();
+    return;
+  }
+  try {
+    const res = await jfetch("/api/v1/agents/" + encodeURIComponent(state.selectedAgentID) + "/log?tail=" + state.agentLogTailLimit);
+    state.selectedAgentLogLines = Array.isArray(res.lines) ? res.lines : [];
+  } catch (_) {
+    state.selectedAgentLogLines = [];
+  }
+  if (shouldRender) renderHistory();
+}
+
 async function refreshAllHistories() {
   const keys = [];
   for (const s of state.sessions) {
@@ -1100,6 +1230,10 @@ function scheduleRefreshAllHistories() {
 
 async function refreshHistory() {
   try {
+    if (state.selectedAgentID) {
+      await refreshSelectedAgentLogHistory(true);
+      return;
+    }
     if (state.selectedSession) {
       await refreshHistoryForSession(state.selectedSession, true);
       return;
@@ -1152,10 +1286,10 @@ function connectEvents(forceKey) {
     es.close();
     es = null;
   }
-  const key = forceKey || state.streamSession || $("sessionKey").value.trim();
-  if (!key) return;
+  let key = forceKey || state.streamSession || $("sessionKey").value.trim();
+  if (!key) key = "__all__";
   state.streamSession = key;
-  if (!$("sessionKey").value.trim()) $("sessionKey").value = key;
+  if (key !== "__all__" && !$("sessionKey").value.trim()) $("sessionKey").value = key;
 
   setSSEStatus("SSE connecting...", "warn");
   es = new EventSource("/api/v1/events?session_key=" + encodeURIComponent(key));
@@ -1163,28 +1297,33 @@ function connectEvents(forceKey) {
     setSSEStatus("SSE connected", "ok");
     renderSessions(state.sessions);
   };
-  es.addEventListener("snapshot", (ev) => {
+  const applySnapshotOrPatch = (ev) => {
     try {
       const data = JSON.parse(ev.data);
-      renderInbound(data.inbound || []);
+      if (Array.isArray(data.inbound)) renderInbound(data.inbound || []);
       const snapshotKey = String(data.session_key || state.streamSession || "");
-      if (snapshotKey) setSessionHistory(snapshotKey, data.history || []);
+      if (snapshotKey && snapshotKey !== "__all__" && Array.isArray(data.history)) setSessionHistory(snapshotKey, data.history || []);
       if (!state.selectedSession) refreshAgentLogHistory(false).then(() => renderHistory());
+      if (state.selectedAgentID) refreshSelectedAgentLogHistory(false).then(() => renderHistory());
       if (state.selectedSession === snapshotKey || !state.selectedSession) {
         renderHistory();
       }
-      state.subagents = data.subagents || [];
-      renderSubagents(state.subagents);
+      if (Array.isArray(data.subagents)) {
+        state.subagents = data.subagents || [];
+        renderSubagents(state.subagents);
+      }
       if (Array.isArray(data.sessions)) {
         state.sessions = data.sessions;
         renderSessions(state.sessions);
         if (!state.selectedSession) scheduleRefreshAllHistories();
       }
-      refreshRuntime(true);
+      if (data.runtime) refreshRuntimeFromPayload(data.runtime);
     } catch (e) {
       setSendOut("SSE parse error: " + e.message, true);
     }
-  });
+  };
+  es.addEventListener("snapshot", applySnapshotOrPatch);
+  es.addEventListener("patch", applySnapshotOrPatch);
   es.onerror = () => {
     setSSEStatus("SSE disconnected, retrying...", "warn");
     if (es && es.readyState === EventSource.CLOSED) {
@@ -1214,7 +1353,7 @@ async function selectAgent(id, name) {
   state.expandedHistoryKey = "";
   renderSubagents(state.subagents);
   renderSessions(state.sessions);
-  await refreshHistory();
+  await refreshSelectedAgentLogHistory(true);
 }
 
 async function clearAllFilters() {
@@ -1419,6 +1558,22 @@ function initFeedControls() {
   if (search) {
     search.addEventListener("input", () => {
       state.quickFilter = String(search.value || "").trim();
+      renderHistory();
+    });
+  }
+  const kind = $("kindFilter");
+  if (kind) {
+    kind.value = state.kindFilter;
+    kind.addEventListener("change", () => {
+      state.kindFilter = String(kind.value || "all");
+      renderHistory();
+    });
+  }
+  const level = $("levelFilter");
+  if (level) {
+    level.value = state.levelFilter;
+    level.addEventListener("change", () => {
+      state.levelFilter = String(level.value || "all");
       renderHistory();
     });
   }
@@ -1633,45 +1788,49 @@ function buildRuntimeSummary(rt) {
   return lines.join("\n");
 }
 
+function refreshRuntimeFromPayload(rt) {
+  const runtime = rt || {};
+  const controls = runtime.controls || {};
+  const prefix = String(controls.prefix || "+").trim();
+  if (prefix) state.controlPrefix = prefix;
+  const cmds = Array.isArray(controls.commands) ? controls.commands : [];
+  state.controlCommands = cmds;
+  state.hasKillControl = cmds.some((c) => String(c).indexOf(state.controlPrefix + "kill ") === 0);
+  state.channels = runtime.channels || {};
+  const catalog = runtime.catalog || {};
+  state.definedAgents = Array.isArray(catalog.defined_agents) ? catalog.defined_agents : [];
+  state.skills = Array.isArray(catalog.skills) ? catalog.skills : [];
+  $("runtimeSummaryBox").textContent = buildRuntimeSummary(runtime);
+  const cfg = runtime.config || {};
+  const top = {
+    path: cfg.path || "",
+    available: !!cfg.available,
+    error: cfg.error || "",
+  };
+  $("runtimeConfigBox").textContent = "Config Meta\n" + fmtObj(top) + "\n\nSanitized Config\n" + fmtObj(cfg.sanitized || {});
+  updateMessageModeUI();
+  renderSubagents(state.subagents);
+  renderChannels(state.channels);
+  renderControls(state.controlCommands);
+  renderDefinedAgents(state.definedAgents);
+  renderSkills(state.skills);
+  const quick = $("quickCommand");
+  if (quick) {
+    const current = String(quick.value || "");
+    let html = "<option value=''>+ menu command...</option>";
+    for (const c of state.controlCommands) {
+      const text = String(c || "");
+      html += "<option value='" + escapeAttr(text) + "'>" + escapeHTML(text) + "</option>";
+    }
+    quick.innerHTML = html;
+    if (current) quick.value = current;
+  }
+}
+
 async function refreshRuntime(silent) {
   try {
     const res = await jfetch("/api/v1/runtime");
-    const rt = (res && res.runtime) || {};
-    const controls = rt.controls || {};
-    const prefix = String(controls.prefix || "+").trim();
-    if (prefix) state.controlPrefix = prefix;
-    const cmds = Array.isArray(controls.commands) ? controls.commands : [];
-    state.controlCommands = cmds;
-    state.hasKillControl = cmds.some((c) => String(c).indexOf(state.controlPrefix + "kill ") === 0);
-    state.channels = rt.channels || {};
-    const catalog = rt.catalog || {};
-    state.definedAgents = Array.isArray(catalog.defined_agents) ? catalog.defined_agents : [];
-    state.skills = Array.isArray(catalog.skills) ? catalog.skills : [];
-    $("runtimeSummaryBox").textContent = buildRuntimeSummary(rt);
-    const cfg = rt.config || {};
-    const top = {
-      path: cfg.path || "",
-      available: !!cfg.available,
-      error: cfg.error || "",
-    };
-    $("runtimeConfigBox").textContent = "Config Meta\n" + fmtObj(top) + "\n\nSanitized Config\n" + fmtObj(cfg.sanitized || {});
-    updateMessageModeUI();
-    renderSubagents(state.subagents);
-    renderChannels(state.channels);
-    renderControls(state.controlCommands);
-    renderDefinedAgents(state.definedAgents);
-    renderSkills(state.skills);
-    const quick = $("quickCommand");
-    if (quick) {
-      const current = String(quick.value || "");
-      let html = "<option value=''>+ menu command...</option>";
-      for (const c of state.controlCommands) {
-        const text = String(c || "");
-        html += "<option value='" + escapeAttr(text) + "'>" + escapeHTML(text) + "</option>";
-      }
-      quick.innerHTML = html;
-      if (current) quick.value = current;
-    }
+    refreshRuntimeFromPayload((res && res.runtime) || {});
   } catch (e) {
     if (!silent) $("runtimeSummaryBox").textContent = "ERROR: " + e.message;
   }

@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.39 - 2026-02-22
+
+### Changed
+- Gateway/agent automatic prefix semantics were split into two independent config fields:
+  - `gateway.sys_message_prefix` (default `[SYS]`) for program/system notices (startup/shutdown/runtime/panic paths),
+  - `gateway.auto_final_prefix` (default `[AUTO]`) for final main-loop outbound replies.
+- Main-loop outbound replies are now automatically prefixed with `gateway.auto_final_prefix` on non-system channels.
+- Subagent task IDs are now persisted across restarts via workspace state (`workspace/state/subagent-next-id.txt`), so new tasks continue incrementing instead of restarting from `subagent-1`.
+- Runtime control menu now includes `+stop` / `+continue`:
+  - `+stop` pauses normal queueing for the session and routes normal messages through inject flow,
+  - `+continue` restores normal queueing.
+
+### Fixed
+- Dashboard channel-visible system filtering now recognizes both `[SYS]` and `[AUTO]` system messages.
+- SSE events endpoint (`/api/v1/events`) now supports read-only/no-session connections (no required `session_key`) so the dashboard can stay live even before a specific session is selected.
+- SSE stream now emits incremental `patch` events between snapshots instead of forcing full snapshot payload processing on each tick.
+- Added agent-scoped log streams under `logging.dir/agents`:
+  - `main.jsonl` for main flow,
+  - `<subagent-id>.jsonl` for subagent-specific flow.
+- New Admin API endpoint: `GET /api/v1/agents/{id}/log?tail=N` for direct per-agent log retrieval.
+- Crash/panic and operator subagent-cancel incidents are now enqueued back to queue head as urgent incident context for immediate main-loop visibility.
+
 ## v0.1.38 - 2026-02-22
 
 ### Changed

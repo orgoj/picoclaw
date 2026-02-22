@@ -81,7 +81,7 @@
 > - **Outbound safety for operator channels**
 >   - Tool execution output is not auto-forwarded to external channels.
 >   - External user-facing content is restricted to explicit `message` sends and final main-agent response.
->   - Automatic runtime/panic notices use the configured `gateway.auto_message_prefix`.
+>   - Automatic system notices use `gateway.sys_message_prefix`, while loop-final fallback messages use `gateway.auto_final_prefix`.
 > - **Inbound queue, timing, and observability**
 >   - Bounded/editable inbound queue APIs (inspect/update/delete/reorder).
 >   - Direct subagent cancellation API (`DELETE /api/v1/subagents/{id}`) for dashboard `KILL` controls.
@@ -1031,7 +1031,8 @@ Example:
 ```json
 {
   "gateway": {
-    "auto_message_prefix": "[AUTO]",
+    "sys_message_prefix": "[SYS]",
+    "auto_final_prefix": "[AUTO]",
     "shutdown_notice": {
       "enabled": true,
       "template": "Gateway shutdown signal {{signal}} at {{timestamp}} for {{channel}}:{{chat_id}}. I am going offline now."
@@ -1254,7 +1255,8 @@ Retry semantics (exact):
 |--------|---------|-------------|
 | `host` | `0.0.0.0` | Gateway listen host |
 | `port` | `18790` | Gateway listen port |
-| `auto_message_prefix` | `[AUTO]` | Prefix added to automatic gateway notices (startup/shutdown/runtime errors) |
+| `sys_message_prefix` | `[SYS]` | Prefix added to automatic system gateway notices (startup/shutdown/runtime errors) |
+| `auto_final_prefix` | `[AUTO]` | Prefix added to final main-loop outbound replies (non-`message` tool flow) |
 | `startup_prompt.enabled` | `true` | Inject restart context into last active session at startup |
 | `startup_prompt.template` | built-in template | Prompt template for restart context |
 | `startup_prompt.include_preflight_warnings` | `true` | Inject preflight warning-fix task into same main session |
@@ -1425,7 +1427,8 @@ picoclaw agent -m "Hello"
   "gateway": {
     "host": "0.0.0.0",
     "port": 18790,
-    "auto_message_prefix": "[AUTO]",
+    "sys_message_prefix": "[SYS]",
+    "auto_final_prefix": "[AUTO]",
     "startup_prompt": {
       "enabled": true,
       "template": "System restart detected at {{timestamp}} for {{channel}}:{{chat_id}}. Greet the user in this channel and continue with full continuity.",
