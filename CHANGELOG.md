@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.36 - 2026-02-22
+
+### Fixed
+- Dashboard history rendering no longer rewrites the full list on each refresh tick.
+- History pane now applies keyed incremental DOM patching by `historyKey`, updating only changed rows and preserving existing row nodes where possible.
+- This reduces UI flicker/reflow and improves text-selection/copy stability during live SSE updates.
+
 ## v0.1.35 - 2026-02-22
 
 ### Added

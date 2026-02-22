@@ -717,6 +717,72 @@ function renderHistoryDetail(entry) {
     "<div>" + escapeHTML(entry.content || "") + "</div>";
 }
 
+function historyRowSignature(row, displayIndex, showSession) {
+  return [
+    row.historyKey || "",
+    displayIndex,
+    showSession ? row.sessionKey : "",
+    row.role || "",
+    row.tone || "",
+    row.agentName || "",
+    row.content || "",
+    state.expandedHistoryKey === row.historyKey ? "1" : "0",
+  ].join("|");
+}
+
+function updateHistoryRowNode(node, row, displayIndex, showSession) {
+  const sig = historyRowSignature(row, displayIndex, showSession);
+  if (node.getAttribute("data-sig") === sig) return;
+  const selected = state.expandedHistoryKey === row.historyKey ? " selected" : "";
+  const toneCls = row.tone ? (" tone-" + row.tone) : "";
+  const roleCls = roleClass(row.role);
+  const idx = "[" + displayIndex + "]";
+  const sessionPart = showSession ? ("<span class='session'>" + escapeHTML(row.sessionKey) + "</span>") : "";
+  let agentPart = "";
+  if (row.agentName) {
+    const color = colorForName(row.agentName);
+    agentPart = "<span class='historyAgent' style='color:" + escapeAttr(color) + "'>" + escapeHTML(row.agentName) + "</span>";
+  }
+  node.className = "historyRow " + roleCls + toneCls + selected;
+  node.setAttribute("data-hk", row.historyKey || "");
+  node.setAttribute("data-sig", sig);
+  node.innerHTML =
+    "<span class='idx'>" + idx + "</span>" +
+    sessionPart +
+    "<span class='role'>" + escapeHTML(row.role || "unknown") + "</span>" +
+    agentPart +
+    "<span class='preview'>" + escapeHTML(shortText(row.content, 280)) + "</span>";
+}
+
+function patchHistoryListNodes(list, shown, base) {
+  const showSession = !state.selectedSession;
+  const oldRows = Array.from(list.querySelectorAll(".historyRow"));
+  const oldByKey = new Map();
+  for (const n of oldRows) {
+    const key = String(n.getAttribute("data-hk") || "");
+    if (key && !oldByKey.has(key)) oldByKey.set(key, n);
+  }
+
+  for (let i = 0; i < shown.length; i++) {
+    const row = shown[i];
+    const key = String(row.historyKey || "");
+    let node = oldByKey.get(key);
+    if (!node) {
+      node = document.createElement("div");
+      node.className = "historyRow";
+      node.setAttribute("data-hk", key);
+    }
+    updateHistoryRowNode(node, row, base + i, showSession);
+    const wantPos = list.children[i] || null;
+    if (wantPos !== node) list.insertBefore(node, wantPos);
+    oldByKey.delete(key);
+  }
+
+  for (const leftover of oldByKey.values()) {
+    if (leftover && leftover.parentNode === list) list.removeChild(leftover);
+  }
+}
+
 function renderHistory() {
   const list = $("historyList");
   if (!list) return;
@@ -743,32 +809,12 @@ function renderHistory() {
   const base = Math.max(0, filtered.length - shown.length);
 
   if (shown.length === 0) {
-    list.innerHTML = "<div class='small' style='padding:8px'>No history matches current filter.</div>";
+    list.innerHTML = "<div class='small historyEmpty' style='padding:8px'>No history matches current filter.</div>";
     state.expandedHistoryKey = "";
     renderHistoryDetail(null);
   } else {
-    let html = "";
-    for (let i = 0; i < shown.length; i++) {
-      const row = shown[i];
-      const selected = state.expandedHistoryKey === row.historyKey ? " selected" : "";
-      const toneCls = row.tone ? (" tone-" + row.tone) : "";
-      const roleCls = roleClass(row.role);
-      const idx = "[" + (base + i) + "]";
-      const sessionPart = state.selectedSession ? "" : ("<span class='session'>" + escapeHTML(row.sessionKey) + "</span>");
-      let agentPart = "";
-      if (row.agentName) {
-        const color = colorForName(row.agentName);
-        agentPart = "<span class='historyAgent' style='color:" + escapeAttr(color) + "'>" + escapeHTML(row.agentName) + "</span>";
-      }
-      html += "<div class='historyRow " + roleCls + toneCls + selected + "' data-hk='" + escapeAttr(row.historyKey) + "'>";
-      html += "<span class='idx'>" + idx + "</span>";
-      html += sessionPart;
-      html += "<span class='role'>" + escapeHTML(row.role || "unknown") + "</span>";
-      html += agentPart;
-      html += "<span class='preview'>" + escapeHTML(shortText(row.content, 280)) + "</span>";
-      html += "</div>";
-    }
-    list.innerHTML = html;
+    if (list.querySelector(".historyEmpty")) list.innerHTML = "";
+    patchHistoryListNodes(list, shown, base);
     const expanded = shown.find((r) => r.historyKey === state.expandedHistoryKey) || null;
     renderHistoryDetail(expanded);
   }

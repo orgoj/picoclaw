@@ -99,6 +99,7 @@
 >     - Selecting a subagent clears session selection (agent and session filters are mutually exclusive).
 >     - Active filter scope is always explicit in history header (`ALL`/`SESSION`/`AGENT`) with strong selected-row highlighting in Sessions/Agents tables.
 >     - History view keeps latest 1000 messages in one-line rows; each row can be clicked to expand full content.
+>     - Live history updates use incremental row patching (keyed by message identity) to avoid full-list redraw flicker.
 >     - All-history scope also includes recent runtime console lines from `agent.log` for operator parity with live console view.
 >     - Default all-history mode now maximizes visible data with bounded caps (sessions list + `agent.log` tail + UI render cap) to stay responsive.
 >     - Message panel uses dedicated mode buttons (`Queue/Inject/Force First/Append/Delete Last`) mapped to prefix controls.
