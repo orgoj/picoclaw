@@ -313,12 +313,20 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 			if line == "" {
 				continue
 			}
-			ts := parseTimelineLogTimestamp(line)
+			entry, ok := parseRuntimeLogEntry(line)
+			if !ok {
+				// JSONL-only strictness: skip non-structured lines.
+				continue
+			}
+			ts := entry.TimestampMS
 			if ts <= 0 {
 				ts = int64(i + 1)
 			}
-			level := classifyTimelineLevel(line)
-			agentID := detectTimelineAgentID(line)
+			level := strings.ToLower(strings.TrimSpace(entry.Level))
+			if level == "" {
+				level = "info"
+			}
+			agentID := detectTimelineAgentID(entry.Message)
 			item := timelineItem{
 				ID:          fmt.Sprintf("agent.jsonl#%d", i),
 				EventID:     fmt.Sprintf("agent.jsonl#%d", i),
@@ -327,11 +335,13 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 				SessionKey:  "agent.jsonl",
 				AgentID:     agentID,
 				Role:        "log",
-				Kind:        classifyTimelineKind("log", line, a.cfg),
+				Kind:        classifyRuntimeLogKind(entry),
 				Level:       level,
-				Content:     line,
+				Content:     entry.Message,
 				Payload: map[string]any{
-					"log_path": mainLogPath,
+					"log_path":  mainLogPath,
+					"component": entry.Component,
+					"fields":    entry.Fields,
 				},
 			}
 			if !timelineMatches(item, sessionFilter, agentFilter, kindFilter, levelFilter, query, fromMS) {
@@ -1184,21 +1194,58 @@ func timelineMatches(item timelineItem, session, agent, kind, level, q string, f
 	return true
 }
 
-func parseTimelineLogTimestamp(line string) int64 {
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(line), &obj); err != nil {
-		return 0
+type runtimeLogEntry struct {
+	Level       string         `json:"level"`
+	Timestamp   string         `json:"timestamp"`
+	Component   string         `json:"component"`
+	Message     string         `json:"message"`
+	Fields      map[string]any `json:"fields"`
+	TimestampMS int64          `json:"-"`
+}
+
+func parseRuntimeLogEntry(line string) (runtimeLogEntry, bool) {
+	var entry runtimeLogEntry
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return runtimeLogEntry{}, false
 	}
-	if ts, ok := obj["timestamp"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(ts)); err == nil {
-			return t.UnixMilli()
+	entry.Message = strings.TrimSpace(entry.Message)
+	if entry.Message == "" {
+		return runtimeLogEntry{}, false
+	}
+	if t, err := time.Parse(time.RFC3339, strings.TrimSpace(entry.Timestamp)); err == nil {
+		entry.TimestampMS = t.UnixMilli()
+	}
+	if entry.Fields == nil {
+		entry.Fields = map[string]any{}
+	}
+	return entry, true
+}
+
+func classifyRuntimeLogKind(entry runtimeLogEntry) string {
+	comp := strings.ToLower(strings.TrimSpace(entry.Component))
+	msg := strings.ToLower(strings.TrimSpace(entry.Message))
+	switch comp {
+	case "tool":
+		return "tool"
+	case "agent":
+		if strings.Contains(msg, "llm ") {
+			return "llm"
 		}
+		return "message"
+	case "bus":
+		return "queue"
+	case "channels", "gateway", "system":
+		return "sys"
 	}
-	if ts, ok := obj["ts"].(float64); ok {
-		if ts > 1e12 {
-			return int64(ts)
-		}
-		return int64(ts * 1000)
+	level := strings.ToLower(strings.TrimSpace(entry.Level))
+	switch level {
+	case "error":
+		return "error"
+	case "warn":
+		return "warn"
+	case "debug":
+		return "debug"
+	default:
+		return "info"
 	}
-	return 0
 }

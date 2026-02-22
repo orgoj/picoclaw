@@ -10,12 +10,10 @@
 
 ### REF-2: Dashboard rewrite (frontend)
 
-- [NOW] Zadny periodicky full redraw: dodelat keyed incremental updates ve zbylych panelech (`channels/control/defined-agents/skills`).
 - [NOW] Layout final:
   - vlevo: `Messages -> Queue -> Input`
   - vpravo: `Agents -> Sessions -> Channels`
   - splittery stabilni, persist, bez jitteru.
-- [NOW] Filtry first-class dodelat na formalni event schema (`kind/level` podle dat, ne heuristik jen z textu).
 
 ### REF-3: Control semantics
 
@@ -24,7 +22,7 @@
   - `[AUTO]` = loop-level final fallback reply, pouze kdyz neprobehla zadna explicitni `message` tool zprava
   - nikdy nemichat: system notifikace nesmi byt `[AUTO]`, fallback final reply nesmi byt `[SYS]`
   - oboji musi byt konzistentni v channelu i dashboard feedu
-- [NOW] Incident report pipeline dodelat na 100% structured payload (`cause`, `channel`, `chat_id`, `sender_id`, `task_id`).
+- [NOW] Incident report pipeline dodelat na 100% structured payload (`cause`, `channel`, `chat_id`, `sender_id`, `task_id`) a formalni event `kind=sys|auto`.
 
 ## HARD RULE PRO NOVOU VERZI
 

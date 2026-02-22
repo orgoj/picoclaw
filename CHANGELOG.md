@@ -24,6 +24,7 @@
 - Crash/panic and operator subagent-cancel incidents are now enqueued back to queue head as urgent incident context for immediate main-loop visibility.
 - Incident queue-head context now carries explicit structured metadata fields (`cause`, `channel`, `chat_id`, `sender_id`, `session_key`, `task_id` when applicable) for deterministic downstream filtering.
 - Dashboard history rendering now consumes unified timeline API data and refreshes via SSE-triggered timeline reload (single feed model for session/agent/kind/level views).
+- Timeline log ingestion now enforces JSONL-only runtime records (non-JSON log lines are ignored), with formal `source/kind/level/payload` mapping from structured log fields.
 
 ## v0.1.38 - 2026-02-22
 
