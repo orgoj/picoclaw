@@ -328,7 +328,7 @@ func TestAgentLogHistoryRoute_ReturnsTailLines(t *testing.T) {
 	mux := http.NewServeMux()
 
 	logDir := t.TempDir()
-	logPath := filepath.Join(logDir, "agent.log")
+	logPath := filepath.Join(logDir, "agent.jsonl")
 	raw := strings.Join([]string{
 		"line-1",
 		"line-2",

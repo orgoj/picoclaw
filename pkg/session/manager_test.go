@@ -46,7 +46,7 @@ func TestSave_WithColonInKey(t *testing.T) {
 	}
 
 	// The file on disk should use sanitized name.
-	expectedFile := filepath.Join(tmpDir, "telegram_123456.json")
+	expectedFile := filepath.Join(tmpDir, "telegram_123456.jsonl")
 	if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
 		t.Fatalf("expected session file %s to exist", expectedFile)
 	}

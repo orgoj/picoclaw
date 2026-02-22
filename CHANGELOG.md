@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.38 - 2026-02-22
+
+### Changed
+- Runtime file logging switched to JSONL-first filenames:
+  - main runtime log: `agent.jsonl` (previously `agent.log`)
+  - debug runtime log: `debug.jsonl` (previously `debug.log`)
+- Dashboard/admin API log-history path now reads from `agent.jsonl`.
+- Session persistence switched from per-session `.json` snapshots to `.jsonl` files (`workspace/sessions/*.jsonl`), with one JSON object per line for write/read flow.
+
+### Fixed
+- Debug file output now writes structured JSONL entries (same schema family as runtime log entries) instead of plain text lines.
+
 ## v0.1.37 - 2026-02-22
 
 ### Fixed

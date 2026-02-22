@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -204,12 +205,13 @@ func (sm *SessionManager) Save(key string) error {
 	}
 	sm.mu.RUnlock()
 
-	data, err := json.MarshalIndent(snapshot, "", "  ")
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return err
 	}
+	data = append(data, '\n')
 
-	sessionPath := filepath.Join(sm.storage, filename+".json")
+	sessionPath := filepath.Join(sm.storage, filename+".jsonl")
 	tmpFile, err := os.CreateTemp(sm.storage, "session-*.tmp")
 	if err != nil {
 		return err
@@ -257,18 +259,30 @@ func (sm *SessionManager) loadSessions() error {
 			continue
 		}
 
-		if filepath.Ext(file.Name()) != ".json" {
+		if filepath.Ext(file.Name()) != ".jsonl" {
 			continue
 		}
 
 		sessionPath := filepath.Join(sm.storage, file.Name())
-		data, err := os.ReadFile(sessionPath)
+		f, err := os.Open(sessionPath)
 		if err != nil {
+			continue
+		}
+		sc := bufio.NewScanner(f)
+		var lastLine string
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line != "" {
+				lastLine = line
+			}
+		}
+		_ = f.Close()
+		if lastLine == "" {
 			continue
 		}
 
 		var session Session
-		if err := json.Unmarshal(data, &session); err != nil {
+		if err := json.Unmarshal([]byte(lastLine), &session); err != nil {
 			continue
 		}
 

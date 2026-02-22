@@ -100,8 +100,8 @@
 >     - Active filter scope is always explicit in history header (`ALL`/`SESSION`/`AGENT`) with strong selected-row highlighting in Sessions/Agents tables.
 >     - History view keeps latest 1000 messages in one-line rows; each row can be clicked to expand full content.
 >     - Live history updates use incremental row patching (keyed by message identity) to avoid full-list redraw flicker.
->     - All-history scope also includes recent runtime console lines from `agent.log` for operator parity with live console view.
->     - Default all-history mode now maximizes visible data with bounded caps (sessions list + `agent.log` tail + UI render cap) to stay responsive.
+>     - All-history scope also includes recent runtime console lines from `agent.jsonl` for operator parity with live console view.
+>     - Default all-history mode now maximizes visible data with bounded caps (sessions list + `agent.jsonl` tail + UI render cap) to stay responsive.
 >     - Message panel uses dedicated mode buttons (`Queue/Inject/Force First/Append/Delete Last`) mapped to prefix controls.
 >     - Composer includes quick `+` command menu for direct command insertion.
 >     - Message textarea has responsive max-height on mobile to avoid overflow past viewport.
@@ -1289,7 +1289,7 @@ The idle prompt includes runtime idle context metadata:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `enabled` | `false` | Enable file logging |
-| `dir` | `~/.picoclaw/workspace/logs` | Directory for runtime logs (`agent.log`, `debug.log` when level is debug, `heartbeat.log`, `audit.jsonl`) |
+| `dir` | `~/.picoclaw/workspace/logs` | Directory for runtime logs (`agent.jsonl`, `debug.jsonl` when level is debug, `heartbeat.log`, `audit.jsonl`) |
 | `level` | `info` | Console/file log level: `debug`, `info`, `warn`, `error` |
 
 Run `picoclaw gateway --debug` (or `-d`) for detailed runtime diagnostics.

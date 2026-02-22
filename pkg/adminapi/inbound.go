@@ -235,7 +235,7 @@ func (a *inboundAPI) handleAgentLogHistory(w http.ResponseWriter, r *http.Reques
 		tail = 5000
 	}
 
-	logPath := filepath.Join(a.cfg.LoggingDirPath(), "agent.log")
+	logPath := filepath.Join(a.cfg.LoggingDirPath(), "agent.jsonl")
 	lines, err := readLastLines(logPath, tail)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{

@@ -685,8 +685,8 @@ function collectHistoryEntries(includeAgentLog) {
       const line = String(state.agentLogLines[i] || "");
       const parsedTs = parseLineTimestamp(line);
       out.push({
-        historyKey: "agent.log#" + i,
-        sessionKey: "agent.log",
+        historyKey: "agent.jsonl#" + i,
+        sessionKey: "agent.jsonl",
         index: i,
         role: "log",
         content: line,
@@ -824,7 +824,7 @@ function renderHistory() {
 
   const meta = $("historyMeta");
   if (meta) {
-    const scope = state.selectedSession ? ("session=" + state.selectedSession) : ("session=ALL" + (includeAgentLog ? "(sessions+agent.log)" : "(sessions)"));
+    const scope = state.selectedSession ? ("session=" + state.selectedSession) : ("session=ALL" + (includeAgentLog ? "(sessions+agent.jsonl)" : "(sessions)"));
     const agent = (state.selectedAgentID || state.selectedAgentName) ? ", agent=" + (state.selectedAgentName || state.selectedAgentID) : "";
     const mode = ", mode=" + state.feedMode;
     meta.textContent = "showing " + shown.length + " / " + filtered.length + " messages (limit " + state.historyLimit + "), " + scope + agent + mode;

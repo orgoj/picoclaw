@@ -171,7 +171,10 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 
 	log.Println(logLine)
 	if logger.debugFile != nil {
-		logger.debugFile.WriteString(logLine + "\n")
+		jsonData, err := json.Marshal(entry)
+		if err == nil {
+			logger.debugFile.WriteString(string(jsonData) + "\n")
+		}
 	}
 
 	if level == FATAL {

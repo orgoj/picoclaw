@@ -393,8 +393,8 @@ func setupLogging(cfg *config.Config) {
 	}
 
 	logDir := cfg.LoggingDirPath()
-	logPath := filepath.Join(logDir, "agent.log")
-	debugPath := filepath.Join(logDir, "debug.log")
+	logPath := filepath.Join(logDir, "agent.jsonl")
+	debugPath := filepath.Join(logDir, "debug.jsonl")
 
 	rotateLogFile(logPath)
 	if logger.GetLevel() == logger.DEBUG {
