@@ -16,6 +16,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/session"
+	"github.com/sipeed/picoclaw/pkg/skills"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/version"
 )
@@ -338,7 +339,7 @@ func (a *inboundAPI) handleSubagents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *inboundAPI) handleSubagentItem(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodDelete {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
 		return
 	}
@@ -355,6 +356,18 @@ func (a *inboundAPI) handleSubagentItem(w http.ResponseWriter, r *http.Request) 
 	task, ok := a.subagentMgr.GetTask(id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "subagent task not found"})
+		return
+	}
+	if r.Method == http.MethodDelete {
+		if err := a.subagentMgr.Cancel(id); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     true,
+			"id":     id,
+			"status": "cancelled",
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -510,6 +523,10 @@ func (a *inboundAPI) handleRuntime(w http.ResponseWriter, r *http.Request) {
 			"count":    len(commands),
 			"commands": commands,
 		}
+		runtime["catalog"] = map[string]any{
+			"defined_agents": a.listDefinedAgentsCatalog(),
+			"skills":         a.listSkillsCatalog(),
+		}
 		runtime["model"] = map[string]any{
 			"provider": a.cfg.Agents.Defaults.Provider,
 			"model":    a.cfg.Agents.Defaults.Model,
@@ -524,6 +541,87 @@ func (a *inboundAPI) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"runtime": runtime})
+}
+
+func (a *inboundAPI) listDefinedAgentsCatalog() []map[string]any {
+	out := make([]map[string]any, 0)
+	if a.cfg == nil {
+		return out
+	}
+	workspace := strings.TrimSpace(a.cfg.WorkspacePath())
+	workspaceAgents := tools.LoadAvailableAgents(workspace)
+	seen := make(map[string]bool)
+
+	for _, item := range workspaceAgents {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		seen[name] = true
+		out = append(out, map[string]any{
+			"name":        name,
+			"description": item.Description,
+			"source":      "workspace",
+		})
+	}
+
+	cfgNames := make([]string, 0, len(a.cfg.Agents.NamedAgents))
+	for name := range a.cfg.Agents.NamedAgents {
+		cfgNames = append(cfgNames, name)
+	}
+	sort.Strings(cfgNames)
+	for _, name := range cfgNames {
+		if seen[name] {
+			continue
+		}
+		out = append(out, map[string]any{
+			"name":        name,
+			"description": "Configured named agent",
+			"source":      "config",
+		})
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		li := strings.TrimSpace(fmt.Sprint(out[i]["name"]))
+		rj := strings.TrimSpace(fmt.Sprint(out[j]["name"]))
+		return li < rj
+	})
+	return out
+}
+
+func (a *inboundAPI) listSkillsCatalog() []map[string]any {
+	out := make([]map[string]any, 0)
+	if a.cfg == nil {
+		return out
+	}
+
+	workspace := strings.TrimSpace(a.cfg.WorkspacePath())
+	homeDir, _ := os.UserHomeDir()
+	globalSkills := ""
+	if homeDir != "" {
+		globalSkills = filepath.Join(homeDir, ".picoclaw", "skills")
+	}
+	wd, _ := os.Getwd()
+	builtinSkills := ""
+	if wd != "" {
+		builtinSkills = filepath.Join(wd, "skills")
+	}
+
+	loader := skills.NewSkillsLoader(workspace, globalSkills, builtinSkills)
+	all := loader.ListSkills()
+	sort.SliceStable(all, func(i, j int) bool {
+		return all[i].Name < all[j].Name
+	})
+
+	for _, s := range all {
+		out = append(out, map[string]any{
+			"name":        s.Name,
+			"description": s.Description,
+			"path":        s.Path,
+			"source":      s.Source,
+		})
+	}
+	return out
 }
 
 func runtimeControlCommands(prefix string, includeKill bool) []string {

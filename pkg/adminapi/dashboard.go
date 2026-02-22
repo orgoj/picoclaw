@@ -175,7 +175,39 @@ const dashboardHTML = `<!doctype html>
       border:1px solid var(--border); border-radius:8px; padding:8px; margin:0;
       overflow:auto; flex:1; min-height:0;
     }
-    .leftCol { min-height:0; }
+    .leftCol {
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      overflow:hidden;
+    }
+    .leftMainCard { flex:1 1 auto; min-height:240px; }
+    .leftQueueCard { flex:0 0 30%; min-height:180px; }
+    .leftComposerCard { flex:0 0 auto; }
+    .leftTabs { display:flex; gap:6px; }
+    .tabBtn.active {
+      border-color:var(--info);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 55%, transparent);
+    }
+    .leftControls {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      margin-bottom:6px;
+      flex-wrap:wrap;
+    }
+    .leftControls label {
+      display:inline-flex;
+      gap:6px;
+      align-items:center;
+      white-space:nowrap;
+    }
+    .leftControls input[type="checkbox"] {
+      width:auto;
+      margin:0;
+      padding:0;
+    }
     .filterState {
       margin-bottom:6px;
       display:flex;
@@ -306,7 +338,9 @@ const dashboardHTML = `<!doctype html>
       }
       .splitter { display:none; }
       .rowSplitter { display:none; }
-      .leftCol { min-height:56vh; }
+      .leftCol { min-height:56vh; overflow:visible; }
+      .leftMainCard { min-height:34vh; }
+      .leftQueueCard { min-height:24vh; }
       .historyDetail { max-height:34vh; min-height:100px; }
       #content { max-height:18vh; max-height:18dvh; }
       .mobilePanelTabs {
@@ -351,13 +385,55 @@ const dashboardHTML = `<!doctype html>
     </div>
   </div>
   <div class="app">
-    <section class="card leftCol">
-      <h2>History</h2>
-      <div id="filterState" class="filterState"></div>
-      <div id="historyMeta" class="small historyMeta"></div>
-      <div id="historyList" class="historyList"></div>
-      <div id="historyDetail" class="historyDetail small">Click any row to expand full message.</div>
-    </section>
+    <div class="leftCol">
+      <section class="card leftMainCard">
+        <div class="row" style="margin-top:0">
+          <h2 class="grow" style="margin:0">Messages</h2>
+          <div class="leftTabs">
+            <button type="button" class="tabBtn active" data-feed="messages">Messages</button>
+            <button type="button" class="tabBtn" data-feed="ops">Logs/Ops</button>
+          </div>
+        </div>
+        <div class="leftControls">
+          <label class="small"><input id="showDebug" type="checkbox"> Show debug</label>
+          <input id="historySearch" class="grow" placeholder="Filter messages...">
+        </div>
+        <div id="filterState" class="filterState"></div>
+        <div id="historyMeta" class="small historyMeta"></div>
+        <div id="historyList" class="historyList"></div>
+        <div id="historyDetail" class="historyDetail small">Click any row to expand full message.</div>
+      </section>
+
+      <section class="card leftQueueCard">
+        <h2>Queue</h2>
+        <div class="small">Editable inbound queue (ArrowUp in empty input pulls latest queued message)</div>
+        <div class="tableWrap"><table id="inboundTable"></table></div>
+      </section>
+
+      <section class="card leftComposerCard">
+        <h2>Input</h2>
+        <div class="row"><input id="sessionKey" class="grow" placeholder="session_key (e.g. telegram:7221629441)"></div>
+        <div class="row"><textarea id="content" placeholder="Type message..."></textarea></div>
+        <div class="row">
+          <select id="quickCommand" class="grow">
+            <option value="">+ menu command...</option>
+          </select>
+          <button id="useQuickCommandBtn" type="button">Use</button>
+        </div>
+        <div class="modeButtons" id="modeButtons">
+          <button type="button" class="modeBtn" data-mode="normal">Queue</button>
+          <button type="button" class="modeBtn" data-mode="inject">Inject</button>
+          <button type="button" class="modeBtn" data-mode="first">Force First</button>
+          <button type="button" class="modeBtn" data-mode="append">Append</button>
+          <button type="button" class="modeBtn" data-mode="delete">Delete Last</button>
+        </div>
+        <div class="row">
+          <button id="sendBtn">Send</button>
+          <div id="commandHint" class="small grow"></div>
+        </div>
+        <div id="sendOut" class="small"></div>
+      </section>
+    </div>
 
     <div id="colSplitter" class="splitter" title="Drag to resize"></div>
 
@@ -365,8 +441,7 @@ const dashboardHTML = `<!doctype html>
       <div class="mobilePanelTabs" id="mobilePanelTabs">
         <button type="button" class="mobilePanelBtn" data-panel="agents">Agents</button>
         <button type="button" class="mobilePanelBtn" data-panel="sessions">Sessions</button>
-        <button type="button" class="mobilePanelBtn" data-panel="queue">Queue</button>
-        <button type="button" class="mobilePanelBtn" data-panel="message">Message</button>
+        <button type="button" class="mobilePanelBtn" data-panel="channels">Channels</button>
       </div>
 
       <section class="card rightCard" data-panel="agents">
@@ -383,29 +458,13 @@ const dashboardHTML = `<!doctype html>
       </section>
       <div class="rowSplitter" title="Drag to resize"></div>
 
-      <section class="card rightCard" data-panel="queue">
-        <h2>Queue</h2>
-        <div class="small">Editable inbound queue</div>
-        <div class="tableWrap"><table id="inboundTable"></table></div>
-      </section>
-      <div class="rowSplitter" title="Drag to resize"></div>
-
-      <section class="card rightCard" data-panel="message">
-        <h2>Message</h2>
-        <div class="row"><input id="sessionKey" class="grow" placeholder="session_key (e.g. telegram:7221629441)"></div>
-        <div class="row"><textarea id="content" placeholder="Type message..."></textarea></div>
-        <div class="modeButtons" id="modeButtons">
-          <button type="button" class="modeBtn" data-mode="normal">Queue</button>
-          <button type="button" class="modeBtn" data-mode="inject">Inject</button>
-          <button type="button" class="modeBtn" data-mode="first">Force First</button>
-          <button type="button" class="modeBtn" data-mode="append">Append</button>
-          <button type="button" class="modeBtn" data-mode="delete">Delete Last</button>
-        </div>
-        <div class="row">
-          <button id="sendBtn">Send</button>
-          <div id="commandHint" class="small grow"></div>
-        </div>
-        <div id="sendOut" class="small"></div>
+      <section class="card rightCard" data-panel="channels">
+        <h2>Channels</h2>
+        <div class="small">Channels, + menu, defined agents, skills</div>
+        <div class="tableWrap" style="flex:0 0 26%"><table id="channelTable"></table></div>
+        <div class="tableWrap" style="flex:0 0 22%"><table id="controlTable"></table></div>
+        <div class="tableWrap" style="flex:0 0 24%"><table id="definedAgentTable"></table></div>
+        <div class="tableWrap" style="flex:1 1 auto"><table id="skillsTable"></table></div>
       </section>
     </div>
   </div>
@@ -436,7 +495,16 @@ const state = {
   controlPrefix: "+",
   hasKillControl: true,
   messageMode: "normal",
-  mobilePanel: "message",
+  mobilePanel: "agents",
+  feedMode: "messages",
+  showDebug: false,
+  quickFilter: "",
+  inboundItems: [],
+  queueEditIndex: -1,
+  channels: [],
+  controlCommands: [],
+  definedAgents: [],
+  skills: [],
 };
 
 async function jfetch(url, opts={}) {
@@ -528,7 +596,57 @@ function historyEntryMatchesAgent(entry) {
   return false;
 }
 
-function collectHistoryEntries() {
+function parseLineTimestamp(content) {
+  const text = String(content || "");
+  const patterns = [
+    /(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)/,
+    /(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})/,
+    /(\\d{4}\\/\\d{2}\\/\\d{2} \\d{2}:\\d{2}:\\d{2})/,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (!m || !m[1]) continue;
+    const ts = Date.parse(m[1].replace(/\\//g, "-"));
+    if (!Number.isNaN(ts)) return ts;
+  }
+  return 0;
+}
+
+function sessionUpdatedMs(sessionKey) {
+  for (const s of state.sessions || []) {
+    if (String((s && s.key) || "") === String(sessionKey || "")) {
+      const t = Number(s.updated || 0);
+      if (!Number.isNaN(t) && t > 0) return t;
+      break;
+    }
+  }
+  return 0;
+}
+
+function looksDebugContent(content) {
+  const c = String(content || "").toLowerCase();
+  return c.includes("tool call:") ||
+    c.includes("llm iteration") ||
+    c.includes("tool execution started") ||
+    c.includes("tool execution completed") ||
+    c.includes("outbound enqueue") ||
+    c.includes("inbound enqueue") ||
+    c.includes("inbound dequeue") ||
+    c.includes("caller:");
+}
+
+function isChannelVisibleEntry(entry) {
+  const role = String(entry.role || "").toLowerCase();
+  if (role === "tool" || role === "log") return false;
+  if (!state.showDebug && looksDebugContent(entry.content || "")) return false;
+  if (role === "system") {
+    const c = String(entry.content || "");
+    if (!c.includes("[AUTO]") && !c.includes("<delivery_failure")) return false;
+  }
+  return true;
+}
+
+function collectHistoryEntries(includeAgentLog) {
   const keys = [];
   if (state.selectedSession) {
     keys.push(state.selectedSession);
@@ -543,6 +661,8 @@ function collectHistoryEntries() {
   const out = [];
   for (const key of keys) {
     const list = getSessionHistory(key);
+    const updated = sessionUpdatedMs(key) || Date.now();
+    const baseTs = Math.max(0, updated - Math.max(1, list.length));
     for (let i = 0; i < list.length; i++) {
       const m = list[i] || {};
       const content = String(m.content || "");
@@ -554,12 +674,14 @@ function collectHistoryEntries() {
         content,
         tone: detectTone(content),
         agentName: detectAgentName(content),
+        ts: baseTs + i,
       });
     }
   }
-  if (!state.selectedSession) {
+  if (includeAgentLog && !state.selectedSession) {
     for (let i = 0; i < state.agentLogLines.length; i++) {
       const line = String(state.agentLogLines[i] || "");
+      const parsedTs = parseLineTimestamp(line);
       out.push({
         historyKey: "agent.log#" + i,
         sessionKey: "agent.log",
@@ -568,6 +690,7 @@ function collectHistoryEntries() {
         content: line,
         tone: detectTone(line),
         agentName: detectAgentName(line),
+        ts: parsedTs || (Date.now() - (state.agentLogLines.length - i)),
       });
     }
   }
@@ -598,8 +721,23 @@ function renderHistory() {
   if (!list) return;
   const nearBottom = (list.scrollHeight - (list.scrollTop + list.clientHeight)) <= 40;
 
-  const all = collectHistoryEntries();
-  const filtered = all.filter(historyEntryMatchesAgent);
+  const includeAgentLog = state.feedMode === "ops";
+  const all = collectHistoryEntries(includeAgentLog);
+  let filtered = all.filter(historyEntryMatchesAgent);
+  if (state.feedMode === "messages") {
+    filtered = filtered.filter(isChannelVisibleEntry);
+  }
+  if (state.quickFilter) {
+    const q = state.quickFilter.toLowerCase();
+    filtered = filtered.filter((e) => String(e.content || "").toLowerCase().includes(q));
+  }
+  filtered.sort((a, b) => {
+    const at = Number(a.ts || 0);
+    const bt = Number(b.ts || 0);
+    if (at !== bt) return at - bt;
+    if (a.sessionKey !== b.sessionKey) return String(a.sessionKey).localeCompare(String(b.sessionKey));
+    return Number(a.index || 0) - Number(b.index || 0);
+  });
   const shown = filtered.length > state.historyLimit ? filtered.slice(filtered.length - state.historyLimit) : filtered;
   const base = Math.max(0, filtered.length - shown.length);
 
@@ -638,9 +776,10 @@ function renderHistory() {
 
   const meta = $("historyMeta");
   if (meta) {
-    const scope = state.selectedSession ? ("session=" + state.selectedSession) : "session=ALL(sessions+agent.log)";
+    const scope = state.selectedSession ? ("session=" + state.selectedSession) : ("session=ALL" + (includeAgentLog ? "(sessions+agent.log)" : "(sessions)"));
     const agent = (state.selectedAgentID || state.selectedAgentName) ? ", agent=" + (state.selectedAgentName || state.selectedAgentID) : "";
-    meta.textContent = "showing " + shown.length + " / " + filtered.length + " messages (limit " + state.historyLimit + "), " + scope + agent;
+    const mode = ", mode=" + state.feedMode;
+    meta.textContent = "showing " + shown.length + " / " + filtered.length + " messages (limit " + state.historyLimit + "), " + scope + agent + mode;
   }
   updateFilterStateUI();
 }
@@ -671,6 +810,7 @@ function updateFilterStateUI() {
 function renderInbound(items) {
   const t = $("inboundTable");
   const rows = (items || []);
+  state.inboundItems = rows;
   let html = "<tr><th>#</th><th>ID</th><th>Session</th><th>Content</th><th></th></tr>";
   for (let i = 0; i < rows.length; i++) {
     const it = rows[i];
@@ -708,7 +848,7 @@ function renderSubagents(items) {
     html += "<td>" + escapeHTML(it.label || "") + "</td>";
     html += "<td>" + (it.pending || 0) + "</td>";
     html += "<td>";
-    if (running && state.hasKillControl) {
+    if (running) {
       html += "<button onclick='killSubagent(\"" + it.id + "\",this,event)'>KILL</button>";
     }
     html += "</td></tr>";
@@ -728,6 +868,73 @@ function renderSessions(items) {
     html += "<td>" + (it.messages || 0) + "</td>";
     html += "<td>" + fmtTs(it.updated) + "</td>";
     html += "</tr>";
+  }
+  t.innerHTML = html;
+}
+
+function renderChannels(chNode) {
+  const t = $("channelTable");
+  if (!t) return;
+  const node = chNode || {};
+  const enabled = Array.isArray(node.enabled) ? node.enabled : [];
+  const status = node.status || {};
+  let html = "<tr><th>Channel</th><th>Enabled</th><th>Status</th></tr>";
+  for (const name of enabled) {
+    const st = status[name] || {};
+    const running = st.running === true;
+    html += "<tr>";
+    html += "<td>" + escapeHTML(name) + "</td>";
+    html += "<td>yes</td>";
+    html += "<td>" + (running ? "<span class='ok'>running</span>" : "<span class='warn'>stopped</span>") + "</td>";
+    html += "</tr>";
+  }
+  if (enabled.length === 0) {
+    html += "<tr><td colspan='3' class='small'>No enabled channels</td></tr>";
+  }
+  t.innerHTML = html;
+}
+
+function renderControls(commands) {
+  const t = $("controlTable");
+  if (!t) return;
+  const cmds = Array.isArray(commands) ? commands : [];
+  let html = "<tr><th>+ Menu Commands</th></tr>";
+  if (cmds.length === 0) {
+    html += "<tr><td class='small'>No control commands</td></tr>";
+  } else {
+    for (const c of cmds) {
+      html += "<tr><td>" + escapeHTML(String(c || "")) + "</td></tr>";
+    }
+  }
+  t.innerHTML = html;
+}
+
+function renderDefinedAgents(items) {
+  const t = $("definedAgentTable");
+  if (!t) return;
+  const rows = Array.isArray(items) ? items : [];
+  let html = "<tr><th>Defined Agents</th><th>Source</th></tr>";
+  if (rows.length === 0) {
+    html += "<tr><td colspan='2' class='small'>No defined agents</td></tr>";
+  } else {
+    for (const it of rows) {
+      html += "<tr><td>" + escapeHTML(it.name || "") + "</td><td>" + escapeHTML(it.source || "") + "</td></tr>";
+    }
+  }
+  t.innerHTML = html;
+}
+
+function renderSkills(items) {
+  const t = $("skillsTable");
+  if (!t) return;
+  const rows = Array.isArray(items) ? items : [];
+  let html = "<tr><th>Skills</th><th>Source</th></tr>";
+  if (rows.length === 0) {
+    html += "<tr><td colspan='2' class='small'>No skills discovered</td></tr>";
+  } else {
+    for (const it of rows) {
+      html += "<tr><td>" + escapeHTML(it.name || "") + "</td><td>" + escapeHTML(it.source || "") + "</td></tr>";
+    }
   }
   t.innerHTML = html;
 }
@@ -792,8 +999,9 @@ async function killSubagent(id, btn, ev) {
   if (!window.confirm("Cancel subagent task '" + id + "'?")) return;
   try {
     setButtonBusy(btn, true, "killing...");
-    const res = await sendMainContent(state.controlPrefix + "kill " + id);
-    setSendOut(describeMainResponse("kill", res), false);
+    const res = await jfetch("/api/v1/subagents/" + encodeURIComponent(id), { method: "DELETE" });
+    setSendOut("Subagent " + (res.id || id) + " cancelled.", false);
+    await refreshSubagents();
   } catch (e) {
     setSendOut("ERROR: " + e.message, true);
   } finally {
@@ -988,6 +1196,41 @@ async function sendMainContent(content) {
   });
 }
 
+function currentQueueSessionKey() {
+  const key = $("sessionKey") ? $("sessionKey").value.trim() : "";
+  return key || state.streamSession || state.selectedSession || "";
+}
+
+function pullQueuedMessageIntoComposer() {
+  const content = $("content");
+  if (!content) return false;
+  const sessionKey = currentQueueSessionKey();
+  const items = (state.inboundItems || []).filter((it) => {
+    const m = it && it.message ? it.message : {};
+    return !sessionKey || String(m.session_key || "") === sessionKey;
+  });
+  if (items.length === 0) {
+    setSendOut("No queued message for current session.", true);
+    return false;
+  }
+  if (state.queueEditIndex < 0 || state.queueEditIndex >= items.length) {
+    state.queueEditIndex = items.length - 1;
+  } else {
+    state.queueEditIndex = Math.max(0, state.queueEditIndex - 1);
+  }
+  const pick = items[state.queueEditIndex] || {};
+  const m = pick.message || {};
+  if ($("sessionKey") && m.session_key) {
+    $("sessionKey").value = String(m.session_key);
+    state.streamSession = String(m.session_key);
+  }
+  content.value = String(m.content || "");
+  content.focus();
+  const qid = pick.id ? String(pick.id) : "(unknown)";
+  setSendOut("Loaded queued message " + qid + " for editing. Use ArrowUp again for older.", false);
+  return true;
+}
+
 async function sendMessage() {
   const btn = $("sendBtn");
   try {
@@ -1016,6 +1259,7 @@ async function sendMessage() {
     const res = await sendMainContent(content);
     setSendOut(describeMainResponse(mode, res), false);
     if (mode !== "delete") $("content").value = "";
+    state.queueEditIndex = -1;
     connectEvents(state.streamSession);
   } catch (e) {
     setSendOut("ERROR: " + e.message, true);
@@ -1103,6 +1347,60 @@ function initModeButtons() {
   }
 }
 
+function initFeedControls() {
+  const tabButtons = document.querySelectorAll(".tabBtn");
+  for (const b of tabButtons) {
+    b.addEventListener("click", () => {
+      state.feedMode = b.getAttribute("data-feed") || "messages";
+      for (const x of tabButtons) {
+        x.classList.toggle("active", x === b);
+      }
+      state.expandedHistoryKey = "";
+      renderHistory();
+    });
+  }
+  const showDebug = $("showDebug");
+  if (showDebug) {
+    showDebug.checked = !!state.showDebug;
+    showDebug.addEventListener("change", () => {
+      state.showDebug = !!showDebug.checked;
+      renderHistory();
+    });
+  }
+  const search = $("historySearch");
+  if (search) {
+    search.addEventListener("input", () => {
+      state.quickFilter = String(search.value || "").trim();
+      renderHistory();
+    });
+  }
+}
+
+function applyQuickCommand() {
+  const sel = $("quickCommand");
+  const content = $("content");
+  if (!sel || !content) return;
+  const cmd = String(sel.value || "").trim();
+  if (!cmd) return;
+  const p = state.controlPrefix || "+";
+  if (cmd.indexOf(p + "inject ") === 0) {
+    setMessageMode("inject");
+    content.value = "";
+  } else if (cmd.indexOf(p + "first ") === 0) {
+    setMessageMode("first");
+    content.value = "";
+  } else if (cmd.indexOf(p + p) === 0) {
+    setMessageMode("append");
+    content.value = "";
+  } else if (cmd === p + "delete") {
+    setMessageMode("delete");
+  } else {
+    setMessageMode("normal");
+    content.value = cmd;
+  }
+  content.focus();
+}
+
 function applyMobilePanels() {
   const rightCol = $("rightCol");
   if (!rightCol) return;
@@ -1126,7 +1424,7 @@ function initMobilePanels() {
   const buttons = document.querySelectorAll(".mobilePanelBtn");
   for (const b of buttons) {
     b.addEventListener("click", () => {
-      state.mobilePanel = b.getAttribute("data-panel") || "message";
+      state.mobilePanel = b.getAttribute("data-panel") || "agents";
       localStorage.setItem("pc_dashboard_mobile_panel", state.mobilePanel);
       applyMobilePanels();
     });
@@ -1170,14 +1468,14 @@ function initRightRowSplitters() {
   if (!container) return;
   if (window.matchMedia && window.matchMedia("(max-width: 980px)").matches) return;
   const cards = Array.from(container.querySelectorAll(".rightCard"));
-  if (cards.length !== 4) return;
+  if (cards.length < 2) return;
 
   const savedRaw = localStorage.getItem("pc_dashboard_right_heights_px");
   if (savedRaw) {
     try {
       const vals = JSON.parse(savedRaw);
-      if (Array.isArray(vals) && vals.length === 4) {
-        for (let i = 0; i < 4; i++) {
+      if (Array.isArray(vals) && vals.length === cards.length) {
+        for (let i = 0; i < cards.length; i++) {
           const h = Number(vals[i]);
           if (!Number.isNaN(h) && h >= 120) cards[i].style.flex = "0 0 " + Math.round(h) + "px";
         }
@@ -1257,7 +1555,9 @@ function buildRuntimeSummary(rt) {
   lines.push("Capabilities");
   lines.push("- tools: " + (tools.count || 0));
   lines.push("- skills: " + (skills.available || 0) + "/" + (skills.total || 0));
+  if (Array.isArray(skills.names) && skills.names.length) lines.push("  - names: " + skills.names.join(", "));
   lines.push("- named agents: " + (agents.count || 0));
+  if (Array.isArray(agents.names) && agents.names.length) lines.push("  - names: " + agents.names.join(", "));
   lines.push("");
 
   const controls = rt.controls || {};
@@ -1293,7 +1593,12 @@ async function refreshRuntime(silent) {
     const prefix = String(controls.prefix || "+").trim();
     if (prefix) state.controlPrefix = prefix;
     const cmds = Array.isArray(controls.commands) ? controls.commands : [];
+    state.controlCommands = cmds;
     state.hasKillControl = cmds.some((c) => String(c).indexOf(state.controlPrefix + "kill ") === 0);
+    state.channels = rt.channels || {};
+    const catalog = rt.catalog || {};
+    state.definedAgents = Array.isArray(catalog.defined_agents) ? catalog.defined_agents : [];
+    state.skills = Array.isArray(catalog.skills) ? catalog.skills : [];
     $("runtimeSummaryBox").textContent = buildRuntimeSummary(rt);
     const cfg = rt.config || {};
     const top = {
@@ -1304,6 +1609,21 @@ async function refreshRuntime(silent) {
     $("runtimeConfigBox").textContent = "Config Meta\n" + fmtObj(top) + "\n\nSanitized Config\n" + fmtObj(cfg.sanitized || {});
     updateMessageModeUI();
     renderSubagents(state.subagents);
+    renderChannels(state.channels);
+    renderControls(state.controlCommands);
+    renderDefinedAgents(state.definedAgents);
+    renderSkills(state.skills);
+    const quick = $("quickCommand");
+    if (quick) {
+      const current = String(quick.value || "");
+      let html = "<option value=''>+ menu command...</option>";
+      for (const c of state.controlCommands) {
+        const text = String(c || "");
+        html += "<option value='" + escapeAttr(text) + "'>" + escapeHTML(text) + "</option>";
+      }
+      quick.innerHTML = html;
+      if (current) quick.value = current;
+    }
   } catch (e) {
     if (!silent) $("runtimeSummaryBox").textContent = "ERROR: " + e.message;
   }
@@ -1363,6 +1683,11 @@ if (sendBtn) sendBtn.addEventListener("click", sendMessage);
 const contentBox = $("content");
 if (contentBox) {
   contentBox.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowUp" && !String(contentBox.value || "").trim()) {
+      ev.preventDefault();
+      pullQueuedMessageIntoComposer();
+      return;
+    }
     if (ev.key === "Enter" && ev.ctrlKey) {
       ev.preventDefault();
       sendMessage();
@@ -1405,7 +1730,10 @@ initSplitter();
 initRightRowSplitters();
 initHistoryListEvents();
 initModeButtons();
+initFeedControls();
 initMobilePanels();
+const useQuickCommandBtn = $("useQuickCommandBtn");
+if (useQuickCommandBtn) useQuickCommandBtn.addEventListener("click", applyQuickCommand);
 setMessageMode("normal");
 refreshInbound();
 refreshSubagents();
