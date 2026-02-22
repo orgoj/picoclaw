@@ -22,4 +22,10 @@ type OutboundMessage struct {
 	Content string `json:"content"`
 }
 
+type OutboundHistoryItem struct {
+	ID          string          `json:"id"`
+	Message     OutboundMessage `json:"message"`
+	TimestampMS int64           `json:"timestamp_ms"`
+}
+
 type MessageHandler func(InboundMessage) error

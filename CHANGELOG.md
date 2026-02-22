@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.41 - 2026-02-22
+
+### Fixed
+- Timeline now includes outbound channel traffic as first-class `source="outbound"` events derived from message bus history, so dashboard feed can mirror what was actually sent to channels.
+- Message bus now keeps bounded outbound history (`ListOutboundHistory`) with IDs/timestamps for deterministic timeline correlation.
+
 ## v0.1.40 - 2026-02-22
 
 ### Fixed

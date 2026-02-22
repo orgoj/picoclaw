@@ -26,23 +26,29 @@ type MessageBus struct {
 	inboundReady chan struct{}
 	inboundSpace chan struct{}
 
-	outbound chan OutboundMessage
-	handlers map[string]MessageHandler
-	mu       sync.RWMutex
+	outbound        chan OutboundMessage
+	outboundMu      sync.Mutex
+	outboundHistory []*OutboundHistoryItem
+	outboundCap     int
+	outboundSeq     atomic.Uint64
+	handlers        map[string]MessageHandler
+	mu              sync.RWMutex
 }
 
 func NewMessageBus() *MessageBus {
 	mb := &MessageBus{
-		inboundQueue: make([]*InboundQueueItem, 0, 100),
-		inboundCap:   100,
-		mergeWindow:  3 * time.Second,
-		gapNotice:    10 * time.Minute,
-		concatPrefix: "+",
-		lastInbound:  make(map[string]int64),
-		inboundReady: make(chan struct{}, 1),
-		inboundSpace: make(chan struct{}, 1),
-		outbound:     make(chan OutboundMessage, 100),
-		handlers:     make(map[string]MessageHandler),
+		inboundQueue:    make([]*InboundQueueItem, 0, 100),
+		inboundCap:      100,
+		mergeWindow:     3 * time.Second,
+		gapNotice:       10 * time.Minute,
+		concatPrefix:    "+",
+		lastInbound:     make(map[string]int64),
+		inboundReady:    make(chan struct{}, 1),
+		inboundSpace:    make(chan struct{}, 1),
+		outbound:        make(chan OutboundMessage, 100),
+		outboundHistory: make([]*OutboundHistoryItem, 0, 300),
+		outboundCap:     300,
+		handlers:        make(map[string]MessageHandler),
 	}
 	return mb
 }
@@ -214,6 +220,7 @@ func (mb *MessageBus) PublishOutbound(msg OutboundMessage) bool {
 	defer timer.Stop()
 	select {
 	case mb.outbound <- msg:
+		mb.recordOutboundHistory(msg)
 		audit.Record("outbound_enqueue", map[string]interface{}{
 			"channel": msg.Channel,
 			"chat_id": msg.ChatID,
@@ -236,6 +243,45 @@ func (mb *MessageBus) PublishOutbound(msg OutboundMessage) bool {
 		})
 		return false
 	}
+}
+
+func (mb *MessageBus) recordOutboundHistory(msg OutboundMessage) {
+	mb.outboundMu.Lock()
+	defer mb.outboundMu.Unlock()
+	item := &OutboundHistoryItem{
+		ID: fmt.Sprintf("out-%06d", mb.outboundSeq.Add(1)),
+		Message: OutboundMessage{
+			Channel: msg.Channel,
+			ChatID:  msg.ChatID,
+			Content: msg.Content,
+		},
+		TimestampMS: time.Now().UnixMilli(),
+	}
+	mb.outboundHistory = append(mb.outboundHistory, item)
+	if len(mb.outboundHistory) > mb.outboundCap {
+		mb.outboundHistory = mb.outboundHistory[len(mb.outboundHistory)-mb.outboundCap:]
+	}
+}
+
+func (mb *MessageBus) ListOutboundHistory(limit int) []OutboundHistoryItem {
+	mb.outboundMu.Lock()
+	defer mb.outboundMu.Unlock()
+	if limit <= 0 || limit > len(mb.outboundHistory) {
+		limit = len(mb.outboundHistory)
+	}
+	start := len(mb.outboundHistory) - limit
+	out := make([]OutboundHistoryItem, 0, limit)
+	for _, item := range mb.outboundHistory[start:] {
+		if item == nil {
+			continue
+		}
+		out = append(out, OutboundHistoryItem{
+			ID:          item.ID,
+			Message:     item.Message,
+			TimestampMS: item.TimestampMS,
+		})
+	}
+	return out
 }
 
 func (mb *MessageBus) SubscribeOutbound(ctx context.Context) (OutboundMessage, bool) {

@@ -173,3 +173,51 @@ func TestMergeInboundWithPrefix(t *testing.T) {
 		t.Fatalf("expected merged metadata")
 	}
 }
+
+func TestOutboundHistoryTracksPublishedMessages(t *testing.T) {
+	mb := NewMessageBus()
+
+	if !mb.PublishOutbound(OutboundMessage{Channel: "telegram", ChatID: "1", Content: "one"}) {
+		t.Fatal("publish outbound one failed")
+	}
+	if !mb.PublishOutbound(OutboundMessage{Channel: "telegram", ChatID: "1", Content: "two"}) {
+		t.Fatal("publish outbound two failed")
+	}
+
+	items := mb.ListOutboundHistory(10)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 outbound history items, got %d", len(items))
+	}
+	if items[0].Message.Content != "one" || items[1].Message.Content != "two" {
+		t.Fatalf("unexpected outbound history order: %+v", items)
+	}
+	if items[0].ID == "" || items[1].ID == "" {
+		t.Fatalf("expected outbound ids to be populated: %+v", items)
+	}
+	if items[0].TimestampMS <= 0 || items[1].TimestampMS <= 0 {
+		t.Fatalf("expected outbound timestamps to be populated: %+v", items)
+	}
+}
+
+func TestOutboundHistoryHonorsLimit(t *testing.T) {
+	mb := NewMessageBus()
+	mb.outboundCap = 2
+
+	if !mb.PublishOutbound(OutboundMessage{Channel: "telegram", ChatID: "1", Content: "one"}) {
+		t.Fatal("publish outbound one failed")
+	}
+	if !mb.PublishOutbound(OutboundMessage{Channel: "telegram", ChatID: "1", Content: "two"}) {
+		t.Fatal("publish outbound two failed")
+	}
+	if !mb.PublishOutbound(OutboundMessage{Channel: "telegram", ChatID: "1", Content: "three"}) {
+		t.Fatal("publish outbound three failed")
+	}
+
+	items := mb.ListOutboundHistory(10)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 outbound history items after cap trim, got %d", len(items))
+	}
+	if items[0].Message.Content != "two" || items[1].Message.Content != "three" {
+		t.Fatalf("unexpected outbound history after trim: %+v", items)
+	}
+}

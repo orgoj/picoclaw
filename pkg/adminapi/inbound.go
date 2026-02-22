@@ -357,6 +357,55 @@ func (a *inboundAPI) handleTimeline(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 
+	for _, out := range a.msgBus.ListOutboundHistory(1000) {
+		msg := out.Message
+		key := strings.TrimSpace(msg.Channel) + ":" + strings.TrimSpace(msg.ChatID)
+		ts := out.TimestampMS
+		if ts <= 0 {
+			ts = time.Now().UnixMilli()
+		}
+		content := strings.TrimSpace(msg.Content)
+		kind := classifyTimelineKind("system", content, a.cfg)
+		if kind == "sys" {
+			// Keep default for explicit SYS/AUTO; otherwise outbound is normal message.
+			sysPrefix := "[SYS]"
+			autoPrefix := "[AUTO]"
+			if a.cfg != nil {
+				if p := strings.TrimSpace(a.cfg.Gateway.SysMessagePrefix); p != "" {
+					sysPrefix = p
+				}
+				if p := strings.TrimSpace(a.cfg.Gateway.AutoFinalPrefix); p != "" {
+					autoPrefix = p
+				}
+			}
+			if !strings.HasPrefix(content, sysPrefix) && !strings.HasPrefix(content, autoPrefix) {
+				kind = "message"
+			}
+		}
+		level := classifyTimelineLevel(content)
+		item := timelineItem{
+			ID:          "outbound:" + out.ID,
+			EventID:     timelineEventID("outbound", out.ID, strconv.FormatInt(ts, 10), key, content),
+			TimestampMS: ts,
+			Source:      "outbound",
+			SessionKey:  key,
+			AgentID:     "",
+			Role:        "assistant",
+			Kind:        kind,
+			Level:       level,
+			Content:     content,
+			Payload: map[string]any{
+				"outbound_id": out.ID,
+				"channel":     msg.Channel,
+				"chat_id":     msg.ChatID,
+			},
+		}
+		if !timelineMatches(item, sessionFilter, agentFilter, kindFilter, levelFilter, query, fromMS) {
+			continue
+		}
+		items = append(items, item)
+	}
+
 	if a.cfg != nil && sessionFilter == "" {
 		mainLogPath := filepath.Join(a.cfg.LoggingDirPath(), "agent.jsonl")
 		lines, _ := readLastLines(mainLogPath, 5000)
