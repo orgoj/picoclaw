@@ -342,7 +342,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 						if ok := al.bus.PublishOutbound(bus.OutboundMessage{
 							Channel: msg.Channel,
 							ChatID:  msg.ChatID,
-							Content: "⚠️ An internal error occurred. The agent has recovered and is still running. Please try again.",
+							Content: al.prefixAutomaticNotice("⚠️ An internal error occurred. The agent has recovered and is still running. Please try again."),
 						}); !ok {
 							logger.WarnCF("agent", "Failed to publish panic recovery message: outbound queue timeout",
 								map[string]interface{}{
@@ -356,7 +356,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				response, err := al.processMessage(ctx, msg)
 				if err != nil {
 					// Check if it's an API/network error and provide user-friendly message
-					response = al.formatErrorMessage(err, msg.SessionKey)
+					response = al.prefixAutomaticNotice(al.formatErrorMessage(err, msg.SessionKey))
 				}
 
 				if response != "" {
@@ -482,6 +482,27 @@ func (al *AgentLoop) formatErrorMessage(err error, sessionKey string) string {
 	}
 
 	return userMessage
+}
+
+func (al *AgentLoop) prefixAutomaticNotice(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	prefix := "[AUTO]"
+	if al.cfg != nil {
+		if cfgPrefix := strings.TrimSpace(al.cfg.Gateway.AutoMessagePrefix); cfgPrefix != "" {
+			prefix = cfgPrefix
+		}
+	}
+	if strings.HasPrefix(content, prefix) {
+		return content
+	}
+	sep := " "
+	if strings.HasSuffix(prefix, " ") {
+		sep = ""
+	}
+	return prefix + sep + content
 }
 
 func (al *AgentLoop) Stop() {
@@ -1108,7 +1129,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	// 3. Run LLM iteration loop
-	finalContent, iteration, sentUserViaTool, err := al.runLLMIteration(runCtx, messages, opts, runID)
+	finalContent, iteration, err := al.runLLMIteration(runCtx, messages, opts, runID)
 	if err != nil {
 		audit.Record("agent_run_error", map[string]interface{}{
 			"run_id":      runID,
@@ -1161,15 +1182,6 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 			"final_length": len(finalContent),
 		})
 
-	if sentUserViaTool {
-		audit.Record("agent_run_done", map[string]interface{}{
-			"run_id":        runID,
-			"session_key":   opts.SessionKey,
-			"iterations":    iteration,
-			"sent_via_tool": true,
-		})
-		return "", nil
-	}
 	audit.Record("agent_run_done", map[string]interface{}{
 		"run_id":       runID,
 		"session_key":  opts.SessionKey,
@@ -1182,11 +1194,10 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 // runLLMIteration executes the LLM call loop with tool handling.
 // Returns the final content, iteration count, and any error.
-func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions, runID string) (string, int, bool, error) {
+func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions, runID string) (string, int, error) {
 	iteration := 0
 	toolIteration := 0
 	var finalContent string
-	sentUserViaTool := false
 
 	for iteration < al.maxIterations {
 		iteration++
@@ -1291,7 +1302,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 					"iteration":   iteration,
 					"error":       err.Error(),
 				})
-			return "", iteration, sentUserViaTool, fmt.Errorf("LLM call failed: %w", err)
+			return "", iteration, fmt.Errorf("LLM call failed: %w", err)
 		}
 
 		// Check if no tool calls - we're done
@@ -1353,7 +1364,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			})
 		toolIteration++
 		if al.maxToolIterations > 0 && toolIteration > al.maxToolIterations {
-			return "", iteration, sentUserViaTool, fmt.Errorf("agent loop reached max tool iterations (%d) without final response", al.maxToolIterations)
+			return "", iteration, fmt.Errorf("agent loop reached max tool iterations (%d) without final response", al.maxToolIterations)
 		}
 
 		// Build assistant message with tool calls
@@ -1409,33 +1420,6 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			}
 
 			toolResult := al.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, opts.Channel, opts.ChatID, asyncCallback)
-			if tc.Name == "message" && toolResult.Silent && !toolResult.IsError {
-				sentUserViaTool = true
-			}
-
-			// Send ForUser content to user immediately if not Silent
-			if !toolResult.Silent && toolResult.ForUser != "" && opts.SendResponse {
-				if ok := al.bus.PublishOutbound(bus.OutboundMessage{
-					Channel: opts.Channel,
-					ChatID:  opts.ChatID,
-					Content: toolResult.ForUser,
-				}); !ok {
-					logger.WarnCF("agent", "Failed to publish tool result: outbound queue timeout", map[string]interface{}{
-						"run_id":      runID,
-						"session_key": opts.SessionKey,
-						"tool":        tc.Name,
-						"channel":     opts.Channel,
-						"chat_id":     opts.ChatID,
-					})
-				}
-				logger.DebugCF("agent", "Sent tool result to user",
-					map[string]interface{}{
-						"run_id":      runID,
-						"session_key": opts.SessionKey,
-						"tool":        tc.Name,
-						"content_len": len(toolResult.ForUser),
-					})
-			}
 
 			// Determine content for LLM based on tool result
 			contentForLLM := toolResult.ForLLM
@@ -1455,7 +1439,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 	}
 
-	return finalContent, iteration, sentUserViaTool, nil
+	return finalContent, iteration, nil
 }
 
 func (al *AgentLoop) trimMessagesToTokenBudget(messages []providers.Message, targetTokens int) []providers.Message {
