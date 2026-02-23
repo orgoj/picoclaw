@@ -221,6 +221,9 @@ picoclaw memopt --workspace ~/.picoclaw/workspace --apply
 
 # Apply deterministic + optional LLM pass
 picoclaw memopt --workspace ~/.picoclaw/workspace --apply --llm
+
+# Optional: override minimum MEMORY.md size for LLM rewrite (default: 8000 chars, 0 disables)
+picoclaw memopt --workspace ~/.picoclaw/workspace --apply --llm --llm-min-chars 12000
 ```
 
 ## 🐳 Docker Compose

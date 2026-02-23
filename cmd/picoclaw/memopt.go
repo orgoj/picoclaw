@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -19,6 +18,7 @@ type memoptOptions struct {
 	Apply       bool
 	UseLLM      bool
 	LLMMaxChars int
+	LLMMinChars int
 }
 
 type memoptStats struct {
@@ -55,6 +55,10 @@ func memoptCmd() {
 	}
 	if opts.LLMMaxChars <= 0 {
 		fmt.Println("Error: --llm-max-chars must be > 0")
+		os.Exit(1)
+	}
+	if opts.LLMMinChars < 0 {
+		fmt.Println("Error: --llm-min-chars must be >= 0")
 		os.Exit(1)
 	}
 
@@ -99,6 +103,7 @@ func parseMemoptArgs(defaultWorkspace string, args []string) (memoptOptions, err
 		Apply:       false,
 		UseLLM:      false,
 		LLMMaxChars: 12000,
+		LLMMinChars: 8000,
 	}
 
 	for i := 0; i < len(args); i++ {
@@ -127,6 +132,16 @@ func parseMemoptArgs(defaultWorkspace string, args []string) (memoptOptions, err
 			}
 			opts.LLMMaxChars = n
 			i++
+		case "--llm-min-chars":
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("--llm-min-chars requires a value")
+			}
+			var n int
+			if _, err := fmt.Sscanf(args[i+1], "%d", &n); err != nil {
+				return opts, fmt.Errorf("invalid --llm-min-chars: %v", err)
+			}
+			opts.LLMMinChars = n
+			i++
 		default:
 			return opts, fmt.Errorf("unknown flag: %s", args[i])
 		}
@@ -150,6 +165,7 @@ func memoptHelp() {
 	fmt.Println("  --llm                  Enable optional LLM rewrite on MEMORY.md files")
 	fmt.Println("  --no-llm               Disable LLM rewrite (default)")
 	fmt.Println("  --llm-max-chars N      Max chars sent per MEMORY.md file to LLM (default: 12000)")
+	fmt.Println("  --llm-min-chars N      Skip LLM rewrite for short MEMORY.md files (default: 8000, 0=disable)")
 	fmt.Println()
 	fmt.Println("Scope:")
 	fmt.Println("  - <workspace>/memory/**/*.md")
@@ -320,6 +336,10 @@ func runLLMMemopt(cfg *config.Config, opts memoptOptions) error {
 		if strings.TrimSpace(original) == "" {
 			continue
 		}
+		if opts.LLMMinChars > 0 && utf8.RuneCountInString(original) < opts.LLMMinChars {
+			fmt.Printf("LLM: skipped short %s (%d chars < %d)\n", path, utf8.RuneCountInString(original), opts.LLMMinChars)
+			continue
+		}
 
 		truncated := original
 		if len(truncated) > opts.LLMMaxChars {
@@ -338,8 +358,7 @@ FILE: %s
 CONTENT:
 %s`, path, truncated)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Agents.Defaults.LLMTimeout)*time.Second)
-		resp, err := llm.CallWithRetry(ctx, llm.CallConfig{
+		resp, err := llm.CallWithRetry(context.Background(), llm.CallConfig{
 			Provider: provider,
 			Messages: []providers.Message{{Role: "user", Content: prompt}},
 			Model:    cfg.Agents.Defaults.Model,
@@ -360,7 +379,6 @@ CONTENT:
 				"file": path,
 			},
 		})
-		cancel()
 		if err != nil {
 			return fmt.Errorf("llm rewrite %s: %w", path, err)
 		}

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.43 - 2026-02-23
+
+### Changed
+- `picoclaw memopt --llm` now skips short `MEMORY.md` files by default before making LLM calls.
+- New user-visible CLI flag: `--llm-min-chars N` (default `8000`, `0` disables the guard), with explicit skip logs (`LLM: skipped short ...`).
+
+### Fixed
+- `picoclaw memopt --llm` no longer wraps the whole LLM-retry flow in a short outer timeout, preventing retry backoff from failing early with `context deadline exceeded`.
+
 ## v0.1.42 - 2026-02-22
 
 ### Fixed
