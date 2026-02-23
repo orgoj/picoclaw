@@ -44,6 +44,8 @@ type Logger struct {
 	agentLogsDir string
 }
 
+const consoleStringLimit = 220
+
 type LogEntry struct {
 	Level     string                 `json:"level"`
 	Timestamp string                 `json:"timestamp"`
@@ -173,9 +175,12 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 	}
 	writeAgentScopedEntry(entry, fields)
 
+	consoleMessage := truncateConsoleString(message)
+	consoleFields := trimFieldsForConsole(fields)
+
 	var fieldStr string
-	if len(fields) > 0 {
-		fieldStr = " " + formatFields(fields)
+	if len(consoleFields) > 0 {
+		fieldStr = " " + formatFields(consoleFields)
 	}
 	flowPrefix := deriveFlowPrefix(fields)
 
@@ -184,7 +189,7 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 		logLevelNames[level],
 		flowPrefix,
 		formatComponent(component),
-		message,
+		consoleMessage,
 		fieldStr,
 	)
 
@@ -257,6 +262,50 @@ func deriveFlowPrefix(fields map[string]interface{}) string {
 		return fmt.Sprintf(" [SUBAGENT:%s]", taskID)
 	}
 	return ""
+}
+
+func truncateConsoleString(s string) string {
+	r := []rune(s)
+	if len(r) <= consoleStringLimit {
+		return s
+	}
+	return string(r[:consoleStringLimit]) + "..."
+}
+
+func trimFieldsForConsole(fields map[string]interface{}) map[string]interface{} {
+	if len(fields) == 0 {
+		return fields
+	}
+	out := make(map[string]interface{}, len(fields))
+	for k, v := range fields {
+		out[k] = trimValueForConsole(v)
+	}
+	return out
+}
+
+func trimValueForConsole(v interface{}) interface{} {
+	switch tv := v.(type) {
+	case string:
+		return truncateConsoleString(tv)
+	case fmt.Stringer:
+		return truncateConsoleString(tv.String())
+	case map[string]interface{}:
+		return trimFieldsForConsole(tv)
+	case []string:
+		out := make([]string, len(tv))
+		for i, s := range tv {
+			out[i] = truncateConsoleString(s)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(tv))
+		for i, item := range tv {
+			out[i] = trimValueForConsole(item)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 func extractSubagentID(fields map[string]interface{}) (string, bool) {

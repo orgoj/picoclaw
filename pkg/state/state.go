@@ -3,11 +3,12 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 // State represents the persistent state for a workspace.
@@ -53,7 +54,10 @@ func NewManager(workspace string) *Manager {
 			if err := json.Unmarshal(data, sm.state); err == nil {
 				// Migrate to new location
 				sm.saveAtomic()
-				log.Printf("[INFO] state: migrated state from %s to %s", oldStateFile, stateFile)
+				logger.InfoCF("state", "Migrated state file", map[string]interface{}{
+					"from": oldStateFile,
+					"to":   stateFile,
+				})
 			}
 		}
 	} else {

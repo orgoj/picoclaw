@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
 type GroqTranscriber struct {
@@ -143,10 +142,10 @@ func (t *GroqTranscriber) Transcribe(ctx context.Context, audioFilePath string) 
 	}
 
 	logger.InfoCF("voice", "Transcription completed successfully", map[string]interface{}{
-		"text_length":           len(result.Text),
-		"language":              result.Language,
-		"duration_seconds":      result.Duration,
-		"transcription_preview": utils.Truncate(result.Text, 50),
+		"text_length":      len(result.Text),
+		"language":         result.Language,
+		"duration_seconds": result.Duration,
+		"text":             result.Text,
 	})
 
 	return &result, nil

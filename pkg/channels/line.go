@@ -371,7 +371,7 @@ func (c *LINEChannel) processEvent(event lineEvent) {
 		"chat_id":      chatID,
 		"message_type": msg.Type,
 		"is_group":     isGroup,
-		"preview":      utils.Truncate(content, 50),
+		"content":      content,
 	})
 
 	// Show typing/loading indicator (requires user ID, not group ID)

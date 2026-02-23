@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -178,5 +179,51 @@ func TestExtractSubagentID(t *testing.T) {
 				t.Fatalf("extractSubagentID() = (%q,%v), want (%q,%v)", gotID, gotOK, tc.wantID, tc.wantOK)
 			}
 		})
+	}
+}
+
+func TestTruncateConsoleString(t *testing.T) {
+	short := "short"
+	if got := truncateConsoleString(short); got != short {
+		t.Fatalf("short string changed: got %q", got)
+	}
+
+	long := strings.Repeat("a", consoleStringLimit+25)
+	got := truncateConsoleString(long)
+	if got == long {
+		t.Fatal("expected long string to be truncated")
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("expected ellipsis suffix, got %q", got)
+	}
+}
+
+func TestTrimFieldsForConsole(t *testing.T) {
+	long := strings.Repeat("x", consoleStringLimit+10)
+	fields := map[string]interface{}{
+		"s": long,
+		"nested": map[string]interface{}{
+			"inner": long,
+		},
+		"arr": []string{long},
+	}
+
+	trimmed := trimFieldsForConsole(fields)
+	if trimmed["s"] == long {
+		t.Fatal("expected top-level string to be truncated")
+	}
+	nested, ok := trimmed["nested"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected nested map, got %T", trimmed["nested"])
+	}
+	if nested["inner"] == long {
+		t.Fatal("expected nested string to be truncated")
+	}
+	arr, ok := trimmed["arr"].([]string)
+	if !ok || len(arr) != 1 {
+		t.Fatalf("expected []string[1], got %T len=%d", trimmed["arr"], len(arr))
+	}
+	if arr[0] == long {
+		t.Fatal("expected slice string to be truncated")
 	}
 }

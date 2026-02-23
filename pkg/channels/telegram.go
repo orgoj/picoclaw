@@ -379,7 +379,7 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, message *telego.Mes
 	logger.DebugCF("telegram", "Received message", map[string]interface{}{
 		"sender_id": senderID,
 		"chat_id":   fmt.Sprintf("%d", chatID),
-		"preview":   utils.Truncate(content, 50),
+		"content":   content,
 	})
 
 	// Thinking indicator

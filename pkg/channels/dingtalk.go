@@ -13,7 +13,6 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
 // DingTalkChannel implements the Channel interface for DingTalk (钉钉)
@@ -110,7 +109,7 @@ func (c *DingTalkChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 
 	logger.DebugCF("dingtalk", "Sending message", map[string]interface{}{
 		"chat_id": msg.ChatID,
-		"preview": utils.Truncate(msg.Content, 100),
+		"content": msg.Content,
 	})
 
 	// Use the session webhook to send the reply
@@ -158,7 +157,7 @@ func (c *DingTalkChannel) onChatBotMessageReceived(ctx context.Context, data *ch
 	logger.DebugCF("dingtalk", "Received message", map[string]interface{}{
 		"sender_nick": senderNick,
 		"sender_id":   senderID,
-		"preview":     utils.Truncate(content, 50),
+		"content":     content,
 	})
 
 	// Handle the message through the base channel

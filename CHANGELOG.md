@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.51 - 2026-02-23
+
+### Changed
+- Runtime logging paths now avoid manual payload truncation in caller code:
+  - removed `preview`/`Truncate` patterns for inbound content and tool-argument logging across agent/channel/tool components,
+  - logger callsites now pass full payloads and rely on centralized logger console-trim behavior.
+
+### Fixed
+- Cron scheduled job naming now preserves full original message text (no pre-trimmed `name` input from tool layer), keeping persisted job metadata consistent with operator input.
+
+## v0.1.50 - 2026-02-23
+
+### Fixed
+- Logger output split is now enforced centrally:
+  - JSONL file logs (`agent.jsonl`, `debug.jsonl`, agent-scoped logs) keep full message and fields payloads,
+  - console output is trimmed for readability without mutating stored log payloads.
+- Main loop inbound message logging no longer truncates `msg.Content` before logger call, preventing accidental data loss in persisted logs.
+
 ## v0.1.49 - 2026-02-23
 
 ### Changed

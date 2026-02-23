@@ -9,7 +9,6 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
 // JobExecutor is the interface for executing cron jobs through the agent
@@ -181,11 +180,8 @@ func (t *CronTool) addJob(args map[string]interface{}) *ToolResult {
 		deliver = false
 	}
 
-	// Truncate message for job name (max 30 chars)
-	messagePreview := utils.Truncate(message, 30)
-
 	job, err := t.cronService.AddJob(
-		messagePreview,
+		message,
 		schedule,
 		message,
 		deliver,

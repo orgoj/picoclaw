@@ -284,7 +284,7 @@ func (c *SlackChannel) handleMessageEvent(ev *slackevents.MessageEvent) {
 	logger.DebugCF("slack", "Received message", map[string]interface{}{
 		"sender_id":  senderID,
 		"chat_id":    chatID,
-		"preview":    utils.Truncate(content, 50),
+		"content":    content,
 		"has_thread": threadTS != "",
 	})
 
@@ -364,7 +364,7 @@ func (c *SlackChannel) handleSlashCommand(event socketmode.Event) {
 	logger.DebugCF("slack", "Slash command received", map[string]interface{}{
 		"sender_id": senderID,
 		"command":   cmd.Command,
-		"text":      utils.Truncate(content, 50),
+		"text":      content,
 	})
 
 	c.HandleMessage(senderID, chatID, content, nil, metadata)

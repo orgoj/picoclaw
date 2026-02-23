@@ -373,7 +373,7 @@ func (c *DiscordChannel) handleMessage(s *discordgo.Session, m *discordgo.Messag
 	logger.DebugCF("discord", "Received message", map[string]any{
 		"sender_name": senderName,
 		"sender_id":   senderID,
-		"preview":     utils.Truncate(content, 50),
+		"content":     content,
 	})
 
 	metadata := map[string]string{

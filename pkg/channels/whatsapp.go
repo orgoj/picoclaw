@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 type WhatsAppChannel struct {
@@ -36,7 +35,7 @@ func NewWhatsAppChannel(cfg config.WhatsAppConfig, bus *bus.MessageBus) (*WhatsA
 }
 
 func (c *WhatsAppChannel) Start(ctx context.Context) error {
-	log.Printf("Starting WhatsApp channel connecting to %s...", c.url)
+	logger.InfoCF("whatsapp", "Starting channel", map[string]interface{}{"url": c.url})
 
 	dialer := websocket.DefaultDialer
 	dialer.HandshakeTimeout = 10 * time.Second
@@ -52,7 +51,7 @@ func (c *WhatsAppChannel) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	c.setRunning(true)
-	log.Println("WhatsApp channel connected")
+	logger.InfoCF("whatsapp", "Channel connected", nil)
 
 	go c.listen(ctx)
 
@@ -60,14 +59,14 @@ func (c *WhatsAppChannel) Start(ctx context.Context) error {
 }
 
 func (c *WhatsAppChannel) Stop(ctx context.Context) error {
-	log.Println("Stopping WhatsApp channel...")
+	logger.InfoCF("whatsapp", "Stopping channel", nil)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.conn != nil {
 		if err := c.conn.Close(); err != nil {
-			log.Printf("Error closing WhatsApp connection: %v", err)
+			logger.WarnCF("whatsapp", "Error closing connection", map[string]interface{}{"error": err.Error()})
 		}
 		c.conn = nil
 	}
@@ -121,14 +120,14 @@ func (c *WhatsAppChannel) listen(ctx context.Context) {
 
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("WhatsApp read error: %v", err)
+				logger.WarnCF("whatsapp", "Read error", map[string]interface{}{"error": err.Error()})
 				time.Sleep(2 * time.Second)
 				continue
 			}
 
 			var msg map[string]interface{}
 			if err := json.Unmarshal(message, &msg); err != nil {
-				log.Printf("Failed to unmarshal WhatsApp message: %v", err)
+				logger.WarnCF("whatsapp", "Failed to unmarshal inbound message", map[string]interface{}{"error": err.Error()})
 				continue
 			}
 
@@ -178,7 +177,11 @@ func (c *WhatsAppChannel) handleIncomingMessage(msg map[string]interface{}) {
 		metadata["user_name"] = userName
 	}
 
-	log.Printf("WhatsApp message from %s: %s...", senderID, utils.Truncate(content, 50))
+	logger.DebugCF("whatsapp", "Inbound message received", map[string]interface{}{
+		"sender_id": senderID,
+		"chat_id":   chatID,
+		"content":   content,
+	})
 
 	c.HandleMessage(senderID, chatID, content, mediaPaths, metadata)
 }

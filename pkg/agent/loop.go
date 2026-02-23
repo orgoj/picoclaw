@@ -31,7 +31,6 @@ import (
 	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
-	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
 const (
@@ -978,14 +977,7 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 }
 
 func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
-	// Add message preview to log (show full content for error messages)
-	var logContent string
-	if strings.Contains(msg.Content, "Error:") || strings.Contains(msg.Content, "error") {
-		logContent = msg.Content // Full content for errors
-	} else {
-		logContent = utils.Truncate(msg.Content, 80)
-	}
-	logger.InfoCF("agent", fmt.Sprintf("Processing message from %s:%s: %s", msg.Channel, msg.SenderID, logContent),
+	logger.InfoCF("agent", fmt.Sprintf("Processing message from %s:%s: %s", msg.Channel, msg.SenderID, msg.Content),
 		map[string]interface{}{
 			"channel":     msg.Channel,
 			"chat_id":     msg.ChatID,
@@ -1321,8 +1313,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	// 8. Log response
-	responsePreview := utils.Truncate(finalContent, 120)
-	logger.InfoCF("agent", fmt.Sprintf("Response: %s", responsePreview),
+	logger.InfoCF("agent", fmt.Sprintf("Response: %s", finalContent),
 		map[string]interface{}{
 			"run_id":       runID,
 			"session_key":  opts.SessionKey,
@@ -1536,10 +1527,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 		// Execute tool calls
 		for _, tc := range response.ToolCalls {
-			// Log tool call with arguments preview
+			// Log tool call with full arguments payload (console trimming is handled by logger).
 			argsJSON, _ := json.Marshal(tc.Arguments)
-			argsPreview := utils.Truncate(string(argsJSON), 200)
-			logger.InfoCF("agent", fmt.Sprintf("Tool call: %s(%s)", tc.Name, argsPreview),
+			logger.InfoCF("agent", fmt.Sprintf("Tool call: %s(%s)", tc.Name, string(argsJSON)),
 				map[string]interface{}{
 					"run_id":      runID,
 					"session_key": opts.SessionKey,
@@ -1813,13 +1803,12 @@ func formatMessagesForLog(messages []providers.Message) string {
 			for _, tc := range msg.ToolCalls {
 				result += fmt.Sprintf("    - ID: %s, Type: %s, Name: %s\n", tc.ID, tc.Type, tc.Name)
 				if tc.Function != nil {
-					result += fmt.Sprintf("      Arguments: %s\n", utils.Truncate(tc.Function.Arguments, 200))
+					result += fmt.Sprintf("      Arguments: %s\n", tc.Function.Arguments)
 				}
 			}
 		}
 		if msg.Content != "" {
-			content := utils.Truncate(msg.Content, 200)
-			result += fmt.Sprintf("  Content: %s\n", content)
+			result += fmt.Sprintf("  Content: %s\n", msg.Content)
 		}
 		if msg.ToolCallID != "" {
 			result += fmt.Sprintf("  ToolCallID: %s\n", msg.ToolCallID)
@@ -1842,7 +1831,7 @@ func formatToolsForLog(tools []providers.ToolDefinition) string {
 		result += fmt.Sprintf("  [%d] Type: %s, Name: %s\n", i, tool.Type, tool.Function.Name)
 		result += fmt.Sprintf("      Description: %s\n", tool.Function.Description)
 		if len(tool.Function.Parameters) > 0 {
-			result += fmt.Sprintf("      Parameters: %s\n", utils.Truncate(fmt.Sprintf("%v", tool.Function.Parameters), 200))
+			result += fmt.Sprintf("      Parameters: %v\n", tool.Function.Parameters)
 		}
 	}
 	result += "]"
