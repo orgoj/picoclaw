@@ -219,10 +219,18 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 
 	// Register subagent management tools only when async spawn is enabled.
 	if cfg.Tools.Spawn.Enabled {
-		toolsRegistry.Register(tools.NewSubagentStatusTool(subagentManager))
-		toolsRegistry.Register(tools.NewSubagentHistoryTool(subagentManager))
-		toolsRegistry.Register(tools.NewSubagentMessageTool(subagentManager))
-		toolsRegistry.Register(tools.NewSubagentCancelTool(subagentManager))
+		if cfg.Tools.Spawn.AllowLLMStatus {
+			toolsRegistry.Register(tools.NewSubagentStatusTool(subagentManager))
+		}
+		if cfg.Tools.Spawn.AllowLLMHistory {
+			toolsRegistry.Register(tools.NewSubagentHistoryTool(subagentManager))
+		}
+		if cfg.Tools.Spawn.AllowLLMMessage {
+			toolsRegistry.Register(tools.NewSubagentMessageTool(subagentManager))
+		}
+		if cfg.Tools.Spawn.AllowLLMCancel {
+			toolsRegistry.Register(tools.NewSubagentCancelTool(subagentManager))
+		}
 	}
 
 	sessionsManager := session.NewSessionManager(filepath.Join(workspace, "sessions"))

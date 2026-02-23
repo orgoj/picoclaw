@@ -304,6 +304,18 @@ func TestDefaultConfig_WebTools(t *testing.T) {
 	if !cfg.Tools.Spawn.Enabled {
 		t.Error("Spawn tool should be enabled by default")
 	}
+	if cfg.Tools.Spawn.AllowLLMCancel {
+		t.Error("tools.spawn.allow_llm_cancel should be false by default")
+	}
+	if !cfg.Tools.Spawn.AllowLLMHistory {
+		t.Error("tools.spawn.allow_llm_history should be true by default")
+	}
+	if !cfg.Tools.Spawn.AllowLLMMessage {
+		t.Error("tools.spawn.allow_llm_message should be true by default")
+	}
+	if !cfg.Tools.Spawn.AllowLLMStatus {
+		t.Error("tools.spawn.allow_llm_status should be true by default")
+	}
 	if !cfg.Tools.Subagent.Enabled {
 		t.Error("Subagent tool should be enabled by default")
 	}
@@ -323,7 +335,13 @@ func TestDefaultConfig_WebTools(t *testing.T) {
 func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
 	jsonData := `{
 		"tools": {
-			"spawn": {"enabled": false},
+			"spawn": {
+				"enabled": false,
+				"allow_llm_status": false,
+				"allow_llm_history": false,
+				"allow_llm_message": true,
+				"allow_llm_cancel": true
+			},
 			"subagent": {"enabled": true}
 		}
 	}`
@@ -335,6 +353,18 @@ func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
 
 	if cfg.Tools.Spawn.Enabled {
 		t.Error("Expected spawn tool disabled")
+	}
+	if cfg.Tools.Spawn.AllowLLMStatus {
+		t.Error("Expected allow_llm_status=false")
+	}
+	if cfg.Tools.Spawn.AllowLLMHistory {
+		t.Error("Expected allow_llm_history=false")
+	}
+	if !cfg.Tools.Spawn.AllowLLMMessage {
+		t.Error("Expected allow_llm_message=true")
+	}
+	if !cfg.Tools.Spawn.AllowLLMCancel {
+		t.Error("Expected allow_llm_cancel=true")
 	}
 	if !cfg.Tools.Subagent.Enabled {
 		t.Error("Expected subagent tool enabled")

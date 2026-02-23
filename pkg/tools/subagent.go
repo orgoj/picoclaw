@@ -34,6 +34,7 @@ type SubagentTask struct {
 	Ended         int64    // When the task completed/failed/cancelled
 	PendingMsgs   []string // Queued guidance messages from supervisor
 	Notified      bool     // Terminal state notification already sent to main agent
+	CancelSource  string   // Where cancellation came from (e.g. admin_api, llm_tool)
 }
 
 type SubagentManager struct {
@@ -641,6 +642,10 @@ func (sm *SubagentManager) drainPendingMessages(taskID string) []string {
 
 // Cancel cancels a running subagent task.
 func (sm *SubagentManager) Cancel(taskID string) error {
+	return sm.CancelWithSource(taskID, "unknown")
+}
+
+func (sm *SubagentManager) CancelWithSource(taskID, source string) error {
 	sm.mu.Lock()
 
 	task, ok := sm.tasks[taskID]
@@ -655,10 +660,19 @@ func (sm *SubagentManager) Cancel(taskID string) error {
 
 	// Mark as cancelled
 	task.Status = "cancelled"
-	task.Result = "Cancelled by user"
+	if strings.TrimSpace(source) == "" {
+		source = "unknown"
+	}
+	task.CancelSource = source
+	task.Result = fmt.Sprintf("Cancelled (%s)", source)
 	task.Ended = time.Now().UnixMilli()
 	cancel := sm.cancels[taskID]
 	sm.mu.Unlock()
+
+	logger.WarnCF("subagent", "Subagent cancelled", map[string]interface{}{
+		"task_id": taskID,
+		"source":  source,
+	})
 
 	// Trigger actual cancellation for the running task context.
 	if cancel != nil {
@@ -715,6 +729,7 @@ func (sm *SubagentManager) publishTaskUpdate(task *SubagentTask) {
 			"source":      "subagent:terminal",
 			"subagent_id": taskID,
 			"status":      status,
+			"cancel_by":   task.CancelSource,
 		},
 	}
 

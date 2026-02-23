@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1.45 - 2026-02-23
+
+### Added
+- New user-visible config fields under `tools.spawn`:
+  - `allow_llm_status` (default `true`)
+  - `allow_llm_history` (default `true`)
+  - `allow_llm_message` (default `true`)
+  - `allow_llm_cancel` (default `false`)
+- Subagent API payloads now expose cancellation provenance metadata:
+  - `cancel_by` in `/api/v1/subagents` and `/api/v1/subagents/{id}` responses.
+
+### Changed
+- Main-agent tool registration now honors `tools.spawn.allow_llm_*` gates for subagent management tools (`subagent_status`, `subagent_history`, `subagent_message`, `subagent_cancel`).
+- Dashboard subagent panel now shows `Cancel by` and keeps state fresh with periodic fallback refresh in addition to SSE patch updates.
+- Subagent list ordering now prioritizes currently running tasks before finished tasks for clearer live operations visibility.
+
+### Fixed
+- Cancellation origin is now explicitly logged and persisted (`admin_api:dashboard_kill`, `llm_tool:subagent_cancel`, etc.), removing ambiguity when diagnosing unexpected subagent stops.
+
 ## v0.1.44 - 2026-02-23
 
 ### Added

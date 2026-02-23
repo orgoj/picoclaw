@@ -493,7 +493,11 @@ type WebToolsConfig struct {
 }
 
 type SpawnToolConfig struct {
-	Enabled bool `json:"enabled" env:"PICOCLAW_TOOLS_SPAWN_ENABLED"`
+	Enabled         bool `json:"enabled" env:"PICOCLAW_TOOLS_SPAWN_ENABLED"`
+	AllowLLMCancel  bool `json:"allow_llm_cancel" env:"PICOCLAW_TOOLS_SPAWN_ALLOW_LLM_CANCEL"`
+	AllowLLMHistory bool `json:"allow_llm_history" env:"PICOCLAW_TOOLS_SPAWN_ALLOW_LLM_HISTORY"`
+	AllowLLMMessage bool `json:"allow_llm_message" env:"PICOCLAW_TOOLS_SPAWN_ALLOW_LLM_MESSAGE"`
+	AllowLLMStatus  bool `json:"allow_llm_status" env:"PICOCLAW_TOOLS_SPAWN_ALLOW_LLM_STATUS"`
 }
 
 type SubagentToolConfig struct {
@@ -661,7 +665,11 @@ func DefaultConfig() *Config {
 				},
 			},
 			Spawn: SpawnToolConfig{
-				Enabled: true,
+				Enabled:         true,
+				AllowLLMCancel:  false,
+				AllowLLMHistory: true,
+				AllowLLMMessage: true,
+				AllowLLMStatus:  true,
 			},
 			Subagent: SubagentToolConfig{
 				Enabled: true,

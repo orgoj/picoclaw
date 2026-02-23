@@ -423,6 +423,33 @@ func TestAgentLoop_SubagentToolToggles(t *testing.T) {
 	}
 }
 
+func TestAgentLoop_SubagentCancelToolDefaultDisabled(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Workspace = tmpDir
+	cfg.Tools.Spawn.Enabled = true
+	cfg.Tools.Spawn.AllowLLMCancel = false
+
+	msgBus := bus.NewMessageBus()
+	provider := &mockProvider{}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	info := al.GetStartupInfo()
+	toolsInfo := info["tools"].(map[string]interface{})
+	toolsList := toolsInfo["names"].([]string)
+
+	for _, name := range toolsList {
+		if name == "subagent_cancel" {
+			t.Fatal("subagent_cancel should be disabled by default")
+		}
+	}
+}
+
 // TestAgentLoop_Stop verifies Stop() sets running to false
 func TestAgentLoop_Stop(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "agent-test-*")

@@ -320,7 +320,11 @@ picoclaw onboard
   },
   "tools": {
     "spawn": {
-      "enabled": true
+      "enabled": true,
+      "allow_llm_status": true,
+      "allow_llm_history": true,
+      "allow_llm_message": true,
+      "allow_llm_cancel": false
     },
     "subagent": {
       "enabled": true
@@ -367,6 +371,10 @@ picoclaw onboard
 | `history_message_threshold` | 100 | Number of messages before triggering summarization |
 | `summary_keep_last_messages` | 4 | How many recent messages stay in raw history after summarization (rest is compacted into summary) |
 | `tools.spawn.enabled` | `true` | Enable async subagent delegation tool (`spawn`) |
+| `tools.spawn.allow_llm_status` | `true` | Expose `subagent_status` tool to LLM |
+| `tools.spawn.allow_llm_history` | `true` | Expose `subagent_history` tool to LLM |
+| `tools.spawn.allow_llm_message` | `true` | Expose `subagent_message` tool to LLM |
+| `tools.spawn.allow_llm_cancel` | `false` | Expose `subagent_cancel` tool to LLM (recommended off for reliability) |
 | `tools.subagent.enabled` | `true` | Enable sync delegation tool (`subagent`) |
 
 Retry semantics (exact):
@@ -1521,7 +1529,11 @@ picoclaw agent -m "Hello"
   },
   "tools": {
     "spawn": {
-      "enabled": true
+      "enabled": true,
+      "allow_llm_status": true,
+      "allow_llm_history": true,
+      "allow_llm_message": true,
+      "allow_llm_cancel": false
     },
     "subagent": {
       "enabled": true

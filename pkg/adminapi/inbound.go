@@ -611,7 +611,7 @@ func (a *inboundAPI) handleSubagentItem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if r.Method == http.MethodDelete {
-		if err := a.subagentMgr.Cancel(id); err != nil {
+		if err := a.subagentMgr.CancelWithSource(id, "admin_api:dashboard_kill"); err != nil {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
 			return
 		}
@@ -628,6 +628,7 @@ func (a *inboundAPI) handleSubagentItem(w http.ResponseWriter, r *http.Request) 
 		"name":        task.Name,
 		"directory":   task.Directory,
 		"status":      task.Status,
+		"cancel_by":   task.CancelSource,
 		"task":        task.Task,
 		"result":      task.Result,
 		"created":     task.Created,
@@ -1095,6 +1096,7 @@ type taskView struct {
 	Name      string `json:"name"`
 	Directory string `json:"directory"`
 	Status    string `json:"status"`
+	CancelBy  string `json:"cancel_by,omitempty"`
 	Created   int64  `json:"created"`
 	Started   int64  `json:"started"`
 	Ended     int64  `json:"ended"`
@@ -1114,6 +1116,7 @@ func (a *inboundAPI) listSubagentViews() []taskView {
 			Name:      t.Name,
 			Directory: t.Directory,
 			Status:    t.Status,
+			CancelBy:  t.CancelSource,
 			Created:   t.Created,
 			Started:   t.Started,
 			Ended:     t.Ended,
@@ -1123,6 +1126,11 @@ func (a *inboundAPI) listSubagentViews() []taskView {
 	sort.SliceStable(out, func(i, j int) bool {
 		li := out[i]
 		rj := out[j]
+		leftRunning := li.Status == "running"
+		rightRunning := rj.Status == "running"
+		if leftRunning != rightRunning {
+			return leftRunning
+		}
 		leftTS := li.Started
 		if leftTS == 0 {
 			leftTS = li.Created

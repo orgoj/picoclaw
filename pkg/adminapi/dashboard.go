@@ -1029,7 +1029,7 @@ function renderSubagents(items) {
   const t = $("subagentTable");
   if (!t) return;
   const rows = (items || []);
-  ensureTableHeader(t, "<th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th></th>");
+  ensureTableHeader(t, "<th>ID</th><th>Status</th><th>Agent</th><th>Label</th><th>Pending</th><th>Cancel by</th><th></th>");
   const oldByKey = tableBodyRowMap(t);
   const seen = new Set();
   for (const it of rows) {
@@ -1037,7 +1037,8 @@ function renderSubagents(items) {
     seen.add(key);
     const running = it.status === "running" || it.status === "pending";
     const cls = (running ? "agent-running" : "agent-stopped") + (state.selectedAgentID === it.id ? " selected" : "");
-    const sig = [it.status || "", it.name || "", it.label || "", it.pending || 0, cls].join("|");
+    const cancelBy = String(it.cancel_by || "");
+    const sig = [it.status || "", it.name || "", it.label || "", it.pending || 0, cancelBy, cls].join("|");
     let tr = oldByKey.get(key);
     if (!tr || tr.getAttribute("data-sig") !== sig) {
       tr = document.createElement("tr");
@@ -1050,6 +1051,7 @@ function renderSubagents(items) {
         "<td>" + escapeHTML(it.name || "") + "</td>" +
         "<td>" + escapeHTML(it.label || "") + "</td>" +
         "<td>" + (it.pending || 0) + "</td>" +
+        "<td class='small'>" + escapeHTML(cancelBy || "-") + "</td>" +
         "<td>" + (running ? "<button onclick='killSubagent(\"" + it.id + "\",this,event)'>KILL</button>" : "") + "</td>";
       tr.onclick = () => selectAgent(String(it.id || ""), String(it.name || ""));
     } else {
@@ -2121,4 +2123,7 @@ refreshInbound();
 refreshSubagents();
 refreshSessions();
 refreshRuntime(true);
+setInterval(() => {
+  refreshSubagents();
+}, 2500);
 `

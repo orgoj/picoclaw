@@ -213,7 +213,11 @@
   },
   "tools": {
     "spawn": {
-      "enabled": true
+      "enabled": true,
+      "allow_llm_status": true,
+      "allow_llm_history": true,
+      "allow_llm_message": true,
+      "allow_llm_cancel": false
     },
     "subagent": {
       "enabled": true

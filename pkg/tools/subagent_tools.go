@@ -260,7 +260,7 @@ func (t *SubagentCancelTool) Execute(ctx context.Context, args map[string]interf
 		return ErrorResult("Subagent manager not configured")
 	}
 
-	err := t.manager.Cancel(taskID)
+	err := t.manager.CancelWithSource(taskID, "llm_tool:subagent_cancel")
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to cancel subagent: %v", err))
 	}
