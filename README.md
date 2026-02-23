@@ -81,6 +81,7 @@
 > - **Outbound safety for operator channels**
 >   - Tool execution output is not auto-forwarded to external channels.
 >   - External user-facing content is restricted to explicit `message` sends and final main-agent response.
+>   - Subagent completion trigger processing is internal-only (session context injection, no automatic external completion post).
 >   - Automatic system notices use `gateway.sys_message_prefix`, while loop-final fallback messages use `gateway.auto_final_prefix`.
 > - **Inbound queue, timing, and observability**
 >   - Bounded/editable inbound queue APIs (inspect/update/delete/reorder).

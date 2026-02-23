@@ -1121,7 +1121,20 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 		})
 
 	// Deliver completion to main agent session (not directly to user channel).
-	notification := fmt.Sprintf("📢 Subagent %s completed:\n\n%s", msg.SenderID, content)
+	status := strings.TrimSpace(msg.Metadata["status"])
+	if status == "" {
+		status = "completed"
+	}
+	notification := fmt.Sprintf(
+		"<subagent_completion sender_id=\"%s\" subagent_id=\"%s\" label=\"%s\" status=\"%s\" origin_channel=\"%s\" origin_chat_id=\"%s\">\n%s\n</subagent_completion>",
+		html.EscapeString(msg.SenderID),
+		html.EscapeString(subagentID),
+		html.EscapeString(subagentLabel),
+		html.EscapeString(status),
+		html.EscapeString(originChannel),
+		html.EscapeString(originChatID),
+		content,
+	)
 	sessionKey := fmt.Sprintf("%s:%s", originChannel, originChatID)
 
 	// Always persist in session history so completion is never dropped.
@@ -1157,7 +1170,8 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 				UserMessage:     trigger,
 				DefaultResponse: "I've completed processing but have no response to give.",
 				EnableSummary:   true,
-				SendResponse:    true,
+				// Internal completion processing must not post to external channels.
+				SendResponse: false,
 			})
 			if err != nil {
 				logger.ErrorCF("agent", "Immediate completion processing failed", map[string]interface{}{

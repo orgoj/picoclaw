@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/sipeed/picoclaw/pkg/llm"
@@ -37,8 +38,9 @@ type ToolLoopConfig struct {
 
 // ToolLoopResult contains the result of running the tool loop.
 type ToolLoopResult struct {
-	Content    string
-	Iterations int
+	Content              string
+	Iterations           int
+	LastAssistantContent string
 }
 
 // RunToolLoop executes the LLM + tool call iteration loop.
@@ -47,6 +49,7 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 	iteration := 0
 	toolIteration := 0
 	var finalContent string
+	var lastAssistantContent string
 	completed := false
 
 	for iteration < config.MaxIterations {
@@ -157,6 +160,9 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 
 		// 4. If no tool calls, we're done
 		if len(response.ToolCalls) == 0 {
+			if strings.TrimSpace(response.Content) != "" {
+				lastAssistantContent = response.Content
+			}
 			finalContent = response.Content
 			completed = true
 			logger.InfoCF("toolloop", "LLM response without tool calls (direct answer)",
@@ -190,6 +196,9 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		assistantMsg := providers.Message{
 			Role:    "assistant",
 			Content: response.Content,
+		}
+		if strings.TrimSpace(response.Content) != "" {
+			lastAssistantContent = response.Content
 		}
 		for _, tc := range response.ToolCalls {
 			argumentsJSON, _ := json.Marshal(tc.Arguments)
@@ -244,8 +253,9 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 	}
 
 	return &ToolLoopResult{
-		Content:    finalContent,
-		Iterations: iteration,
+		Content:              finalContent,
+		Iterations:           iteration,
+		LastAssistantContent: lastAssistantContent,
 	}, nil
 }
 

@@ -19,6 +19,21 @@ import (
 
 const emptySubagentResultMessage = "Subagent finished without textual summary. Check generated files and tool side effects."
 
+func resolveSubagentResultContent(loopResult *ToolLoopResult) string {
+	if loopResult == nil {
+		return emptySubagentResultMessage
+	}
+	resultContent := strings.TrimSpace(loopResult.Content)
+	if resultContent != "" {
+		return resultContent
+	}
+	lastAssistant := strings.TrimSpace(loopResult.LastAssistantContent)
+	if lastAssistant == "" {
+		return emptySubagentResultMessage
+	}
+	return fmt.Sprintf("%s\n\nLast assistant message:\n%s", emptySubagentResultMessage, lastAssistant)
+}
+
 type SubagentTask struct {
 	ID            string
 	Task          string
@@ -439,10 +454,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 			Err:     err,
 		}
 	} else {
-		resultContent := strings.TrimSpace(loopResult.Content)
-		if resultContent == "" {
-			resultContent = emptySubagentResultMessage
-		}
+		resultContent := resolveSubagentResultContent(loopResult)
 		task.Status = "completed"
 		task.Result = resultContent
 		result = &ToolResult{
@@ -880,10 +892,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult(fmt.Sprintf("Subagent execution failed: %v", err)).WithError(err)
 	}
 
-	resultContent := strings.TrimSpace(loopResult.Content)
-	if resultContent == "" {
-		resultContent = emptySubagentResultMessage
-	}
+	resultContent := resolveSubagentResultContent(loopResult)
 
 	// ForUser: Brief summary for user (truncated if too long)
 	userContent := resultContent

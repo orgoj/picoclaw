@@ -851,7 +851,10 @@ func TestProcessSystemMessage_TriggersImmediateRunForOriginSession(t *testing.T)
 	}
 	foundSystemCompletion := false
 	for _, item := range history {
-		if item.Role == "system" && strings.Contains(item.Content, "Subagent subagent:subagent-1 completed") {
+		if item.Role == "system" &&
+			strings.Contains(item.Content, "<subagent_completion ") &&
+			strings.Contains(item.Content, "sender_id=\"subagent:subagent-1\"") &&
+			strings.Contains(item.Content, "subagent_id=\"subagent-1\"") {
 			foundSystemCompletion = true
 			break
 		}
@@ -860,14 +863,10 @@ func TestProcessSystemMessage_TriggersImmediateRunForOriginSession(t *testing.T)
 		t.Fatalf("expected system completion notification in history, got %d items", len(history))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
-	out, ok := msgBus.SubscribeOutbound(ctx)
-	if !ok {
-		t.Fatal("expected immediate outbound response for origin session")
-	}
-	if out.Channel != "telegram" || out.ChatID != "123" {
-		t.Fatalf("unexpected outbound target: channel=%s chat_id=%s", out.Channel, out.ChatID)
+	if out, ok := msgBus.SubscribeOutbound(ctx); ok {
+		t.Fatalf("expected no outbound response for internal completion processing, got channel=%s chat_id=%s", out.Channel, out.ChatID)
 	}
 
 	history = al.sessions.GetHistory("telegram:123")

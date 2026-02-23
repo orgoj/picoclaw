@@ -57,6 +57,43 @@ func (m *EmptyResponseProvider) GetContextWindow() int {
 	return 4096
 }
 
+type EmptyFinalWithAssistantProvider struct {
+	calls int
+}
+
+func (m *EmptyFinalWithAssistantProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, options map[string]interface{}) (*providers.LLMResponse, error) {
+	m.calls++
+	if m.calls == 1 {
+		return &providers.LLMResponse{
+			Content: "Collected outputs from tools.",
+			ToolCalls: []providers.ToolCall{
+				{
+					ID:   "call-1",
+					Name: "read_file",
+					Arguments: map[string]any{
+						"path": "missing.txt",
+					},
+				},
+			},
+		}, nil
+	}
+	return &providers.LLMResponse{
+		Content: "",
+	}, nil
+}
+
+func (m *EmptyFinalWithAssistantProvider) GetDefaultModel() string {
+	return "test-model"
+}
+
+func (m *EmptyFinalWithAssistantProvider) SupportsTools() bool {
+	return true
+}
+
+func (m *EmptyFinalWithAssistantProvider) GetContextWindow() int {
+	return 4096
+}
+
 // testConfig creates a minimal config for testing
 func testConfig() *config.Config {
 	cfg := config.DefaultConfig()
@@ -266,6 +303,32 @@ func TestSubagentTool_Execute_EmptyFinalContentUsesFallback(t *testing.T) {
 	}
 	if !strings.Contains(result.ForLLM, "without textual summary") {
 		t.Fatalf("expected fallback llm content, got: %q", result.ForLLM)
+	}
+}
+
+func TestSubagentTool_Execute_EmptyFinalUsesLastAssistantFallback(t *testing.T) {
+	provider := &EmptyFinalWithAssistantProvider{}
+	msgBus := bus.NewMessageBus()
+	manager := NewSubagentManager(provider, testConfig(), "/tmp/test", msgBus)
+	tool := NewSubagentTool(manager)
+
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"task": "task with empty final response but prior assistant text",
+	}
+
+	result := tool.Execute(ctx, args)
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForUser, "without textual summary") {
+		t.Fatalf("expected fallback marker, got: %q", result.ForUser)
+	}
+	if !strings.Contains(result.ForUser, "Last assistant message:") {
+		t.Fatalf("expected last assistant fallback marker, got: %q", result.ForUser)
+	}
+	if !strings.Contains(result.ForUser, "Collected outputs from tools.") {
+		t.Fatalf("expected assistant fallback text, got: %q", result.ForUser)
 	}
 }
 

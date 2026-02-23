@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.49 - 2026-02-23
+
+### Changed
+- Subagent completion handoff to the main agent is now strictly internal-only:
+  - immediate completion-trigger runs no longer auto-send external channel replies,
+  - completion context is persisted/injected only to the origin session for main-agent processing.
+- Main-agent completion context now uses explicit structured payload format:
+  - `<subagent_completion ...>` with metadata fields `sender_id`, `subagent_id`, `label`, `status`, `origin_channel`, `origin_chat_id`.
+
+### Fixed
+- Empty subagent final responses now use stronger fallback behavior:
+  - keep existing explicit fallback text,
+  - append last non-empty subagent assistant message when available, so the main agent still receives meaningful completion context.
+
 ## v0.1.48 - 2026-02-23
 
 ### Added
