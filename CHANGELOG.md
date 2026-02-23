@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.44 - 2026-02-23
+
+### Added
+- New user-visible config field: `agents.defaults.llm_stream_mode` (`auto`/`on`/`off`), including override support in:
+  - `agents.subagents.llm_stream_mode`
+  - `agents.<name>.llm_stream_mode`
+
+### Changed
+- Z.AI-compatible HTTP calls now auto-enable streaming (`stream=true`) for no-tool chat completions on `api.z.ai` GLM models, with safe fallback to non-stream JSON parsing when SSE is not returned.
+
+### Fixed
+- Session summarization LLM calls now run under a retry-aware timeout budget (`llm_timeout * attempts + llm_retry_max_elapsed_seconds + buffer`) so summary retries are not prematurely terminated by a single short outer context deadline.
+
 ## v0.1.43 - 2026-02-23
 
 ### Changed

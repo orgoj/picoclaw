@@ -358,6 +358,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
+	streamMode := resolvedCfg.LLMStreamMode
 	memoryThreshold := resolvedCfg.MemoryThreshold
 	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
 	contextLimit := subagentResolvedContextLimit(sm.cfg.Agents.Defaults.ContextWindow, maxTok)
@@ -405,10 +406,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		MemoryThreshold:         memoryThreshold,
 		SummaryKeepLastMessages: keepLastMessages,
 		HistoryMessageThreshold: msgThreshold,
-		LLMOptions: map[string]any{
-			"max_tokens":  maxTok,
-			"temperature": temperature,
-		},
+		LLMOptions:              buildSubagentLLMOptions(maxTok, temperature, streamMode),
 		LLMRetry: llm.RetryConfig{
 			MaxRetries:              sm.cfg.Agents.Defaults.LLMMaxRetries,
 			RetryBackoffSeconds:     sm.cfg.Agents.Defaults.LLMRetryBackoffSeconds,
@@ -826,6 +824,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 	maxTok := resolvedCfg.MaxTokens
 	msgThreshold := resolvedCfg.HistoryMessageThreshold
 	temperature := resolvedCfg.Temperature
+	streamMode := resolvedCfg.LLMStreamMode
 	memoryThreshold := resolvedCfg.MemoryThreshold
 	keepLastMessages := resolvedCfg.SummaryKeepLastMessages
 	contextLimit := subagentResolvedContextLimit(sm.cfg.Agents.Defaults.ContextWindow, maxTok)
@@ -851,10 +850,7 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		MemoryThreshold:         memoryThreshold,
 		SummaryKeepLastMessages: keepLastMessages,
 		HistoryMessageThreshold: msgThreshold,
-		LLMOptions: map[string]any{
-			"max_tokens":  maxTok,
-			"temperature": temperature,
-		},
+		LLMOptions:              buildSubagentLLMOptions(maxTok, temperature, streamMode),
 		LLMRetry: llm.RetryConfig{
 			MaxRetries:              sm.cfg.Agents.Defaults.LLMMaxRetries,
 			RetryBackoffSeconds:     sm.cfg.Agents.Defaults.LLMRetryBackoffSeconds,
@@ -895,5 +891,27 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		Silent:  false,
 		IsError: false,
 		Async:   false,
+	}
+}
+
+func buildSubagentLLMOptions(maxTokens int, temperature float64, streamMode string) map[string]any {
+	opts := map[string]any{
+		"max_tokens":  maxTokens,
+		"temperature": temperature,
+	}
+	if stream, ok := streamOptionFromMode(streamMode); ok {
+		opts["stream"] = stream
+	}
+	return opts
+}
+
+func streamOptionFromMode(mode string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "on", "true", "enabled":
+		return true, true
+	case "off", "false", "disabled":
+		return false, true
+	default:
+		return false, false
 	}
 }

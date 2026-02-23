@@ -55,6 +55,7 @@ type AgentLoop struct {
 	maxTokens               int     // Max tokens for LLM responses
 	temperature             float64 // LLM temperature
 	llmTimeout              int     // LLM API timeout in seconds
+	llmStreamMode           string  // LLM stream mode: auto/on/off
 	llmMaxRetries           int     // Max retry attempts after the initial failed LLM call
 	llmRetryBackoffSeconds  int     // Base backoff for retryable errors (seconds, exponential)
 	llmRetryMaxBackoff      int     // Max backoff for retryable errors (seconds)
@@ -251,6 +252,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		maxTokens:               cfg.Agents.Defaults.MaxTokens,
 		temperature:             cfg.Agents.Defaults.Temperature,
 		llmTimeout:              cfg.Agents.Defaults.LLMTimeout,
+		llmStreamMode:           cfg.Agents.Defaults.LLMStreamMode,
 		llmMaxRetries:           maxInt(cfg.Agents.Defaults.LLMMaxRetries, 0),
 		llmRetryBackoffSeconds:  maxInt(cfg.Agents.Defaults.LLMRetryBackoffSeconds, 1),
 		llmRetryMaxBackoff:      maxInt(cfg.Agents.Defaults.LLMRetryMaxBackoff, 1),
@@ -1372,10 +1374,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			Messages: messages,
 			Tools:    providerToolDefs,
 			Model:    al.model,
-			Options: map[string]any{
-				"max_tokens":  al.maxTokens,
-				"temperature": al.temperature,
-			},
+			Options:  al.buildLLMOptions(al.maxTokens, al.temperature),
 			Retry: llm.RetryConfig{
 				MaxRetries:              al.llmMaxRetries,
 				RetryBackoffSeconds:     al.llmRetryBackoffSeconds,
@@ -1813,7 +1812,7 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(al.llmTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), al.summaryLLMTimeoutBudget())
 	defer cancel()
 
 	history := al.sessions.GetHistory(sessionKey)
@@ -1870,10 +1869,7 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 			Provider: al.provider,
 			Messages: []providers.Message{{Role: "user", Content: mergePrompt}},
 			Model:    al.model,
-			Options: map[string]any{
-				"max_tokens":  1024,
-				"temperature": 0.3,
-			},
+			Options:  al.buildLLMOptions(1024, 0.3),
 			Retry: llm.RetryConfig{
 				MaxRetries:              al.llmMaxRetries,
 				RetryBackoffSeconds:     al.llmRetryBackoffSeconds,
@@ -1936,10 +1932,7 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 		Provider: al.provider,
 		Messages: []providers.Message{{Role: "user", Content: prompt}},
 		Model:    al.model,
-		Options: map[string]any{
-			"max_tokens":  1024,
-			"temperature": 0.3,
-		},
+		Options:  al.buildLLMOptions(1024, 0.3),
 		Retry: llm.RetryConfig{
 			MaxRetries:              al.llmMaxRetries,
 			RetryBackoffSeconds:     al.llmRetryBackoffSeconds,
@@ -1957,6 +1950,37 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 		return "", err
 	}
 	return response.Content, nil
+}
+
+func (al *AgentLoop) summaryLLMTimeoutBudget() time.Duration {
+	attempts := maxInt(al.llmMaxRetries, 0) + 1
+	baseSeconds := maxInt(al.llmTimeout, 1) * attempts
+	waitSeconds := maxInt(al.llmRetryMaxElapsed, 0)
+	// Small fixed cushion for scheduling/transport jitter.
+	totalSeconds := baseSeconds + waitSeconds + 5
+	return time.Duration(totalSeconds) * time.Second
+}
+
+func (al *AgentLoop) buildLLMOptions(maxTokens int, temperature float64) map[string]any {
+	opts := map[string]any{
+		"max_tokens":  maxTokens,
+		"temperature": temperature,
+	}
+	if stream, ok := streamOptionFromMode(al.llmStreamMode); ok {
+		opts["stream"] = stream
+	}
+	return opts
+}
+
+func streamOptionFromMode(mode string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "on", "true", "enabled":
+		return true, true
+	case "off", "false", "disabled":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 // estimateTokens estimates the number of tokens in a message list.

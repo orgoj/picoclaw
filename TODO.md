@@ -6,7 +6,6 @@
 - [LATER] autotune max context podle error
 - [LATER] autotune retry podle error
 - [LATER] barvicky ve WEBUI agentu, aby bylo videt retry
-- [LATER] proverit stream mode z.ai: https://docs.z.ai/guides/capabilities/streaming
 
 ### Config parity
 
@@ -39,3 +38,8 @@
 - [LATER] Multi-dashboard pro vice picoclaw instanci.
 - [LATER] Memory tooling (`memory_append/search/consolidate`) + idle maintenance.
 - [LATER] Workspace file manager ve web UI (+ pozdeji editace).
+
+### Analyze for inspiration
+
+- https://github.com/logiccrafterdz/Droidclaw
+-

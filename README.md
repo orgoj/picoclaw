@@ -288,6 +288,7 @@ picoclaw onboard
       "workspace": "~/.picoclaw/workspace",
       "model": "glm-4.7",
       "max_tokens": 8192,
+      "llm_stream_mode": "auto",
       "max_iterations": 20,
       "temperature": 0.7,
       "max_tool_iterations": 20,
@@ -304,6 +305,7 @@ picoclaw onboard
     "subagents": {
       "model": "glm-4.7",
       "max_tokens": 4096,
+      "llm_stream_mode": "auto",
       "max_iterations": 20,
       "max_tool_iterations": 20,
       "memory_threshold": 0.8,
@@ -347,9 +349,11 @@ picoclaw onboard
 | `agents.subagents.provider` | inherits `agents.defaults.provider` | Provider used by subagents by default |
 | `agents.subagents.model` | `glm-4.7` | Model used by subagents by default |
 | `agents.subagents.max_tokens` | 4096 | Max tokens for subagents (global subagent limit) |
+| `agents.subagents.llm_stream_mode` | inherits `llm_stream_mode` | Streaming mode for subagent LLM calls: `auto`, `on`, `off` |
 | `agents.subagents.memory_threshold` | 0.8 | Subagent context trim threshold as a fraction of its context budget |
 | `agents.subagents.summary_keep_last_messages` | 4 | Minimum recent message budget retained by subagent loop trimming |
 | `max_tokens` | 8192 | Max tokens for main agent |
+| `llm_stream_mode` | `auto` | Streaming mode for main-agent LLM calls: `auto`, `on`, `off` |
 | `max_concurrent_subagents` | 2 | Max number of subagents that can run simultaneously |
 | `agents.subagents.max_concurrent_subagents` | 2 | Global subagent concurrency limit |
 | `agents.<name>.max_concurrent_subagents` | inherits `agents.subagents.max_concurrent_subagents` | Per-named-agent concurrency limit override |
@@ -1208,6 +1212,7 @@ The `name` and `description` fields in the frontmatter are used to advertise the
 | `provider` | `""` (auto-detect) | Force a specific provider: `openrouter`, `zhipu`, `anthropic`, `openai`, `gemini`, `groq`, etc. |
 | `model` | `glm-4.7` | Model to use (provider-specific) |
 | `max_tokens` | `8192` | Max tokens for main agent responses |
+| `llm_stream_mode` | `auto` | Streaming mode for main-agent LLM calls: `auto`, `on`, `off` |
 | `max_iterations` | `20` | Max total LLM loop iterations for main agent |
 | `temperature` | `0.7` | LLM temperature (0.0-2.0) |
 | `max_tool_iterations` | `20` | Max iterations that may include tool calls for main agent |
@@ -1237,6 +1242,7 @@ Retry semantics (exact):
 |--------|---------|-------------|
 | `agents.subagents.model` | `glm-4.7` | Global default model for subagents |
 | `agents.subagents.max_tokens` | `4096` | Global token limit for subagent responses |
+| `agents.subagents.llm_stream_mode` | inherits `agents.defaults.llm_stream_mode` | Global stream mode for subagents (`auto`, `on`, `off`) |
 | `agents.subagents.max_iterations` | `20` | Global max total LLM loop iterations for subagents |
 | `agents.subagents.max_tool_iterations` | `20` | Global max tool-call iterations for subagents |
 | `agents.subagents.provider` | inherits `agents.defaults.provider` | Global default provider for subagents |
@@ -1246,6 +1252,7 @@ Retry semantics (exact):
 | `agents.<name>.provider` | inherits `agents.subagents.provider` (fallback `agents.defaults.provider`) | Per-named-agent provider override |
 | `agents.<name>.model` | inherits `agents.subagents.model` (fallback `agents.defaults.model`) | Per-named-agent model override |
 | `agents.<name>.max_tokens` | inherits `agents.subagents.max_tokens` (fallback `agents.defaults.max_tokens`) | Per-named-agent token override |
+| `agents.<name>.llm_stream_mode` | inherits `agents.subagents.llm_stream_mode` (fallback `agents.defaults.llm_stream_mode`) | Per-named-agent stream-mode override |
 | `agents.<name>.max_iterations` | inherits `agents.subagents.max_iterations` (fallback `agents.defaults.max_iterations`) | Per-named-agent iteration override |
 | `agents.<name>.max_tool_iterations` | inherits `agents.subagents.max_tool_iterations` (fallback `agents.defaults.max_tool_iterations`) | Per-named-agent tool-iteration override |
 | `agents.<name>.memory_threshold` | inherits `agents.subagents.memory_threshold` (fallback `agents.defaults.memory_threshold`) | Per-named-agent context-trim threshold override |
@@ -1387,6 +1394,7 @@ picoclaw agent -m "Hello"
       "provider": "",
       "model": "anthropic/claude-opus-4-5",
       "max_tokens": 8192,
+      "llm_stream_mode": "auto",
       "max_iterations": 20,
       "temperature": 0.7,
       "max_tool_iterations": 20,
@@ -1404,12 +1412,14 @@ picoclaw agent -m "Hello"
     "subagents": {
       "model": "glm-4.7",
       "max_tokens": 4096,
+      "llm_stream_mode": "auto",
       "max_iterations": 20,
       "max_tool_iterations": 20,
       "memory_threshold": 0.8,
       "summary_keep_last_messages": 4
     },
     "example_named_agent": {
+      "llm_stream_mode": "auto",
       "max_iterations": 20,
       "max_tool_iterations": 20,
       "max_concurrent_subagents": 1,

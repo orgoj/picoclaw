@@ -381,6 +381,7 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 		"defaults": {
 			"model": "test-model",
 			"max_tokens": 4096,
+			"llm_stream_mode": "auto",
 			"temperature": 0.7,
 			"history_message_threshold": 100
 		},
@@ -388,6 +389,7 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 			"provider": "zhipu",
 			"model": "subagent-model",
 			"max_tokens": 2048,
+			"llm_stream_mode": "on",
 			"max_iterations": 12,
 			"max_tool_iterations": 10,
 			"history_message_threshold": 50
@@ -396,6 +398,7 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 			"provider": "openai",
 			"model": "analyst-model",
 			"max_tokens": 8192,
+			"llm_stream_mode": "off",
 			"history_message_threshold": 200,
 			"max_concurrent_subagents": 1
 		},
@@ -425,6 +428,9 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 	if agents.Subagents.Provider != "zhipu" {
 		t.Errorf("Expected subagents.provider 'zhipu', got %q", agents.Subagents.Provider)
 	}
+	if agents.Subagents.LLMStreamMode != "on" {
+		t.Errorf("Expected subagents.llm_stream_mode 'on', got %q", agents.Subagents.LLMStreamMode)
+	}
 
 	// Verify named agents exist
 	if len(agents.NamedAgents) != 2 {
@@ -444,6 +450,9 @@ func TestAgentsConfig_UnmarshalJSON_NamedAgents(t *testing.T) {
 	}
 	if analyst.Provider != "openai" {
 		t.Errorf("Expected analyst.provider 'openai', got %q", analyst.Provider)
+	}
+	if analyst.LLMStreamMode != "off" {
+		t.Errorf("Expected analyst.llm_stream_mode 'off', got %q", analyst.LLMStreamMode)
 	}
 	if analyst.HistoryMessageThreshold != 200 {
 		t.Errorf("Expected analyst.history_message_threshold 200, got %d", analyst.HistoryMessageThreshold)
@@ -484,6 +493,7 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 		Provider:                "zhipu",
 		Model:                   "subagent-model",
 		MaxTokens:               2048,
+		LLMStreamMode:           "on",
 		MaxIterations:           11,
 		MaxToolIterations:       10,
 		HistoryMessageThreshold: 30,
@@ -510,6 +520,9 @@ func TestAgentsConfig_ResolveAgentConfig(t *testing.T) {
 	}
 	if resolved.Provider != "openai" {
 		t.Errorf("Expected analyst provider 'openai', got %q", resolved.Provider)
+	}
+	if resolved.LLMStreamMode != "on" {
+		t.Errorf("Expected analyst llm_stream_mode from subagents, got %q", resolved.LLMStreamMode)
 	}
 	// Should inherit from subagents when not specified
 	if resolved.MaxIterations != cfg.Agents.Subagents.MaxIterations {
@@ -559,6 +572,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 		Defaults: AgentDefaults{
 			Provider:                "openrouter",
 			Model:                   "defaults-model",
+			LLMStreamMode:           "auto",
 			Temperature:             0.9,
 			MemoryThreshold:         0.8,
 			SummaryKeepLastMessages: 4,
@@ -568,6 +582,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 			Provider:                "zhipu",
 			Model:                   "subagents-model",
 			MaxTokens:               2000,
+			LLMStreamMode:           "on",
 			MaxIterations:           25,
 			MaxToolIterations:       15,
 			Temperature:             0.5,
@@ -580,6 +595,7 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 				Provider:                "openai",
 				Model:                   "named-model",
 				MaxTokens:               3000,
+				LLMStreamMode:           "off",
 				MemoryThreshold:         0.55,
 				SummaryKeepLastMessages: 12,
 				HistoryMessageThreshold: 30,
@@ -598,6 +614,9 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	}
 	if anon.Provider != "zhipu" {
 		t.Errorf("Anonymous: expected provider 'zhipu' (from subagents), got %q", anon.Provider)
+	}
+	if anon.LLMStreamMode != "on" {
+		t.Errorf("Anonymous: expected llm_stream_mode 'on' (from subagents), got %q", anon.LLMStreamMode)
 	}
 	if anon.Temperature != 0.5 {
 		t.Errorf("Anonymous: expected temperature 0.5 (from subagents), got %f", anon.Temperature)
@@ -619,6 +638,9 @@ func TestAgentsConfig_ResolveAgentConfig_Priority(t *testing.T) {
 	}
 	if named.Provider != "openai" {
 		t.Errorf("Named: expected provider 'openai' (from named), got %q", named.Provider)
+	}
+	if named.LLMStreamMode != "off" {
+		t.Errorf("Named: expected llm_stream_mode 'off' (from named), got %q", named.LLMStreamMode)
 	}
 	if named.HistoryMessageThreshold != 30 {
 		t.Errorf("Named: expected history_threshold 30 (from named), got %d", named.HistoryMessageThreshold)
@@ -647,6 +669,7 @@ func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t 
 			Provider:                "openrouter",
 			Model:                   "defaults-model",
 			MaxTokens:               9000,
+			LLMStreamMode:           "auto",
 			MaxIterations:           42,
 			MaxToolIterations:       21,
 			Temperature:             0.6,
@@ -666,6 +689,9 @@ func TestAgentsConfig_ResolveAgentConfig_DefaultsFallbackWhenSubagentsMissing(t 
 	}
 	if resolved.Provider != "openrouter" {
 		t.Errorf("Expected provider from defaults, got %q", resolved.Provider)
+	}
+	if resolved.LLMStreamMode != "auto" {
+		t.Errorf("Expected llm_stream_mode from defaults, got %q", resolved.LLMStreamMode)
 	}
 	if resolved.MaxTokens != 9000 {
 		t.Errorf("Expected max_tokens from defaults, got %d", resolved.MaxTokens)

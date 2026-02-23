@@ -87,6 +87,7 @@ type SubagentsConfig struct {
 	Provider                string  `json:"provider" env:"PICOCLAW_AGENTS_SUBAGENTS_PROVIDER"`
 	Model                   string  `json:"model" env:"PICOCLAW_AGENTS_SUBAGENTS_MODEL"`
 	MaxTokens               int     `json:"max_tokens" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOKENS"`
+	LLMStreamMode           string  `json:"llm_stream_mode" env:"PICOCLAW_AGENTS_SUBAGENTS_LLM_STREAM_MODE"`
 	MaxIterations           int     `json:"max_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_ITERATIONS"`
 	MaxToolIterations       int     `json:"max_tool_iterations" env:"PICOCLAW_AGENTS_SUBAGENTS_MAX_TOOL_ITERATIONS"`
 	Temperature             float64 `json:"temperature" env:"PICOCLAW_AGENTS_SUBAGENTS_TEMPERATURE"`
@@ -102,6 +103,7 @@ type NamedAgentConfig struct {
 	Provider                string  `json:"provider"`
 	Model                   string  `json:"model"`
 	MaxTokens               int     `json:"max_tokens"`
+	LLMStreamMode           string  `json:"llm_stream_mode"`
 	MaxIterations           int     `json:"max_iterations"`
 	MaxToolIterations       int     `json:"max_tool_iterations"`
 	Temperature             float64 `json:"temperature"`
@@ -169,6 +171,7 @@ type ResolvedAgentConfig struct {
 	Provider                string
 	Model                   string
 	MaxTokens               int
+	LLMStreamMode           string
 	MaxIterations           int
 	MaxToolIterations       int
 	Temperature             float64
@@ -189,6 +192,7 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 		Provider:                a.Defaults.Provider,
 		Model:                   a.Defaults.Model,
 		MaxTokens:               a.Defaults.MaxTokens,
+		LLMStreamMode:           a.Defaults.LLMStreamMode,
 		MaxIterations:           a.Defaults.MaxIterations,
 		MaxToolIterations:       a.Defaults.MaxToolIterations,
 		Temperature:             a.Defaults.Temperature,
@@ -206,6 +210,9 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 	}
 	if a.Subagents.MaxTokens > 0 {
 		result.MaxTokens = a.Subagents.MaxTokens
+	}
+	if strings.TrimSpace(a.Subagents.LLMStreamMode) != "" {
+		result.LLMStreamMode = a.Subagents.LLMStreamMode
 	}
 	if a.Subagents.MaxIterations > 0 {
 		result.MaxIterations = a.Subagents.MaxIterations
@@ -242,6 +249,9 @@ func (a *AgentsConfig) ResolveAgentConfig(name string) ResolvedAgentConfig {
 		}
 		if named.MaxTokens > 0 {
 			result.MaxTokens = named.MaxTokens
+		}
+		if strings.TrimSpace(named.LLMStreamMode) != "" {
+			result.LLMStreamMode = named.LLMStreamMode
 		}
 		if named.MaxIterations > 0 {
 			result.MaxIterations = named.MaxIterations
@@ -289,6 +299,7 @@ type AgentDefaults struct {
 	Provider                string   `json:"provider" env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
 	Model                   string   `json:"model" env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"`
 	MaxTokens               int      `json:"max_tokens" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	LLMStreamMode           string   `json:"llm_stream_mode" env:"PICOCLAW_AGENTS_DEFAULTS_LLM_STREAM_MODE"`
 	MaxIterations           int      `json:"max_iterations" env:"PICOCLAW_AGENTS_DEFAULTS_MAX_ITERATIONS"`
 	ContextWindow           int      `json:"context_window" env:"PICOCLAW_AGENTS_DEFAULTS_CONTEXT_WINDOW"`
 	Temperature             float64  `json:"temperature" env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
@@ -505,6 +516,7 @@ func DefaultConfig() *Config {
 				Provider:                "",
 				Model:                   "glm-4.7",
 				MaxTokens:               8192,
+				LLMStreamMode:           "auto",
 				MaxIterations:           20,
 				ContextWindow:           131072, // 128K tokens default context window
 				Temperature:             0.7,
@@ -525,6 +537,7 @@ func DefaultConfig() *Config {
 				Provider:                "",
 				Model:                   "glm-4.7",
 				MaxTokens:               4096,
+				LLMStreamMode:           "auto",
 				MaxIterations:           20,
 				MaxToolIterations:       20,
 				Temperature:             0.7,
@@ -861,6 +874,7 @@ func (c *Config) Summary() string {
 	sb.WriteString(fmt.Sprintf("- ContextWindow: %d\n", c.Agents.Defaults.ContextWindow))
 	sb.WriteString(fmt.Sprintf("- HistoryThreshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
 	sb.WriteString(fmt.Sprintf("- SummaryKeepLast: %d\n", c.Agents.Defaults.SummaryKeepLastMessages))
+	sb.WriteString(fmt.Sprintf("- LLMStreamMode: %s\n", c.Agents.Defaults.LLMStreamMode))
 	return sb.String()
 }
 
@@ -883,6 +897,7 @@ func (c *Config) FormatConfigForLog() string {
 	sb.WriteString(fmt.Sprintf("- context_window: %d\n", c.Agents.Defaults.ContextWindow))
 	sb.WriteString(fmt.Sprintf("- history_threshold: %d\n", c.Agents.Defaults.HistoryMessageThreshold))
 	sb.WriteString(fmt.Sprintf("- summary_keep_last_messages: %d\n", c.Agents.Defaults.SummaryKeepLastMessages))
+	sb.WriteString(fmt.Sprintf("- llm_stream_mode: %s\n", c.Agents.Defaults.LLMStreamMode))
 	if c.Agents.Defaults.Temperature > 0 {
 		sb.WriteString(fmt.Sprintf("- temperature: %.2f\n", c.Agents.Defaults.Temperature))
 	}
@@ -900,6 +915,7 @@ func (c *Config) FormatConfigForLog() string {
 	sb.WriteString(fmt.Sprintf("- memory_threshold: %.2f\n", c.Agents.Subagents.MemoryThreshold))
 	sb.WriteString(fmt.Sprintf("- summary_keep_last_messages: %d\n", c.Agents.Subagents.SummaryKeepLastMessages))
 	sb.WriteString(fmt.Sprintf("- history_threshold: %d\n", c.Agents.Subagents.HistoryMessageThreshold))
+	sb.WriteString(fmt.Sprintf("- llm_stream_mode: %s\n", c.Agents.Subagents.LLMStreamMode))
 
 	return sb.String()
 }

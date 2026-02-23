@@ -12,9 +12,13 @@ This skill provides a map and workflow for investigating the state of a remote `
 All paths are relative to: `/home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/`
 
 ### 1. Logs & Heartbeat
-- **`heartbeat.log`**: Main log for the heartbeat mechanism. Check for `[ERROR]` tags and LLM failures.
-- **`pm2-logs/`**: (Symlink) Contains PM2 process logs (out and err) for the running nanobot.
-- **`sessions/`**: JSON files for active/recent sessions (e.g., `telegram_XXX.json`, `heartbeat.json`). Useful for seeing the raw message flow.
+- **`logs/agent.jsonl`**: Primary runtime structured log (preferred source).
+- **`logs/debug.jsonl`**: Debug structured log (preferred source for deeper triage).
+- **`logs/audit.jsonl`**: Full LLM request payload audit trail (`llm_request_full`) for incident forensics.
+- **`logs/agent.log` / `logs/debug.log`**: Legacy/compat mirrored logs still useful on mixed deployments.
+- **`heartbeat.log`**: Heartbeat mechanism log (legacy but still relevant for watchdog issues).
+- **`pm2-logs/`**: (Symlink) PM2 process logs for the running nanobot.
+- **`sessions/`**: Session history files (current format `*.jsonl`; legacy instances may still contain `*.json`).
 
 ### 2. Memory & State
 - **`memory/MEMORY.md`**: The agent's long-term memory.
@@ -33,7 +37,7 @@ All paths are relative to: `/home/michael/projects/picoclaw/picoclaw/nanobotnb/.
 
 ### Acute Incident Mode (Default for urgent reports)
 If the user reports an urgent live issue (e.g., "stuck", "zaseklo", "urgent", "akutní"), run a fast triage first and keep scope narrow:
-1. Start with `logs/agent.log` and `logs/debug.log` only.
+1. Start with `logs/agent.jsonl` and `logs/debug.jsonl` first (fallback to `.log` only if needed).
 2. Focus on the last relevant 200-400 lines around the reported timestamp/event.
 3. Return a first diagnosis immediately (what failed, where, and if the process is still progressing).
 4. Do **not** expand into memory/history/session deep-dive unless:
@@ -42,14 +46,16 @@ If the user reports an urgent live issue (e.g., "stuck", "zaseklo", "urgent", "a
 
 Use this quick triage pattern:
 ```bash
-tail -n 300 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/agent.log
-tail -n 300 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/debug.log
+tail -n 300 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/agent.jsonl
+tail -n 300 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/debug.jsonl
 ```
 
 ### Step 1: Error Discovery
 Search for errors in logs to find root causes:
 ```bash
-grep "\[ERROR\]" /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/heartbeat.log
+rg -n "\"level\":\"ERROR\"|context deadline exceeded|Client.Timeout exceeded|status=429|status=500" \
+  /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/agent.jsonl \
+  /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/debug.jsonl
 ```
 
 ### Step 2: Context Analysis
@@ -61,9 +67,12 @@ Read the memory and failures to see what the agent *thinks* happened:
 Before concluding "new regression", verify what build/version is actually running on the live instance and compare it against the code/commit under review.
 - Record the observed runtime version/commit in your notes.
 - If versions differ, treat the mismatch as first-order explanation until disproven.
+```bash
+head -n 5 /home/michael/projects/picoclaw/picoclaw/nanobotnb/.picoclaw/workspace/logs/debug.log
+```
 
 ### Step 3: Session Deep-Dive
-If an error occurred during interaction, check the relevant session file in `sessions/` to see the exact prompts and responses.
+If an error occurred during interaction, check the relevant `sessions/*.jsonl` file to see exact prompts/responses and timestamp ordering.
 
 ### Step 4: Improvement Proposals
 Based on findings:

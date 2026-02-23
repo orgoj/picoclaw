@@ -7,6 +7,7 @@
 package providers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -75,6 +76,10 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 		requestBody["tools"] = tools
 		requestBody["tool_choice"] = "auto"
 	}
+	useStreaming := shouldUseStreamingResponse(p.apiBase, model, tools, options)
+	if useStreaming {
+		requestBody["stream"] = true
+	}
 
 	if maxTokens, ok := options["max_tokens"].(int); ok {
 		if shouldUseMaxCompletionTokens(model) {
@@ -115,17 +120,99 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read error response: %w", err)
+		}
+		bodyStr := strings.ReplaceAll(strings.TrimSpace(string(body)), "\n", " ")
+		return nil, fmt.Errorf("API request failed: status=%d body=%s", resp.StatusCode, bodyStr)
+	}
+
+	if useStreaming {
+		return p.parseStreamingResponse(resp)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		bodyStr := strings.ReplaceAll(strings.TrimSpace(string(body)), "\n", " ")
-		return nil, fmt.Errorf("API request failed: status=%d body=%s", resp.StatusCode, bodyStr)
+	return p.parseResponse(body)
+}
+
+func (p *HTTPProvider) parseStreamingResponse(resp *http.Response) (*LLMResponse, error) {
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if !strings.Contains(contentType, "text/event-stream") {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read non-stream response: %w", err)
+		}
+		return p.parseResponse(body)
 	}
 
-	return p.parseResponse(body)
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
+
+	var contentBuilder strings.Builder
+	finishReason := "stop"
+	var usage *UsageInfo
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" {
+			continue
+		}
+		if payload == "[DONE]" {
+			break
+		}
+
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+				FinishReason string `json:"finish_reason"`
+			} `json:"choices"`
+			Usage *UsageInfo `json:"usage"`
+		}
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			return nil, fmt.Errorf("failed to parse stream chunk: %w", err)
+		}
+
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		choice := chunk.Choices[0]
+		if choice.Delta.Content != "" {
+			contentBuilder.WriteString(choice.Delta.Content)
+		} else if choice.Message.Content != "" {
+			contentBuilder.WriteString(choice.Message.Content)
+		}
+		if choice.FinishReason != "" {
+			finishReason = choice.FinishReason
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read stream response: %w", err)
+	}
+
+	return &LLMResponse{
+		Content:      contentBuilder.String(),
+		FinishReason: finishReason,
+		Usage:        usage,
+	}, nil
 }
 
 func (p *HTTPProvider) parseResponse(body []byte) (*LLMResponse, error) {
@@ -216,6 +303,22 @@ func shouldUseMaxCompletionTokens(model string) bool {
 	parts := strings.Split(lowerModel, "/")
 	last := parts[len(parts)-1]
 	return strings.HasPrefix(last, "o1") || strings.HasPrefix(last, "o3") || strings.HasPrefix(last, "o4")
+}
+
+func shouldUseStreamingResponse(apiBase, model string, tools []ToolDefinition, options map[string]interface{}) bool {
+	if stream, ok := options["stream"].(bool); ok {
+		return stream
+	}
+	if len(tools) > 0 {
+		return false
+	}
+
+	base := strings.ToLower(strings.TrimSpace(apiBase))
+	if !strings.Contains(base, "api.z.ai") {
+		return false
+	}
+	lowerModel := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(lowerModel, "glm")
 }
 
 func createClaudeAuthProvider() (LLMProvider, error) {
