@@ -14,6 +14,7 @@ import (
 type ToolRegistry struct {
 	tools             map[string]Tool
 	denyByDefault     bool
+	denyList          map[string]struct{}
 	allowList         map[string]struct{}
 	notifyOnBlock     bool
 	blockedToolNotify BlockedToolNotify
@@ -23,6 +24,7 @@ type ToolRegistry struct {
 
 type ToolPolicy struct {
 	DenyByDefault bool
+	DenyList      []string
 	AllowList     []string
 	NotifyOnBlock bool
 }
@@ -48,6 +50,7 @@ func buildAllowSet(allowList []string) map[string]struct{} {
 func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{
 		tools:         make(map[string]Tool),
+		denyList:      map[string]struct{}{},
 		allowList:     map[string]struct{}{},
 		notifyOnBlock: true,
 	}
@@ -57,6 +60,7 @@ func (r *ToolRegistry) SetPolicy(policy ToolPolicy) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.denyByDefault = policy.DenyByDefault
+	r.denyList = buildAllowSet(policy.DenyList)
 	r.allowList = buildAllowSet(policy.AllowList)
 	r.notifyOnBlock = policy.NotifyOnBlock
 }
@@ -68,11 +72,21 @@ func (r *ToolRegistry) SetBlockedToolNotify(notify BlockedToolNotify) {
 }
 
 func (r *ToolRegistry) isAllowedUnlocked(name string) bool {
+	return r.blockReasonUnlocked(name) == ""
+}
+
+func (r *ToolRegistry) blockReasonUnlocked(name string) string {
+	if _, denied := r.denyList[normalizeToolName(name)]; denied {
+		return "blocked by tools.policy deny_list"
+	}
 	if !r.denyByDefault {
-		return true
+		return ""
 	}
 	_, ok := r.allowList[normalizeToolName(name)]
-	return ok
+	if ok {
+		return ""
+	}
+	return "blocked by tools.policy allow_list"
 }
 
 func (r *ToolRegistry) Register(tool Tool) {
@@ -103,23 +117,22 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 		})
 
 	r.mu.RLock()
-	isAllowed := r.isAllowedUnlocked(name)
+	blockReason := r.blockReasonUnlocked(name)
 	notifyOnBlock := r.notifyOnBlock
 	blockedNotify := r.blockedToolNotify
 	r.mu.RUnlock()
-	if !isAllowed {
-		reason := "blocked by tools.policy allow_list"
+	if blockReason != "" {
 		if notifyOnBlock && blockedNotify != nil {
-			blockedNotify(channel, chatID, name, reason)
+			blockedNotify(channel, chatID, name, blockReason)
 		}
 		logger.WarnCF("tool", "Tool blocked by policy",
 			map[string]interface{}{
 				"tool":    name,
 				"channel": channel,
 				"chat_id": chatID,
-				"reason":  reason,
+				"reason":  blockReason,
 			})
-		return ErrorResult(fmt.Sprintf("tool %q is blocked by tools.policy", name)).WithError(fmt.Errorf("tool blocked by policy"))
+		return ErrorResult(fmt.Sprintf("tool %q is blocked by tools.policy (%s)", name, blockReason)).WithError(fmt.Errorf("tool blocked by policy"))
 	}
 
 	tool, ok := r.Get(name)

@@ -214,6 +214,7 @@
   "tools": {
     "policy": {
       "deny_by_default": false,
+      "deny_list": [],
       "allow_list": [],
       "notify_on_block": true
     },

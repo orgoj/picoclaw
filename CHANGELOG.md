@@ -1,10 +1,22 @@
 # Changelog
 
+## v0.1.48 - 2026-02-23
+
+### Added
+- New `tools.policy.deny_list` (default `[]`) to block specific tools directly without enabling deny-by-default mode.
+
+### Changed
+- Tool policy precedence is now:
+  - `deny_list` always blocks first,
+  - then `deny_by_default/allow_list` is applied.
+- Block notifications now include exact block reason (`deny_list` vs `allow_list`) in SYS message/log context.
+
 ## v0.1.47 - 2026-02-23
 
 ### Added
 - New user-visible tool execution policy config under `tools.policy`:
   - `deny_by_default` (default `false`)
+  - `deny_list` (default `[]`)
   - `allow_list` (default `[]`)
   - `notify_on_block` (default `true`)
 - When a blocked tool is attempted and notification is enabled, runtime now sends a channel-visible system notice prefixed with `gateway.sys_message_prefix` (default `[SYS]`).

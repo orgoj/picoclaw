@@ -113,6 +113,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	registry := tools.NewToolRegistry()
 	registry.SetPolicy(tools.ToolPolicy{
 		DenyByDefault: cfg.Tools.Policy.DenyByDefault,
+		DenyList:      cfg.Tools.Policy.DenyList,
 		AllowList:     cfg.Tools.Policy.AllowList,
 		NotifyOnBlock: cfg.Tools.Policy.NotifyOnBlock,
 	})

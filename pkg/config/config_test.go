@@ -325,6 +325,9 @@ func TestDefaultConfig_WebTools(t *testing.T) {
 	if len(cfg.Tools.Policy.AllowList) != 0 {
 		t.Errorf("tools.policy.allow_list should be empty by default, got %v", cfg.Tools.Policy.AllowList)
 	}
+	if len(cfg.Tools.Policy.DenyList) != 0 {
+		t.Errorf("tools.policy.deny_list should be empty by default, got %v", cfg.Tools.Policy.DenyList)
+	}
 	if !cfg.Tools.Policy.NotifyOnBlock {
 		t.Error("tools.policy.notify_on_block should be true by default")
 	}
@@ -354,6 +357,7 @@ func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
 			"subagent": {"enabled": true},
 			"policy": {
 				"deny_by_default": true,
+				"deny_list": ["subagent_cancel"],
 				"allow_list": ["read_file", "list_dir"],
 				"notify_on_block": false
 			}
@@ -388,6 +392,9 @@ func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
 	}
 	if len(cfg.Tools.Policy.AllowList) != 2 {
 		t.Fatalf("Expected tools.policy.allow_list length 2, got %d", len(cfg.Tools.Policy.AllowList))
+	}
+	if len(cfg.Tools.Policy.DenyList) != 1 || cfg.Tools.Policy.DenyList[0] != "subagent_cancel" {
+		t.Errorf("Unexpected tools.policy.deny_list: %v", cfg.Tools.Policy.DenyList)
 	}
 	if cfg.Tools.Policy.AllowList[0] != "read_file" || cfg.Tools.Policy.AllowList[1] != "list_dir" {
 		t.Errorf("Unexpected tools.policy.allow_list: %v", cfg.Tools.Policy.AllowList)

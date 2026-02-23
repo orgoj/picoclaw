@@ -82,3 +82,25 @@ func TestToolRegistryPolicy_NotifyCanBeDisabled(t *testing.T) {
 		t.Fatalf("expected blocked notify disabled, got %d calls", notified)
 	}
 }
+
+func TestToolRegistryPolicy_DenyListBlocksSpecificToolWithoutDenyByDefault(t *testing.T) {
+	reg := NewToolRegistry()
+	reg.Register(&registryPolicyMockTool{name: "read_file"})
+	reg.Register(&registryPolicyMockTool{name: "subagent_cancel"})
+	reg.SetPolicy(ToolPolicy{
+		DenyByDefault: false,
+		DenyList:      []string{"subagent_cancel"},
+		AllowList:     []string{},
+		NotifyOnBlock: true,
+	})
+
+	allowed := reg.ExecuteWithContext(context.Background(), "read_file", map[string]interface{}{}, "telegram", "123", nil)
+	if allowed == nil || allowed.IsError {
+		t.Fatalf("expected read_file to be allowed, got %+v", allowed)
+	}
+
+	blocked := reg.ExecuteWithContext(context.Background(), "subagent_cancel", map[string]interface{}{}, "telegram", "123", nil)
+	if blocked == nil || !blocked.IsError {
+		t.Fatalf("expected subagent_cancel to be blocked by deny_list, got %+v", blocked)
+	}
+}

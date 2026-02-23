@@ -506,6 +506,7 @@ type SubagentToolConfig struct {
 
 type ToolPolicyConfig struct {
 	DenyByDefault bool     `json:"deny_by_default" env:"PICOCLAW_TOOLS_POLICY_DENY_BY_DEFAULT"`
+	DenyList      []string `json:"deny_list" env:"PICOCLAW_TOOLS_POLICY_DENY_LIST"`
 	AllowList     []string `json:"allow_list" env:"PICOCLAW_TOOLS_POLICY_ALLOW_LIST"`
 	NotifyOnBlock bool     `json:"notify_on_block" env:"PICOCLAW_TOOLS_POLICY_NOTIFY_ON_BLOCK"`
 }
@@ -683,6 +684,7 @@ func DefaultConfig() *Config {
 			},
 			Policy: ToolPolicyConfig{
 				DenyByDefault: false,
+				DenyList:      []string{},
 				AllowList:     []string{},
 				NotifyOnBlock: true,
 			},

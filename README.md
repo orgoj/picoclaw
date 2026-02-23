@@ -321,6 +321,7 @@ picoclaw onboard
   "tools": {
     "policy": {
       "deny_by_default": false,
+      "deny_list": [],
       "allow_list": [],
       "notify_on_block": true
     },
@@ -377,6 +378,7 @@ picoclaw onboard
 | `summary_keep_last_messages` | 4 | How many recent messages stay in raw history after summarization (rest is compacted into summary) |
 | `tools.spawn.enabled` | `true` | Enable async subagent delegation tool (`spawn`) |
 | `tools.policy.deny_by_default` | `false` | Deny all tool execution unless explicitly included in `tools.policy.allow_list` |
+| `tools.policy.deny_list` | `[]` | Always-block list for specific tools, even when `deny_by_default=false` (example: `["subagent_cancel"]`) |
 | `tools.policy.allow_list` | `[]` | Tool allowlist used when `tools.policy.deny_by_default=true` (example: `["read_file","list_dir","message"]`) |
 | `tools.policy.notify_on_block` | `true` | Send prefixed system notice (`gateway.sys_message_prefix`) to channel when a blocked tool is attempted |
 | `tools.spawn.allow_llm_status` | `true` | Expose `subagent_status` tool to LLM |
@@ -1538,6 +1540,7 @@ picoclaw agent -m "Hello"
   "tools": {
     "policy": {
       "deny_by_default": false,
+      "deny_list": [],
       "allow_list": [],
       "notify_on_block": true
     },
