@@ -212,6 +212,11 @@
     }
   },
   "tools": {
+    "policy": {
+      "deny_by_default": false,
+      "allow_list": [],
+      "notify_on_block": true
+    },
     "spawn": {
       "enabled": true,
       "allow_llm_status": true,

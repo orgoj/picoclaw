@@ -504,10 +504,17 @@ type SubagentToolConfig struct {
 	Enabled bool `json:"enabled" env:"PICOCLAW_TOOLS_SUBAGENT_ENABLED"`
 }
 
+type ToolPolicyConfig struct {
+	DenyByDefault bool     `json:"deny_by_default" env:"PICOCLAW_TOOLS_POLICY_DENY_BY_DEFAULT"`
+	AllowList     []string `json:"allow_list" env:"PICOCLAW_TOOLS_POLICY_ALLOW_LIST"`
+	NotifyOnBlock bool     `json:"notify_on_block" env:"PICOCLAW_TOOLS_POLICY_NOTIFY_ON_BLOCK"`
+}
+
 type ToolsConfig struct {
 	Web      WebToolsConfig     `json:"web"`
 	Spawn    SpawnToolConfig    `json:"spawn"`
 	Subagent SubagentToolConfig `json:"subagent"`
+	Policy   ToolPolicyConfig   `json:"policy"`
 }
 
 func DefaultConfig() *Config {
@@ -673,6 +680,11 @@ func DefaultConfig() *Config {
 			},
 			Subagent: SubagentToolConfig{
 				Enabled: true,
+			},
+			Policy: ToolPolicyConfig{
+				DenyByDefault: false,
+				AllowList:     []string{},
+				NotifyOnBlock: true,
 			},
 		},
 		Heartbeat: HeartbeatConfig{

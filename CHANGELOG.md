@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.47 - 2026-02-23
+
+### Added
+- New user-visible tool execution policy config under `tools.policy`:
+  - `deny_by_default` (default `false`)
+  - `allow_list` (default `[]`)
+  - `notify_on_block` (default `true`)
+- When a blocked tool is attempted and notification is enabled, runtime now sends a channel-visible system notice prefixed with `gateway.sys_message_prefix` (default `[SYS]`).
+
+### Changed
+- Tool surface exposed to the LLM now respects `tools.policy` allowlist filtering (`toProviderDefs`/tool summaries/list/count), so blocked tools are hidden from normal model tool selection.
+
 ## v0.1.46 - 2026-02-23
 
 ### Fixed

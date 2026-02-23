@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,15 +12,67 @@ import (
 )
 
 type ToolRegistry struct {
-	tools map[string]Tool
-	mu    sync.RWMutex
-	exec  sync.Mutex
+	tools             map[string]Tool
+	denyByDefault     bool
+	allowList         map[string]struct{}
+	notifyOnBlock     bool
+	blockedToolNotify BlockedToolNotify
+	mu                sync.RWMutex
+	exec              sync.Mutex
+}
+
+type ToolPolicy struct {
+	DenyByDefault bool
+	AllowList     []string
+	NotifyOnBlock bool
+}
+
+type BlockedToolNotify func(channel, chatID, toolName, reason string)
+
+func normalizeToolName(name string) string {
+	return strings.TrimSpace(name)
+}
+
+func buildAllowSet(allowList []string) map[string]struct{} {
+	allowSet := make(map[string]struct{}, len(allowList))
+	for _, name := range allowList {
+		normalized := normalizeToolName(name)
+		if normalized == "" {
+			continue
+		}
+		allowSet[normalized] = struct{}{}
+	}
+	return allowSet
 }
 
 func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{
-		tools: make(map[string]Tool),
+		tools:         make(map[string]Tool),
+		allowList:     map[string]struct{}{},
+		notifyOnBlock: true,
 	}
+}
+
+func (r *ToolRegistry) SetPolicy(policy ToolPolicy) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.denyByDefault = policy.DenyByDefault
+	r.allowList = buildAllowSet(policy.AllowList)
+	r.notifyOnBlock = policy.NotifyOnBlock
+}
+
+func (r *ToolRegistry) SetBlockedToolNotify(notify BlockedToolNotify) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.blockedToolNotify = notify
+}
+
+func (r *ToolRegistry) isAllowedUnlocked(name string) bool {
+	if !r.denyByDefault {
+		return true
+	}
+	_, ok := r.allowList[normalizeToolName(name)]
+	return ok
 }
 
 func (r *ToolRegistry) Register(tool Tool) {
@@ -48,6 +101,26 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 			"tool": name,
 			"args": args,
 		})
+
+	r.mu.RLock()
+	isAllowed := r.isAllowedUnlocked(name)
+	notifyOnBlock := r.notifyOnBlock
+	blockedNotify := r.blockedToolNotify
+	r.mu.RUnlock()
+	if !isAllowed {
+		reason := "blocked by tools.policy allow_list"
+		if notifyOnBlock && blockedNotify != nil {
+			blockedNotify(channel, chatID, name, reason)
+		}
+		logger.WarnCF("tool", "Tool blocked by policy",
+			map[string]interface{}{
+				"tool":    name,
+				"channel": channel,
+				"chat_id": chatID,
+				"reason":  reason,
+			})
+		return ErrorResult(fmt.Sprintf("tool %q is blocked by tools.policy", name)).WithError(fmt.Errorf("tool blocked by policy"))
+	}
 
 	tool, ok := r.Get(name)
 	if !ok {
@@ -125,6 +198,9 @@ func (r *ToolRegistry) GetDefinitions() []map[string]interface{} {
 
 	definitions := make([]map[string]interface{}, 0, len(r.tools))
 	for _, tool := range r.tools {
+		if !r.isAllowedUnlocked(tool.Name()) {
+			continue
+		}
 		definitions = append(definitions, ToolToSchema(tool))
 	}
 	return definitions
@@ -138,6 +214,9 @@ func (r *ToolRegistry) ToProviderDefs() []providers.ToolDefinition {
 
 	definitions := make([]providers.ToolDefinition, 0, len(r.tools))
 	for _, tool := range r.tools {
+		if !r.isAllowedUnlocked(tool.Name()) {
+			continue
+		}
 		schema := ToolToSchema(tool)
 
 		// Safely extract nested values with type checks
@@ -169,6 +248,9 @@ func (r *ToolRegistry) List() []string {
 
 	names := make([]string, 0, len(r.tools))
 	for name := range r.tools {
+		if !r.isAllowedUnlocked(name) {
+			continue
+		}
 		names = append(names, name)
 	}
 	return names
@@ -178,7 +260,13 @@ func (r *ToolRegistry) List() []string {
 func (r *ToolRegistry) Count() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.tools)
+	count := 0
+	for name := range r.tools {
+		if r.isAllowedUnlocked(name) {
+			count++
+		}
+	}
+	return count
 }
 
 // GetSummaries returns human-readable summaries of all registered tools.
@@ -189,6 +277,9 @@ func (r *ToolRegistry) GetSummaries() []string {
 
 	summaries := make([]string, 0, len(r.tools))
 	for _, tool := range r.tools {
+		if !r.isAllowedUnlocked(tool.Name()) {
+			continue
+		}
 		summaries = append(summaries, fmt.Sprintf("- `%s` - %s", tool.Name(), tool.Description()))
 	}
 	return summaries

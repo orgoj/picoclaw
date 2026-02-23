@@ -319,6 +319,15 @@ func TestDefaultConfig_WebTools(t *testing.T) {
 	if !cfg.Tools.Subagent.Enabled {
 		t.Error("Subagent tool should be enabled by default")
 	}
+	if cfg.Tools.Policy.DenyByDefault {
+		t.Error("tools.policy.deny_by_default should be false by default")
+	}
+	if len(cfg.Tools.Policy.AllowList) != 0 {
+		t.Errorf("tools.policy.allow_list should be empty by default, got %v", cfg.Tools.Policy.AllowList)
+	}
+	if !cfg.Tools.Policy.NotifyOnBlock {
+		t.Error("tools.policy.notify_on_block should be true by default")
+	}
 
 	// Verify web tools defaults
 	if cfg.Tools.Web.Brave.MaxResults != 5 {
@@ -342,7 +351,12 @@ func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
 				"allow_llm_message": true,
 				"allow_llm_cancel": true
 			},
-			"subagent": {"enabled": true}
+			"subagent": {"enabled": true},
+			"policy": {
+				"deny_by_default": true,
+				"allow_list": ["read_file", "list_dir"],
+				"notify_on_block": false
+			}
 		}
 	}`
 
@@ -368,6 +382,18 @@ func TestDefaultConfig_SubagentToolTogglesParsing(t *testing.T) {
 	}
 	if !cfg.Tools.Subagent.Enabled {
 		t.Error("Expected subagent tool enabled")
+	}
+	if !cfg.Tools.Policy.DenyByDefault {
+		t.Error("Expected tools.policy.deny_by_default=true")
+	}
+	if len(cfg.Tools.Policy.AllowList) != 2 {
+		t.Fatalf("Expected tools.policy.allow_list length 2, got %d", len(cfg.Tools.Policy.AllowList))
+	}
+	if cfg.Tools.Policy.AllowList[0] != "read_file" || cfg.Tools.Policy.AllowList[1] != "list_dir" {
+		t.Errorf("Unexpected tools.policy.allow_list: %v", cfg.Tools.Policy.AllowList)
+	}
+	if cfg.Tools.Policy.NotifyOnBlock {
+		t.Error("Expected tools.policy.notify_on_block=false")
 	}
 }
 

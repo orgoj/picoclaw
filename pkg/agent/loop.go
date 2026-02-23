@@ -111,6 +111,32 @@ type processOptions struct {
 // This is shared between main agent and subagents.
 func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msgBus *bus.MessageBus) *tools.ToolRegistry {
 	registry := tools.NewToolRegistry()
+	registry.SetPolicy(tools.ToolPolicy{
+		DenyByDefault: cfg.Tools.Policy.DenyByDefault,
+		AllowList:     cfg.Tools.Policy.AllowList,
+		NotifyOnBlock: cfg.Tools.Policy.NotifyOnBlock,
+	})
+	registry.SetBlockedToolNotify(func(channel, chatID, toolName, reason string) {
+		if channel == "" || chatID == "" || msgBus == nil {
+			return
+		}
+		prefix := strings.TrimSpace(cfg.Gateway.SysMessagePrefix)
+		if prefix == "" {
+			prefix = "[SYS]"
+		}
+		content := fmt.Sprintf("%s Tool blocked by policy: %s (%s)", prefix, toolName, reason)
+		if ok := msgBus.PublishOutbound(bus.OutboundMessage{
+			Channel: channel,
+			ChatID:  chatID,
+			Content: content,
+		}); !ok {
+			logger.WarnCF("agent", "Failed to publish blocked-tool SYS notification", map[string]interface{}{
+				"channel": channel,
+				"chat_id": chatID,
+				"tool":    toolName,
+			})
+		}
+	})
 	denyPathPatterns := cfg.Agents.Defaults.DenyPathPatterns
 
 	// File system tools
