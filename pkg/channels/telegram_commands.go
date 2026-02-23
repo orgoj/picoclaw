@@ -212,6 +212,7 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 				timeRange := fmt.Sprintf("[%s - ...]", startTime)
 
 				sb.WriteString(fmt.Sprintf("• <code>%s</code> %s\n", html.EscapeString(t.ID), html.EscapeString(timeRange)))
+				sb.WriteString(fmt.Sprintf("  ID: <code>%s</code>\n", html.EscapeString(t.ID)))
 
 				// Label (if set)
 				if t.Label != "" {
@@ -252,12 +253,16 @@ func (c *cmd) Status(ctx context.Context, message telego.Message) error {
 
 				timeRange := fmt.Sprintf("[%s - %s]", startTime, endTime)
 				sb.WriteString(fmt.Sprintf("• <code>%s</code> %s %s\n", html.EscapeString(t.ID), html.EscapeString(timeRange), statusIcon))
+				sb.WriteString(fmt.Sprintf("  ID: <code>%s</code>\n", html.EscapeString(t.ID)))
 
 				if t.Label != "" {
 					sb.WriteString(fmt.Sprintf("  Label: %s\n", html.EscapeString(t.Label)))
 				}
 				if t.Name != "" {
 					sb.WriteString(fmt.Sprintf("  Agent: %s\n", html.EscapeString(t.Name)))
+				}
+				if t.Status == "cancelled" && t.CancelSource != "" {
+					sb.WriteString(fmt.Sprintf("  CancelBy: %s\n", html.EscapeString(t.CancelSource)))
 				}
 			}
 		}
@@ -383,7 +388,7 @@ func (c *cmd) Kill(ctx context.Context, message telego.Message) error {
 		return err
 	}
 
-	if err := c.subagentManager.Cancel(taskID); err != nil {
+	if err := c.subagentManager.CancelWithSource(taskID, "telegram:/kill"); err != nil {
 		_, sendErr := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: message.Chat.ID},
 			Text:   fmt.Sprintf("Failed to cancel task '%s': %v", taskID, err),

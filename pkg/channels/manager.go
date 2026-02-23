@@ -565,6 +565,7 @@ func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
 			for _, t := range running {
 				timeRange := fmt.Sprintf("[%s - ...]", formatTimeShort(t.Started))
 				sb.WriteString(fmt.Sprintf("- %s %s\n", t.ID, timeRange))
+				sb.WriteString(fmt.Sprintf("  ID: %s\n", t.ID))
 				if t.Label != "" {
 					sb.WriteString(fmt.Sprintf("  Label: %s\n", t.Label))
 				}
@@ -584,11 +585,15 @@ func (m *Manager) handleStatusControl(msg bus.InboundMessage) bool {
 			for _, t := range recent {
 				timeRange := fmt.Sprintf("[%s - %s]", formatTimeShort(t.Started), formatTimeShort(t.Ended))
 				sb.WriteString(fmt.Sprintf("- %s %s [%s]\n", t.ID, timeRange, t.Status))
+				sb.WriteString(fmt.Sprintf("  ID: %s\n", t.ID))
 				if t.Label != "" {
 					sb.WriteString(fmt.Sprintf("  Label: %s\n", t.Label))
 				}
 				if t.Name != "" {
 					sb.WriteString(fmt.Sprintf("  Agent: %s\n", t.Name))
+				}
+				if t.Status == "cancelled" && t.CancelSource != "" {
+					sb.WriteString(fmt.Sprintf("  CancelBy: %s\n", t.CancelSource))
 				}
 			}
 		}
@@ -839,7 +844,7 @@ func (m *Manager) handleKillControl(msg bus.InboundMessage, body string) bool {
 		return true
 	}
 
-	if err := m.subagentManager.Cancel(taskID); err != nil {
+	if err := m.subagentManager.CancelWithSource(taskID, "control:+kill"); err != nil {
 		m.sendControlReply(msg, fmt.Sprintf("Failed to cancel task '%s': %v", taskID, err))
 		return true
 	}

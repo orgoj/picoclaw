@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.46 - 2026-02-23
+
+### Fixed
+- Channel control cancellation now preserves explicit source metadata:
+  - `+kill` writes `control:+kill`
+  - Telegram `/kill` writes `telegram:/kill`
+  instead of generic/unknown cancel origin.
+- Runtime status outputs now always include explicit subagent IDs in both running and recent sections, with `CancelBy` shown for cancelled tasks when available.
+
 ## v0.1.45 - 2026-02-23
 
 ### Added
