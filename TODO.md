@@ -1,11 +1,19 @@
 # TODO for picoclaw agents system
 
+## WEBUI
+
+- kliknu na agenta a udela se mi tam duplicine
+- potrebuji videt so dostane jako ukol agent pri startu
+- kliknu na egenta a  vleho ma nejaky filtrovany telegram a ne jeho log!!!
+  - kdyz kurva kliknu na agenta tak vlevo musim videt jeho sesssion a kurva nic jineho!
+
 ### LLM
 
 - [LATER] LLM autotune context/retry podle chyb - pro konretniho provedera a model separatne
 - [LATER] autotune max context podle error
 - [LATER] autotune retry podle error
 - [LATER] barvicky ve WEBUI agentu, aby bylo videt retry
+- [LATER] proverit stream mode z.ai: https://docs.z.ai/guides/capabilities/streaming
 
 ### Config parity
 
@@ -42,4 +50,5 @@
 ### Analyze for inspiration
 
 - https://github.com/logiccrafterdz/Droidclaw
+- https://github.com/sker65/picoclaw/tree/webui
 -
